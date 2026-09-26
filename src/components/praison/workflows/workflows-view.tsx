@@ -59,6 +59,7 @@ import {
   useWorkflowsStore,
 } from "@/lib/stores";
 import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
+import { buildVariationProposal } from "@/lib/spawn-proposal-engine";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, uid } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DepthChip, EmptyState, PageHeader } from "@/components/praison/atoms";
@@ -148,6 +149,8 @@ function sanitizeWorkflow(raw: unknown, validAgentIds: Set<string>): Workflow | 
  * Self-hides when no workflow has finished a run yet.
  */
 function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
+  const addProposal = useWorkflowsStore((s) => s.addProposal);
+  const proposals = useWorkflowsStore((s) => s.proposals);
   const rows = React.useMemo(
     () =>
       workflows
@@ -278,6 +281,33 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
                 >
                   {n != null ? `🧬 ${n}%` : "not scored"}
                 </span>
+                {n != null && n < 35 && !proposals.some((p) => p.status === "open" && p.sourceWorkflowId === wf.id) && (
+                  <button
+                    title={`Propose a variation of "${wf.name}" to the Evolution Inbox — latest run stalled at ${n}%`}
+                    onClick={() => {
+                      addProposal(
+                        buildVariationProposal({
+                          sourceWorkflowId: wf.id,
+                          sourceWorkflowName: wf.name,
+                          sourceRunId: latest.id,
+                          taskExcerpt:
+                            wf.steps[0]?.instruction ||
+                            wf.steps.map((s) => s.label).join(" → ") ||
+                            wf.name,
+                          novelty: n,
+                          manual: true,
+                        })
+                      );
+                      toast.success("Variation proposed — waiting in the Evolution Inbox", {
+                        description: `${wf.name} · spawn it into a real pipeline with one click`,
+                      });
+                    }}
+                    className="ml-1 inline-flex h-6 items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 text-[10px] font-semibold text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Suggest variation
+                  </button>
+                )}
               </div>
             </div>
           );

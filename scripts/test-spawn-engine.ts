@@ -1,5 +1,6 @@
 /** Unit check for the pure spawn-proposal engine (bun run). */
 import {
+  buildVariationProposal,
   maybeProposeSpawn,
   NOVELTY_SPAWN_THRESHOLD,
 } from "../src/lib/spawn-proposal-engine";
@@ -75,6 +76,28 @@ check(
 
 // 6. Missing novelty → null (cannot judge)
 check("undefined novelty yields null", maybeProposeSpawn({ ...base, novelty: undefined }) === null);
+
+// 7. buildVariationProposal — manual path (ledger "Suggest variation" action)
+const m = buildVariationProposal({
+  sourceWorkflowId: "wf-src",
+  sourceWorkflowName: "RSIinFIELD",
+  sourceRunId: "run-9",
+  taskExcerpt: base.taskExcerpt,
+  novelty: 22,
+  manual: true,
+});
+check(
+  "manual reason cites score + threshold",
+  /Manually requested — latest run scored 22% novelty \(below the 35% stall threshold\)/.test(m.reason),
+);
+check(
+  "manual goal keeps the task + angle format",
+  m.goal.startsWith(base.taskExcerpt) && m.goal.includes("approach it from"),
+);
+check(
+  "manual proposal carries source linkage",
+  m.sourceWorkflowId === "wf-src" && m.sourceWorkflowName === "RSIinFIELD" && m.sourceRunId === "run-9",
+);
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
