@@ -1404,3 +1404,20 @@ Stage Summary:
 - The Evolution loop now has BOTH halves: automatic (runner finishes a stalled run → proposal) AND manual (user sees amber row → one click → proposal). Both share one constructor, one dedupe rule (max 1 open per source), one inbox surface
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree: non-modal panel, 90s budget, resume chip, inbox v1, generator, ledger action — restarting it before rebuild reverts ALL; do NOT); 2) boot-server longevity check at next real boot; 3) candidate polish: inbox empty-state hint when proposals were all accepted/dismissed (teach the loop), or accepted-proposals archive view
 - Fleet: heartbeats continuous through 21:07:11Z; no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 06:23 +08 window)
+Agent: main (hourly review loop)
+Task: inbox cycle strip — teach the loop when all proposals are handled
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 05:37+06:07, heartbeats present; 414940 = this task). HEAD 64d11ce→7e7378e = platform auto-commit (verified worklog.md +20 only). HTTP 200 (dev tenure ~18h15m) — HMR-only
+- QA GATE: console 0 errors, Studio renders, dom 5144 (matches reconciled baseline) → STABLE → took the queued candidate: inbox empty-state strip
+- INCREMENT SHIPPED (workflows-view.tsx EvolutionInbox): when open=0 but history>0, the inbox no longer vanishes — it renders a muted violet strip: "Evolution cycle: N spawned · M dismissed — inbox clear. New proposals appear here automatically when runs stall (<35% novelty) or via Suggest variation in the ledger." Pristine profiles (zero proposals ever) still render nothing. This closes the discoverability gap: after handling proposals, users previously lost all trace of the feature until a workflow stalled again
+- VERIFIED: eslint exit 0; LIVE E2E via localStorage injection (1 accepted + 1 dismissed proposal) → reload → strip rendered with exact counts, no Spawn buttons/list, teaching text present ("stall" + "Suggest variation") → cleanup → reload clean. E2E HARNESS NOTE: first cleanup write was overwritten by a debounced persist (scheduler set() re-persisted the injected state AFTER my write) — diagnosis: propIds still present post-reload; fixed with the double-write doctrine (write → wait 1.2s for pending debounce → write again → reload): propsLeft [], stripGone true. Product code unaffected; the strip behaved correctly throughout
+- Profile state: clean (proposals [], no test artifacts)
+
+Stage Summary:
+- Shipped: the Evolution inbox now explains its own lifecycle — spawn/dismiss counts persist as a cycle summary, teaching users where proposals come from and how to request them manually
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree — restarting it before rebuild reverts ALL recent fixes; do NOT); 2) boot-server longevity check at next real boot; 3) candidates: accepted-proposals archive view (expand strip into a collapsible history), or novelty-threshold setting surfaced in Settings (currently hardcoded 35 via NOVELTY_SPAWN_THRESHOLD)
+- Fleet: heartbeats continuous through 22:07:10Z; no gaps; no failed patrols
