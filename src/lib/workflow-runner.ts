@@ -3,6 +3,7 @@
 // ─── Shared workflow run engine (used by the run panel AND the scheduler) ────
 
 import { toast } from "sonner";
+import { runText, scoreNovelty } from "@/lib/evolution";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveLlm } from "@/lib/llm-config";
 import { decide, SYSTEMONE_GATE_CONFIDENCE } from "@/lib/systemone";
@@ -347,7 +348,27 @@ export async function executeWorkflowRun(
     toastMsg: string,
     errorInfo?: RunErrorInfo
   ) => {
-    patchRun({ status, finishedAt: Date.now(), ...(errorInfo ? { error: errorInfo } : status === "done" ? { error: undefined } : {}) });
+    // Evolution Layer (r68): novelty % vs this workflow's recent done runs —
+    // best-effort; a scoring failure must never affect run finalization.
+    let novelty: number | undefined;
+    if (status === "done") {
+      try {
+        const liveWf = useWorkflowsStore.getState().workflows.find((w) => w.id === wf.id);
+        const prevOutputs = (liveWf?.runs ?? [])
+          .filter((r) => r.id !== runId && r.status === "done")
+          .map((r) => runText(r.steps));
+        const score = scoreNovelty(runText(steps), prevOutputs);
+        if (score != null) novelty = score;
+      } catch {
+        /* novelty is best-effort */
+      }
+    }
+    patchRun({
+      status,
+      finishedAt: Date.now(),
+      ...(novelty !== undefined ? { novelty } : {}),
+      ...(errorInfo ? { error: errorInfo } : status === "done" ? { error: undefined } : {}),
+    });
     if (source === "scheduled") {
       // r29 scheduled-run autonomy (Temporal/Circuit-Breaker doctrine):
       // failures feed a consecutive-fail streak — 1-2 re-arm SOONER than the

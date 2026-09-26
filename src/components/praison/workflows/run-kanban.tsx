@@ -188,6 +188,19 @@ function RunCard({
         <span className="min-w-0 flex-1 truncate text-xs font-semibold">
           {card.workflowName}
         </span>
+        {run.novelty != null && (
+          <span
+            title={`Evolution novelty vs recent runs: ${run.novelty}%${run.novelty < 35 ? " — stall signal (near-duplicate output)" : ""}`}
+            className={cn(
+              "shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold tabular-nums",
+              run.novelty < 35
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                : "border-emerald-500/30 bg-emerald-500/5 text-emerald-500"
+            )}
+          >
+            🧬 {run.novelty}%
+          </span>
+        )}
         <ArrowRight
           className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
           aria-hidden

@@ -307,6 +307,8 @@ export interface WorkflowRun {
   resumeCount?: number;
   /** Chronological log of LLM calls made during this run (capped, oldest-dropped). */
   callLog?: RunCallLogEntry[];
+  /** Evolution Layer (r68): novelty % vs this workflow's recent done runs (0-100; <35 = stall). */
+  novelty?: number;
 }
 
 export interface Workflow {
