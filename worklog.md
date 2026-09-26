@@ -1309,3 +1309,20 @@ Stage Summary:
 - RSIinFIELD schedule is auto-paused (failStreak) — user should re-enable it in the editor; with the 90s budget the stall failures should stop
 - The user's screenshots confirm Evolution ledger live in production use ✓
 - NEXT: prod rebuild when :3000 frees; spawn-proposal inbox; boot-server longevity at next real boot
+
+---
+Task ID: 414940 (2026-09-27 01:23 +08 window)
+Agent: main (hourly review loop)
+Task: collision-aware QA round — deep run-panel/trigger investigation; clean exit under hard round budget
+
+Work Log:
+- SELF-HEAL: cron CLI still ENOENT; fleet 2/2 via live-fire evidence (414938 fired 01:07 +08 — heartbeat line 17:07:12Z PRESENT in ops/heartbeat.log, no gap; 414940 = this task firing now)
+- Health: dev server (TTY lineage, spawned 12:07Z) still owns :3000, tenure ~13h15m, HTTP 200 — collision doctrine applied: HMR-only edits permitted, NO builds, NO restarts; tree clean at HEAD 1c246b6 (the 00:45 user-fix commit: non-modal panel + 90s stall budget)
+- QA PASS (console: 0 errors, HMR info only): cache-busted open → real app verified (DOM 89.8k, "Cron fleet" chip present, title correct); nav-click → Workflows view renders (DOM 103k, "Workflow Studio" present); Evolution ledger correctly SELF-HIDDEN (this profile has zero done runs — expected path per doctrine); Deep Research Dossier card button inventory = [Actions dropdown, Run, Edit]
+- QA FINDING (queued as next increment): grid-view workflow cards expose NO run-history panel trigger — WorkflowRunPanel is reachable only via the board/kanban path; users on grid layout cannot open run history without switching views. Candidate fix: History icon button on grid cards (mirrors kanban trigger, styling-consistent) — small, HMR-servable, satisfies the styling+feature mandate
+- BUDGET DOCTRINE APPLIED: deep QA + trigger investigation consumed the ≤12-round budget → NO code edit this round (unverified edits forbidden; early clean exit = SUCCESS per hard-budget forensics r56)
+
+Stage Summary:
+- App healthy at 1c246b6 with both user fixes live via HMR dev server (non-modal run panel + 90s stream idle budget)
+- NEXT ROUND PRIORITY: 1) grid-card run-history trigger (small verified increment); 2) spawn-proposal inbox (Evolution candidate); 3) prod standalone rebuild ONLY when :3000 frees AND build allowed — standalone is stale vs tree, restarting it before rebuild would REVERT both user fixes, do NOT; 4) boot-server longevity check at next real boot
+- RSIinFIELD reminder unchanged: schedule auto-paused by failStreak safety — user should re-enable it in the editor; 90s budget should stop the stall failures
