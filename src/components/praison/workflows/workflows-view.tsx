@@ -17,7 +17,18 @@ import {
   Trash2,
   Upload,
   Users,
+  Wand2,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -272,6 +283,197 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
   );
 }
 
+// ─── Plan → Pipeline · one-click composer (paste a plan, get a workflow) ─────
+
+/** First line = goal; the rest = steps (bullet/numbered markers stripped). */
+function parsePlan(text: string): { goal: string; steps: string[] } {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return { goal: "", steps: [] };
+  const goal = lines[0].replace(/^#+\s*/, "").slice(0, 200);
+  const steps = lines
+    .slice(1)
+    .map((l) =>
+      l
+        .replace(/^(?:[-*•·]|\d+[.)])\s*/, "")
+        .replace(/^step\s*\d+\s*[:.]\s*/i, "")
+        .trim()
+    )
+    .filter(Boolean)
+    .slice(0, 8);
+  return { goal, steps };
+}
+
+function PlanPipelineDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const agents = useAgentsStore((s) => s.agents);
+  const addWf = useWorkflowsStore((s) => s.add);
+  const [planText, setPlanText] = React.useState("");
+  const [reviewGate, setReviewGate] = React.useState(true);
+  const [selected, setSelected] = React.useState<string[]>([]);
+
+  // Default-select the whole roster (order stable) each time the dialog opens.
+  React.useEffect(() => {
+    if (open) setSelected(agents.map((a) => a.id));
+  }, [open, agents]);
+
+  const { goal, steps: planSteps } = parsePlan(planText);
+  const scaffold = planSteps.length === 0;
+  const stepLines = scaffold
+    ? ["Research the goal and gather context", "Draft the deliverable"]
+    : planSteps;
+  const canCreate = goal.length > 0 && selected.length > 0;
+
+  const toggle = (id: string) =>
+    setSelected((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+    );
+
+  const create = () => {
+    if (!canCreate) return;
+    const steps: WorkflowStep[] = stepLines.map((label, i) => ({
+      id: uid("step"),
+      agentId: selected[i % selected.length],
+      label: label.slice(0, 120) || `Step ${i + 1}`,
+      instruction: goal,
+      kind: "generate" as const,
+    }));
+    if (reviewGate) {
+      steps.push({
+        id: uid("step"),
+        agentId: selected[selected.length - 1],
+        label: "Review & refine",
+        instruction: `Audit the final output against the goal — ${goal}. Force a rework if it falls short.`,
+        kind: "review" as const,
+      });
+    }
+    addWf({
+      name: goal.slice(0, 80),
+      description: scaffold
+        ? `Auto-composed scaffold · ${steps.length} steps`
+        : `From pasted plan · ${steps.length} steps`,
+      steps,
+      depth: "standard",
+      runs: [],
+    });
+    toast.success(
+      `Pipeline created with ${steps.length} step${steps.length === 1 ? "" : "s"} — ready to run`
+    );
+    setPlanText("");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wand2 className="h-4 w-4 text-violet-400" aria-hidden />
+            Plan → Pipeline
+          </DialogTitle>
+          <DialogDescription>
+            Paste a goal or plan — the first line becomes the workflow, each
+            further line becomes a step mapped across your agents.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="plan-text">Plan or goal</Label>
+            <textarea
+              id="plan-text"
+              value={planText}
+              onChange={(e) => setPlanText(e.target.value)}
+              rows={6}
+              placeholder={
+                "Launch a niche SaaS blog\n- Research competitor positioning\nDraft the first 3 articles\nBuild a publishing calendar"
+              }
+              className="w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-sm shadow-sm outline-none transition placeholder:text-muted-foreground/50 focus-visible:border-violet-500/40 focus-visible:ring-2 focus-visible:ring-violet-500/20"
+            />
+            <p
+              className={cn(
+                "text-xs",
+                goal
+                  ? planSteps.length
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground"
+                  : "text-muted-foreground/60"
+              )}
+            >
+              {goal
+                ? planSteps.length
+                  ? `✓ ${planSteps.length} step${planSteps.length === 1 ? "" : "s"} detected — mapped to agents in order`
+                  : "No step lines — a Research → Draft scaffold will be composed for you"
+                : "Tip: one step per line; bullets and numbering are stripped automatically"}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>
+              Agents in rotation ({selected.length}/{agents.length})
+            </Label>
+            <div className="flex flex-wrap gap-1.5">
+              {agents.map((a) => {
+                const on = selected.includes(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => toggle(a.id)}
+                    aria-pressed={on}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 transition",
+                      on
+                        ? "border-violet-500/40 bg-violet-500/10"
+                        : "border bg-muted/40 opacity-50 hover:opacity-80"
+                    )}
+                  >
+                    <AgentAvatar agent={a} size="xs" />
+                    <span className="max-w-28 truncate text-xs font-medium">
+                      {a.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="review-gate"
+              checked={reviewGate}
+              onCheckedChange={(v) => setReviewGate(v === true)}
+            />
+            <Label
+              htmlFor="review-gate"
+              className="cursor-pointer text-sm font-normal text-muted-foreground"
+            >
+              Append a review gate step (audits the final output, forces rework)
+            </Label>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={create} disabled={!canCreate}>
+            <Wand2 className="h-4 w-4" />
+            Create pipeline
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Workflow Studio · grid of pipelines, editor dialog + run panel ─────────
 
 export function WorkflowsView() {
@@ -295,6 +497,7 @@ export function WorkflowsView() {
   ).length;
 
   const [editorOpen, setEditorOpen] = React.useState(false);
+  const [planOpen, setPlanOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Workflow | null>(null);
   const [runOpen, setRunOpen] = React.useState(false);
   const [running, setRunning] = React.useState<Workflow | null>(null);
@@ -465,6 +668,17 @@ export function WorkflowsView() {
             <span className="hidden sm:inline">Runs board</span>
           </button>
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={agents.length === 0}
+          onClick={() => setPlanOpen(true)}
+          aria-label="Create a pipeline from a pasted plan"
+          title="Paste a plan — one click composes a pipeline across your agents"
+        >
+          <Wand2 className="h-4 w-4" />
+          <span className="hidden md:inline">Plan → Pipeline</span>
+        </Button>
         <Button
           size="sm"
           variant="outline"
@@ -692,6 +906,8 @@ export function WorkflowsView() {
         onOpenChange={setEditorOpen}
         workflow={editing}
       />
+
+      <PlanPipelineDialog open={planOpen} onOpenChange={setPlanOpen} />
 
       <WorkflowRunPanel
         open={runOpen}

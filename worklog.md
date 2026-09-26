@@ -1274,3 +1274,19 @@ Stage Summary:
 - Evolution Layer surfaces now complete: scoring spine (finish hook) → kanban chip → ledger (22:23) → run-panel history chip (this round). Every run completion is visible in 3 places
 - planner→pipeline one-click remains queued — note: it only needs HMR (src edit), the "build window" constraint applies to PROD standalone rebuilds; feasible any round
 - NEXT ROUND: 1) planner→pipeline one-click (HMR-servable); 2) spawn-proposal inbox; 3) prod rebuild when :3000 frees; 4) boot-server longevity at next real boot
+
+---
+Task ID: 414940 (2026-09-27 00:23 +08 window)
+Agent: main (hourly review loop)
+Task: queued increment — planner→pipeline one-click ("Plan → Pipeline" composer)
+
+Work Log:
+- Health: server 200 (dev tenure ~4h15m), tree clean at 26d62fb; no dedicated "Planner" feature exists → interpreted the queued item as plan-text → workflow composition
+- SHIPPED (workflows-view.tsx, +200 lines): "Plan → Pipeline" — new header button (Wand2, disabled without agents) + PlanPipelineDialog: paste goal/plan → parsePlan (first line = name/goal; bullet/numbered/"step N:" markers stripped; cap 8 steps) → live detection hint ("✓ N steps detected" / single-line falls back to Research → Draft scaffold) → agent rotation chips (toggle, default all roster, steps map i%len) → optional review-gate step (default ON, kind="review", audits final output vs goal) → addWf + toast
+- VERIFIED E2E IN LIVE APP (strongest round yet): eslint 0; parsePlan unit sanity via bun -e (markers/step-prefix stripped, single-line → scaffold, empty guard); browser E2E data path — dialog opens → textarea filled via native-setter + input event → hint "3 steps detected" → Create pipeline → card "Launch a niche SaaS blog" appears with aria-label "4 steps" (3 generate + 1 review gate) → 0 console errors, DOM 126k
+- Tool note: agent-browser eval shares scope across calls — redeclaring const in a later eval throws SyntaxError; use IIFE wrappers
+- Fleet: 414938 patrols 23:37Z + 00:07Z clean (200, fleet 2/2); this task = 414940
+
+Stage Summary:
+- Plan → Pipeline closes the top queued item: users go from ad-hoc plan text to a runnable multi-agent pipeline in one dialog (scaffold fallback makes single-sentence input work too)
+- QUEUED NEXT: 1) spawn-proposal inbox (Evolution); 2) prod standalone rebuild when :3000 frees (standalone still stale vs tree); 3) boot-server longevity check at next real boot
