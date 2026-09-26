@@ -1364,3 +1364,23 @@ Stage Summary:
 - Shipped: the Evolution Layer's action surface — proposals can now be accepted into real pipelines in one click (store + inbox UI verified end-to-end)
 - Resume point if this job died: generator hook in workflow-runner.ts finish() (novelty<35 → addProposal), then prod rebuild queue unchanged
 - ⚠️ Next session MUST read the malfunction note above; no code debt — HEAD will contain the complete v1
+
+---
+Task ID: 414940 (2026-09-27 04:23 +08 window)
+Agent: main (hourly review loop)
+Task: wire the spawn-proposal GENERATOR (the v1 inbox had no producer) + inbox styling polish
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 03:37+04:07, heartbeat 20:07:15Z present; 414940 = this task). Dev server HTTP 200 (tenure ~16h15m, HMR window open) — HMR-only, no builds/restarts. Previous HEAD 5d84896 = complete inbox v1 per resume note; tree clean
+- QA GATE: app renders (title correct, Workflow Studio present, 0 console errors/warnings) → phase STABLE → took the queued resume-point increment
+- INCREMENT SHIPPED — spawn-proposal generator (3 files, commit 799a5e6):
+  · src/lib/spawn-proposal-engine.ts (NEW, pure — no store imports): maybeProposeSpawn({status, novelty, openSourceIds, source*, taskExcerpt}) → SpawnProposal | null. Qualifies ONLY done runs with novelty < NOVELTY_SPAWN_THRESHOLD(35); anti-spam cap = max ONE open proposal per sourceWorkflowId; goal = 220-char-clamped excerpt + deterministic angle suffix (char-code hash picks 1 of 4 canned angles — same task always gets the same angle)
+  · workflow-runner.ts finish(): after the novelty hook computes score, if done && novelty<35 → best-effort try/catch reads store (open proposals, liveWf task excerpt = steps[0].instruction || label-join || name) → maybeProposeSpawn → addProposal + 🧬 toast "Evolution proposal added to the inbox"; a proposal failure can never affect run finalization
+  · workflows-view.tsx EvolutionInbox: rows now show a violet relative-time chip (proposalAge: "just now"/"5m ago"/"3h ago"/date fallback, full timestamp in title attr) — replaces the raw date text
+- VERIFIED: eslint exit 0 on all 3 files; scripts/test-spawn-engine.ts (bun) — 11/11 checks PASS (qualification, threshold boundaries, error/stopped → null, duplicate-open-source → null, different-source open OK, determinism, 220-char clamp, undefined novelty → null). One initial test FAIL was a miscalibrated assertion bound (goal vs excerpt clamp), fixed in the test only — engine contract unchanged. Post-HMR browser eval still healthy
+- Live-fire path now closed end-to-end: run finishes with novelty<35 → proposal appears in inbox → user clicks Spawn → real pipeline created (accept path verified in the 03:23 round)
+
+Stage Summary:
+- The Evolution Loop is now a closed circuit: RUN → score novelty → STALL DETECTED → PROPOSE variation → ONE-CLICK SPAWN → new pipeline runs. Nothing produces proposals by accident: cap is 1 open per source workflow, and only genuinely stale (novelty<35) done runs qualify
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone still stale vs tree — restarting it before rebuild would revert the non-modal panel + 90s budget + one-click resume + inbox v1 + generator; do NOT); 2) boot-server longevity check at next real boot; 3) optional: score-novelty telemetry row in EvolutionLedger to make the 35% threshold legible to the user
+- RSIinFIELD reminder: schedule still auto-paused (failStreak) — one-click resume chip is in the grid; with the 90s budget + generator now live, its next successful runs will self-heal the streak and stale-output variants will surface as proposals
