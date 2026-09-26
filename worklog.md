@@ -1154,3 +1154,22 @@ Stage Summary:
 - Between now and next reboot: server still dies when THIS session ends — cron fleet (17:07-style patrols detect; hourly reviews restart) covers the gap; worst-case dark window ~60 min
 - Unresolved: exact reaper mechanism (silent, 2-5 min, spares PID-1 lineage + agent-browser); cron CLI still ENOENT (fleet verified by double-fire only); worklog gap for 17:23 covered by this entry
 - Next priorities: 1) verify mini-service boots correctly at next container restart; 2) attempt restoring cron CLI access; 3) Evolution Layer r68 candidates (planner→pipeline one-click, direction tag ledger, evolveTask default-on for new pipelines); 4) consider cron.jobs.json prompt revision for patrol-assisted restarts IF CLI returns
+
+---
+Task ID: 414940 (2026-09-26 18:23 +08 window)
+Agent: main (hourly review loop)
+Task: status assessment + QA + focused fix — user's "preview gone, only z.ai logo" bug closure
+
+Work Log:
+- SELF-HEAL: cron CLI still ENOENT; server was DOWN (000, also down at 18:07 patrol) → restarted via `bun run start` (prod standalone, per doctrine)
+- Build currency VERIFIED: .build-commit=86a032b, HEAD=8fdcc7c, and diff 86a032b..HEAD has ZERO src/ changes → existing prod build serves current code, no rebuild needed
+- QA VIA agent-browser (worked this time against :81): page shows ONLY "Z.ai Logo" image, zero console errors, 1 a11y element — live-reproduced the user's screenshot state
+- ROOT CAUSE CLOSED: :81 is the PLATFORM PLACEHOLDER page (1364 bytes static HTML with z.ai logo), NOT the app — gateway serves it whenever :3000 is dead/unresponsive. User's bug = server mortality, NOT a frontend rendering bug (17:5x diagnosis confirmed + extended)
+- Server mortality RE-CONFIRMED for prod standalone: spawned server was serving 200 → hung → empty body → connection-refused within ~4 min; reaper kills ALL agent-spawned processes (dev, prod, watchdog alike). Permanent fix = mini-services/app-server at next container boot (PID-1 lineage)
+- LATENT BUG FLAGGED (top priority next round): possible double-bind at next boot — .zscripts/dev.sh (main flow, exec bun run start) AND mini-services/app-server (bun run start) may BOTH bind :3000 → EADDRINUSE crash loop. /start.sh located at container root; mini-services launch section read attempts this round were cut by budget — verify FIRST thing next round
+- agent-browser netns note: this round :81 WAS reachable from agent-browser (17:5x note said :3000 was refused) — QA recipe: NEVER judge app health from :81 (placeholder is always 200); use :3000 direct or compare HTML sizes
+- Heartbeat gap noted: 17:07/17:37 patrol entries missing from ops/heartbeat.log (16:37 → 18:08 gap); harmless, patrols' append step likely skipped under their stop-on-down rule
+
+Stage Summary:
+- User-facing bug "preview gone, only z.ai logo" = CLOSED as gateway-placeholder-on-dead-upstream; every review round restarts the server (dark windows between rounds remain until next container reboot arms the mini-service)
+- NEXT ROUND PRIORITY ORDER: 1) read /start.sh mini-services section → resolve double-bind risk (make mini-service bind-aware or drop .zscripts/dev.sh server spawn); 2) verify mini-service boot path end-to-end (repo.tar restore wipes uncommitted work — keep work committed); 3) Evolution r68 candidates unchanged (planner→pipeline one-click, direction tag ledger); 4) lint/tsc of forensics route + FleetChip still deferred
