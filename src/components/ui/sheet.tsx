@@ -48,13 +48,20 @@ function SheetContent({
   className,
   children,
   side = "right",
+  overlay = true,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
+  /**
+   * Render the blocking backdrop (default true = modal sheet with focus trap).
+   * Pass false for non-modal docked panels — no backdrop, no focus trap, the
+   * rest of the app stays interactive and the user's caret is never stolen.
+   */
+  overlay?: boolean
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {overlay && <SheetOverlay />}
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(

@@ -1290,3 +1290,22 @@ Work Log:
 Stage Summary:
 - Plan → Pipeline closes the top queued item: users go from ad-hoc plan text to a runnable multi-agent pipeline in one dialog (scaffold fallback makes single-sentence input work too)
 - QUEUED NEXT: 1) spawn-proposal inbox (Evolution); 2) prod standalone rebuild when :3000 frees (standalone still stale vs tree); 3) boot-server longevity check at next real boot
+
+---
+Task ID: USER-REPORT (2026-09-27 00:45 +08 window)
+Agent: main (direct user message)
+Task: USER BUG REPORT — (1) focus/caret steal while a workflow runs; (2) RSIinFIELD "failed again" (upstream stalled)
+
+Work Log:
+- USER EVIDENCE (screenshots): Evolution ledger LIVE with real data (RSIinFIELD 3 done, Morning Briefing 5 done — pre-Evolution runs show "not scored" as designed); "many self triggered crons" confirmed = scheduled workflows firing (Morning Briefing 12 runs · next in 4h; RSIinFIELD 12 runs, now auto-paused after ≥3 consecutive failures — the auto-pause doctrine working as designed)
+- BUG 1 ROOT CAUSE (focus steal): WorkflowRunPanel is a MODAL Radix Sheet → focus trap recaptures the caret every time streaming updates churn the DOM inside the panel (user watches a live run → elements unmount/remount each chunk → trap re-engages → steals focus from the Z.ai conversation box repeatedly, "every couple of seconds")
+- FIX 1: run panel is now a NON-MODAL docked panel — Sheet modal={false} + overlay={false} (new prop in ui/sheet.tsx, default true = all other sheets unchanged) + onOpenAutoFocus/onCloseAutoFocus preventDefault + onInteractOutside preventDefault (docked behavior: no outside-click dismissal, X/ESC still close). No focus trap exists anymore → caret never stolen; dimming overlay gone; app fully interactive behind the panel. VERIFIED E2E: panel opens with overlayExists:false, nav behind works, 0 console errors
+- BUG 2 ROOT CAUSE (stall failures): agent-engine IDLE_CHUNK_TIMEOUT_MS=15s vs chat-client SERVER_STALL_TIMEOUT_MS=90s — the WORKFLOW path killed streams after 15s of silence while the CHAT path (same providers, same streams) tolerates 90s. Free-tier reasoning models routinely pause >15s mid-answer → false "upstream stalled: no data for 15s" kills (RSIinFIELD died at step 1/7 with 26 tool calls already succeeded, twice)
+- FIX 2: IDLE_CHUNK_TIMEOUT_MS 15s → 90s (matches chat path; truly dead connections still error fast via the read loop's close event — this timer only guards silent hangs). First-token budgets unchanged (12s/25s orca)
+- Tool lesson (test-script bug): sidebar nav "Chat" description contains the word "workflows" → unanchored /Workflows/i .find() clicked CHAT repeatedly; use ^Workflows anchor. View-switch closes the run panel = view-unmount semantics (panel lives in Workflows view; pre-existing, out of scope)
+
+Stage Summary:
+- Both user-reported pains fixed at the root: caret no longer stealable during runs; pipeline streams no longer killed at 15s
+- RSIinFIELD schedule is auto-paused (failStreak) — user should re-enable it in the editor; with the 90s budget the stall failures should stop
+- The user's screenshots confirm Evolution ledger live in production use ✓
+- NEXT: prod rebuild when :3000 frees; spawn-proposal inbox; boot-server longevity at next real boot

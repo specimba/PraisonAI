@@ -634,10 +634,17 @@ export function WorkflowRunPanel({
   );
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
+        overlay={false}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        /* Docked-panel behavior: clicking/typing elsewhere in the app must
+         * NOT dismiss the run panel — users watch a live run while writing.
+         * Dismissal stays available via the X button or Escape. */
+        onInteractOutside={(e) => e.preventDefault()}
+        className="flex w-full flex-col gap-0 border-l bg-background p-0 shadow-2xl sm:max-w-2xl"
       >
         <SheetHeader className="border-b pr-12">
           <SheetTitle className="truncate">{liveWorkflow?.name ?? "Workflow"}</SheetTitle>

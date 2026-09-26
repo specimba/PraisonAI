@@ -141,7 +141,16 @@ export class UpstreamDeadlineError extends Error {
 export const FIRST_TOKEN_TIMEOUT_MS = 12_000;
 /** OrcaRouter internally fails over 1-5 upstreams before the first byte. */
 export const FIRST_TOKEN_TIMEOUT_ORCA_MS = 25_000;
-export const IDLE_CHUNK_TIMEOUT_MS = 15_000;
+/**
+ * Mid-stream silence budget. MATCHES the interactive chat path
+ * (chat-client SERVER_STALL_TIMEOUT_MS = 90s): free-tier relays routinely
+ * pause tens of seconds between chunks while a model reasons. The old 15s
+ * budget caused false "upstream stalled" failures that killed whole pipeline
+ * runs mid-flight (r68 forensics: RSIinFIELD died at step 1/7 with 26 tool
+ * calls already succeeded — twice). Truly dead connections still error fast
+ * via the read loop's close event; this timer only guards silent hangs.
+ */
+export const IDLE_CHUNK_TIMEOUT_MS = 90_000;
 
 /**
  * Combine the caller's abort signal with an engine-owned deadline controller.
