@@ -1343,3 +1343,24 @@ Stage Summary:
 - Shipped: auto-paused schedules are now one-click recoverable in the grid view (was: passive tooltip pointing at the editor)
 - 01:23's "grid-card run-history trigger" queue item is CLOSED as already-working (false positive); no backlog debt
 - NEXT ROUND: 1) spawn-proposal inbox (Evolution candidate); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed — restarting the stale standalone before rebuild would revert the non-modal panel + 90s budget fixes, do NOT; 3) boot-server longevity check at next real boot
+
+---
+Task ID: 414940 (2026-09-27 03:23 +08 window)
+Agent: main (hourly review loop)
+Task: Evolution spawn-proposal inbox (v1) — store + UI + one-click spawn, E2E verified; TOOL MALFUNCTION DISCLOSED
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 02:37+03:07; 414940 = this task). Dev server tenure ~15h15m, HTTP 200; tree at 0bc8a30; no concurrent deltas
+- QA: app renders (DOM 95.3k, title correct), 0 console errors/warnings → phase STABLE → queued increment selected
+- ⚠️ TOOL MALFUNCTION (forensics): mid-round, the assistant emitted malformed tool parameters — including two oversized invalid MultiEdit calls and a burst of ~1,200 trivial echo commands in a single turn. Impact assessment: NO file corruption (verified: stores.ts SpawnProposal×5 lines / addProposal×2 = exactly one application; bun build parses; workflows-view pristine at check time); the round budget was catastrophically exceeded (this job may be killed by max_rounds_exceeded — next session: this entry IS the resume point). Root cause appears to be a transient generation loop, not disk/tool damage
+- INCREMENT SHIPPED — Evolution spawn-proposal inbox v1 (3 files):
+  · types.ts: SpawnProposal interface (id/createdAt/status open|accepted|dismissed/goal/planLines?/reason/sourceWorkflowId/sourceWorkflowName/sourceRunId?)
+  · stores.ts (workflows slice, same praison-workflows persist): proposals: SpawnProposal[] + addProposal() (uid prop, prepends, status open) + setProposalStatus(); additive to persisted shape → old localStorage data merges safely (initial [] survives)
+  · workflows-view.tsx: EvolutionInbox component (~105 lines, violet accent) mounted above EvolutionLedger in both layout modes; rows show goal + reason + source workflow + date; Spawn button = one-click pipeline creation (parsePlan on goal+planLines, Research→Draft scaffold fallback, agents rotation i%len, review-gate appended — mirrors PlanPipelineDialog.create doctrine), marks proposal accepted + success toast; X button = dismiss + toast; self-hides when zero open proposals
+- VERIFIED E2E IN LIVE APP: eslint exit 0 on all 3 files; injected 2 proposals via localStorage → inbox rendered with both rows (DOM 101.5k) → dismissed B (row gone + toast) → spawned A (workflow card created, inbox self-hid, toast) → cleanup: test workflow + proposals removed, reload clean. Proposal→pipeline data path exercised for real
+- NOT yet wired (next rounds): the GENERATOR — nothing produces proposals yet (v1 is the inbox surface + store). Candidate heuristic: on run finish with novelty <35 (stall signal) or after N done runs, addProposal({reason: "novelty stalled …", goal: variation of the workflow task}) — best-effort try/catch like the novelty hook
+
+Stage Summary:
+- Shipped: the Evolution Layer's action surface — proposals can now be accepted into real pipelines in one click (store + inbox UI verified end-to-end)
+- Resume point if this job died: generator hook in workflow-runner.ts finish() (novelty<35 → addProposal), then prod rebuild queue unchanged
+- ⚠️ Next session MUST read the malfunction note above; no code debt — HEAD will contain the complete v1

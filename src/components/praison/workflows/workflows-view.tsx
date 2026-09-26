@@ -8,6 +8,7 @@ import {
   Columns3,
   Copy,
   Download,
+  Lightbulb,
   LayoutList,
   MoreVertical,
   Pencil,
@@ -15,10 +16,12 @@ import {
   Plus,
   RotateCcw,
   ShieldAlert,
+  Sparkles,
   Trash2,
   Upload,
   Users,
   Wand2,
+  X,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -55,7 +58,7 @@ import {
   useUiStore,
   useWorkflowsStore,
 } from "@/lib/stores";
-import type { Workflow, WorkflowStep } from "@/lib/types";
+import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, uid } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DepthChip, EmptyState, PageHeader } from "@/components/praison/atoms";
@@ -475,6 +478,114 @@ function PlanPipelineDialog({
   );
 }
 
+// ─── Evolution Inbox · pipeline-born spawn proposals ───────────────────────
+
+function EvolutionInbox() {
+  const proposals = useWorkflowsStore((s) => s.proposals);
+  const setProposalStatus = useWorkflowsStore((s) => s.setProposalStatus);
+  const agents = useAgentsStore((s) => s.agents);
+  const addWf = useWorkflowsStore((s) => s.add);
+
+  const open = proposals.filter((p) => p.status === "open");
+  if (open.length === 0) return null;
+
+  const accept = (p: SpawnProposal) => {
+    const roster = agents.map((a) => a.id);
+    if (roster.length === 0) {
+      toast.error("No agents in the roster — create an agent first");
+      return;
+    }
+    const parsed = parsePlan([p.goal, ...(p.planLines ?? [])].join("\n"));
+    const stepLines = parsed.steps.length
+      ? parsed.steps
+      : ["Research the goal and gather context", "Draft the deliverable"];
+    const steps: WorkflowStep[] = stepLines.map((label, i) => ({
+      id: uid("step"),
+      agentId: roster[i % roster.length],
+      label: label.slice(0, 120) || `Step ${i + 1}`,
+      instruction: parsed.goal,
+      kind: "generate" as const,
+    }));
+    steps.push({
+      id: uid("step"),
+      agentId: roster[roster.length - 1],
+      label: "Review & refine",
+      instruction: `Audit the final output against the goal — ${parsed.goal}. Force a rework if it falls short.`,
+      kind: "review" as const,
+    });
+    addWf({
+      name: parsed.goal.slice(0, 80),
+      description: `Evolution spawn · from "${p.sourceWorkflowName}" · ${p.reason}`,
+      steps,
+      depth: "standard",
+      runs: [],
+    });
+    setProposalStatus(p.id, "accepted");
+    toast.success(
+      `Spawned "${parsed.goal.slice(0, 80)}" with ${steps.length} steps — review gate included`
+    );
+  };
+
+  return (
+    <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.04] p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Lightbulb className="h-4 w-4 shrink-0 text-violet-500" />
+        <span className="text-sm font-medium">Evolution Inbox</span>
+        <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400">
+          {open.length} proposal{open.length === 1 ? "" : "s"}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          pipelines suggested by your workflows — spawn or dismiss
+        </span>
+      </div>
+      <div className="space-y-2">
+        {open.map((p) => (
+          <div
+            key={p.id}
+            className="flex items-start gap-3 rounded-lg border bg-background/60 p-2.5"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{p.goal}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {p.reason} · from{" "}
+                <span className="font-medium text-foreground/80">
+                  {p.sourceWorkflowName}
+                </span>{" "}
+                ·{" "}
+                {new Date(p.createdAt).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                size="sm"
+                onClick={() => accept(p)}
+                aria-label={`Spawn pipeline from proposal: ${p.goal}`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Spawn
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`Dismiss proposal: ${p.goal}`}
+                onClick={() => {
+                  setProposalStatus(p.id, "dismissed");
+                  toast("Proposal dismissed — archived in Evolution history");
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Workflow Studio · grid of pipelines, editor dialog + run panel ─────────
 
 export function WorkflowsView() {
@@ -746,6 +857,7 @@ export function WorkflowsView() {
           </Alert>
         ) : null}
 
+        <EvolutionInbox />
         <EvolutionLedger workflows={workflows} />
 
         {boardOpen ? (

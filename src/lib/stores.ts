@@ -16,6 +16,7 @@ import type {
   WorkflowRun,
   WorkflowRunStep,
   WorkflowStep,
+  SpawnProposal,
 } from "./types";
 import { DEFAULT_SETTINGS, PRESEED_PROVIDER_KEYS, SEED_AGENTS, TOOL_IDS } from "./constants";
 import { uid } from "./helpers";
@@ -359,7 +360,11 @@ export const useConversationsStore = create<ConversationsState>()(
 // ─── Workflows ───────────────────────────────────────────────────────────────
 interface WorkflowsState {
   workflows: Workflow[];
+  /** Evolution Layer: pipeline-born spawn proposals (inbox queue). */
+  proposals: SpawnProposal[];
   add: (wf: Partial<Workflow>) => string;
+  addProposal: (p: Omit<SpawnProposal, "id" | "createdAt" | "status">) => string;
+  setProposalStatus: (id: string, status: SpawnProposal["status"]) => void;
   update: (id: string, patch: Partial<Workflow>) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => string | null;
@@ -372,6 +377,7 @@ export const useWorkflowsStore = create<WorkflowsState>()(
   persist(
     (set, get) => ({
       workflows: [],
+      proposals: [],
       add: (wf) => {
         const id = wf.id ?? uid("wf");
         const now = Date.now();
@@ -398,6 +404,15 @@ export const useWorkflowsStore = create<WorkflowsState>()(
           ),
         })),
       remove: (id) => set((s) => ({ workflows: s.workflows.filter((w) => w.id !== id) })),
+      addProposal: (p) => {
+        const proposal: SpawnProposal = { ...p, id: uid("prop"), createdAt: Date.now(), status: "open" };
+        set((s) => ({ proposals: [proposal, ...s.proposals] }));
+        return proposal.id;
+      },
+      setProposalStatus: (id, status) =>
+        set((s) => ({
+          proposals: s.proposals.map((p) => (p.id === id ? { ...p, status } : p)),
+        })),
       duplicate: (id) => {
         const src = get().workflows.find((w) => w.id === id);
         if (!src) return null;

@@ -340,6 +340,26 @@ export interface WorkflowSchedule {
   nextRunAt?: number;
 }
 
+/**
+ * Evolution Layer: a pipeline-born suggestion for a NEW workflow (spawn
+ * proposal). Surfaced in the Evolution Inbox; accepting it spawns a real
+ * pipeline (Research→Draft scaffold + review gate), dismissing archives it.
+ */
+export interface SpawnProposal {
+  id: string;
+  createdAt: number;
+  status: "open" | "accepted" | "dismissed";
+  /** One-line goal for the proposed pipeline (also becomes its name). */
+  goal: string;
+  /** Optional extra step lines (bullets/numbering stripped on accept). */
+  planLines?: string[];
+  /** Why this was proposed — shown verbatim in the inbox row. */
+  reason: string;
+  sourceWorkflowId: string;
+  sourceWorkflowName: string;
+  sourceRunId?: string;
+}
+
 /** A user-saved API key + preferences for one registry provider (BYOK vault). */
 export interface ProviderKeyEntry {
   key: string;
