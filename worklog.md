@@ -1209,3 +1209,19 @@ Stage Summary:
 - Shipped: mobile users now see cron fleet health + theme toggle + version in the nav drawer (parity with desktop sidebar)
 - Fleet: 414938 self-evidenced 19:07; server window open at round end; dark-window doctrine unchanged pending next boot
 - NEXT ROUND: 1) cache-busted agent-browser QA + mobile viewport drawer test (FleetChip visible?) 2) planner→pipeline one-click (r68 candidate) 3) confirm boot-server longevity at next real boot
+
+---
+Task ID: 414940 (2026-09-26 20:23 +08 window)
+Agent: main (hourly review loop)
+Task: collision-aware review — r68 mobile QA closure under an ACTIVE concurrent dev session
+
+Work Log:
+- COLLISION DETECTED & RESPECTED: a dev server (bun run dev, pts/1 TTY lineage, spawned 20:07 +08) is ALIVE 20+ min — exceeds the agent-spawn reaping window (interactive/TTY processes seem exempt or longer-lived). Doctrine applied: NO restarts, NO src edits, NO builds (next build would contend .next with Turbopack dev) — the running dev server hot-serves the committed tree (incl. r68 b24c9c3)
+- OOM TELEMETRY: next-server RSS plateaued at 1.36→1.39GB (idle); growth is EVENT-DRIVEN (route compiles), not constant — OOM ETA depends on user navigation burstiness; headroom ~2GB on the 4GB cgroup
+- r68 MOBILE QA CLOSED (was queued from 19:23): cache-busted open (fresh browser launch cleared the stale placeholder cache — quirk #2 self-resolved) → DOM 118,924 chars, title "PraisonAI — Multi-Agent AI Platform" → desktop FleetChip renders "Cron fleet 2 of 2 alive" (forensics route works under dev server too) → set viewport 390 844 (correct syntax is `agent-browser set viewport`, NOT `viewport`) → drawer opened via JS click (eval button.click() bypasses the fixed-inset-0 overlay that blocks hit-test clicks on fresh Sheets) → DRAWER CONTENT VERIFIED: "PraisonAI repo | cron 2/2 | next 11m | v1.0.0 · local-first · BYOK" — FleetChip countdown ticked 12m→11m live between samples
+- Tool notes: agent-browser `viewport` is a subcommand of `set`; overlay hit-test errors → prefer eval-based clicks for Radix Sheet triggers; fresh browser instance purges cached placeholder
+
+Stage Summary:
+- r68 increment (MobileNav FleetChip parity) is now FULLY verified end-to-end in real mobile viewport — debt closed
+- Concurrent session owns :3000 until it ends; prod restarts resume NEXT review round if :3000 is free again (bind-guard pattern: probe before start)
+- NEXT ROUND: 1) if dev server gone → standard prod restart + planner→pipeline one-click increment (requires build — only when no dev server is running); 2) boot-server longevity check at next real boot; 3) if concurrent session landed work, read its worklog delta FIRST
