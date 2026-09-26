@@ -2,6 +2,6 @@
   "name": "app-server",
   "private": true,
   "scripts": {
-    "dev": "cd /home/z/my-project && if [ -f .next/standalone/server.js ]; then bun run start; else bun run dev; fi"
+    "dev": "cd /home/z/my-project && if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:3000; then echo '[app-server] :3000 already served - standing down (bind-aware guard)'; else if [ -f .next/standalone/server.js ]; then exec bun run start; else exec bun run dev; fi; fi"
   }
 }

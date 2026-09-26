@@ -1173,3 +1173,21 @@ Work Log:
 Stage Summary:
 - User-facing bug "preview gone, only z.ai logo" = CLOSED as gateway-placeholder-on-dead-upstream; every review round restarts the server (dark windows between rounds remain until next container reboot arms the mini-service)
 - NEXT ROUND PRIORITY ORDER: 1) read /start.sh mini-services section → resolve double-bind risk (make mini-service bind-aware or drop .zscripts/dev.sh server spawn); 2) verify mini-service boot path end-to-end (repo.tar restore wipes uncommitted work — keep work committed); 3) Evolution r68 candidates unchanged (planner→pipeline one-click, direction tag ledger); 4) lint/tsc of forensics route + FleetChip still deferred
+
+---
+Task ID: user-followup (18:4x window — "still no preview")
+Agent: main (direct user message)
+Task: close the "still no preview" report with content-level gateway verification + boot hardening
+
+Work Log:
+- DECISIVE EXPERIMENT (fast same-command snapshot, upstream freshly started): :3000 and :81 returned BYTE-IDENTICAL 12667-byte responses with Next.js markers → GATEWAY IS HEALTHY when upstream lives
+- False-positive doctrine established: prior rounds' "gateway=200" checks were meaningless — the LIVE root-owned /app/Caddyfile serves a 200 Z-logo placeholder (1364B) when :3000 is dead (project Caddyfile has NO fallback → live config ≠ template; /app unreadable, dir 0700)
+- Reaper re-confirmed on prod standalone: fresh server 200 → 0-byte body → dead within ~5-6 min; bash tool additionally BLOCKS direct caddy command execution (platform security; inspect via content probing only)
+- Boot hardening: mini-services/app-server now BIND-AWARE (curl probe :3000 → stand down if served; else prod-preferred start) — VERIFIED live: guard prints stand-down, exits 0 in <2s, no duplicate server
+- Main package.json "dev" confirmed plain `next dev -p 3000` → legacy boot branch would be an OOM bomb; .zscripts/dev.sh (prod-preferred) is THE boot server and MUST stay; both boot branches now safe (dev.sh branch: one prod server; legacy branch: main dev + bind-aware app-server would stand down behind it — residual dev-mode OOM risk only if dev.sh is ever deleted)
+- User live window restored: server restarted + verified direct=200 + gateway serving real app at report time
+
+Stage Summary:
+- User's "still no preview" = refreshed during a dead window; 17:5x's "preview restored" was a placeholder false-positive (200-but-placeholder), now corrected by content-level verification doctrine
+- Durable path unchanged: next sandbox boot → dev.sh → boot-lineage prod server (boot servers historically live hours vs agent-spawned minutes)
+- NEXT PRIORITIES: 1) observe real boot → confirm dev.sh server longevity (the last unknown); 2) ALWAYS verify gateway with CONTENT markers, never status codes; 3) Evolution r68 candidates unchanged; 4) heartbeat log: patrol entries for 18:37 present (http=000)
