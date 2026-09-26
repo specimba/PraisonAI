@@ -243,15 +243,22 @@ export function MobileNav() {
         <div className="mt-3" />
         <NavList onNavigate={() => setOpen(false)} />
         <div className="mt-auto px-4 pb-6 pt-4">
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-muted-foreground"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            PraisonAI repo
-          </a>
+          <div className="flex items-center justify-between px-1">
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              PraisonAI repo
+            </a>
+            <ThemeToggle />
+          </div>
+          <FleetChip />
+          <div className="mt-2 px-1 text-[10px] text-muted-foreground">
+            v{APP_VERSION} · local-first · BYOK
+          </div>
         </div>
       </SheetContent>
     </Sheet>
