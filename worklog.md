@@ -1384,3 +1384,23 @@ Stage Summary:
 - The Evolution Loop is now a closed circuit: RUN → score novelty → STALL DETECTED → PROPOSE variation → ONE-CLICK SPAWN → new pipeline runs. Nothing produces proposals by accident: cap is 1 open per source workflow, and only genuinely stale (novelty<35) done runs qualify
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone still stale vs tree — restarting it before rebuild would revert the non-modal panel + 90s budget + one-click resume + inbox v1 + generator; do NOT); 2) boot-server longevity check at next real boot; 3) optional: score-novelty telemetry row in EvolutionLedger to make the 35% threshold legible to the user
 - RSIinFIELD reminder: schedule still auto-paused (failStreak) — one-click resume chip is in the grid; with the 90s budget + generator now live, its next successful runs will self-heal the streak and stale-output variants will surface as proposals
+
+---
+Task ID: 414940 (2026-09-27 05:23 +08 window)
+Agent: main (hourly review loop)
+Task: manual "Suggest variation" ledger action — user-driven half of the Evolution loop; closes the stale telemetry queue item
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 04:37+05:07, heartbeats present; 414940 = this task). HEAD moved 799a5e6→53e9a1b = platform auto-commit (git show --stat: worklog.md +20 only, zero src). Dev server HTTP 200 (tenure ~17h15m) — HMR-only
+- QA GATE: console 0 errors; Workflows grid renders 4 cards, header present. NOTE: innerText now ~5.1k vs ~95k in earlier rounds — reconciled as measurement-context difference (earlier numbers were taken with run-panel/board state accumulated in the session; ledger+inbox currently self-hidden per doctrine: zero done runs and zero open proposals in this QA profile). Not a bug signal
+- QUEUE ITEM CORRECTION: "score-novelty telemetry row in EvolutionLedger" was already built (per-run trail chips with 35% amber/emerald coloring, avg chip, stalled counter, ▲/▼ delta, 🧬 latest-score chip) — closed as done, NOT duplicated (same false-positive discipline as 01:23)
+- INCREMENT SHIPPED (commit on top of 53e9a1b): manual variation requests from the ledger —
+  · spawn-proposal-engine.ts: extracted buildVariationProposal() shared constructor (excerpt clamp + deterministic angle pick + reason text with manual/auto variants); maybeProposeSpawn refactored to guard + delegate — auto path behavior byte-identical
+  · workflows-view.tsx EvolutionLedger: rows whose latest done run scored <35% now show a violet "Suggest variation" chip button → addProposal(buildVariationProposal({manual:true, novelty:n, sourceRunId:latest.id, taskExcerpt: steps[0].instruction || label-join || name})) + success toast pointing at the inbox; hidden while an open proposal for that source already exists (dedupe)
+  · scripts/test-spawn-engine.ts: +3 checks for the manual path (14 total)
+- VERIFIED: eslint exit 0 on all 3 files; bun suite 14/14 PASS (auto-path tests unchanged = refactor is behavior-preserving); LIVE E2E via localStorage injection: workflow with done run novelty 22 → ledger row + 🧬 22% + button rendered → CLICKED → Evolution Inbox appeared with "Manually requested — latest run scored 22% novelty (below the 35% stall threshold)" → button self-removed (dedupe re-render confirmed in live DOM) → snapshot-restore cleanup + reload clean (dom 5144, zero artifacts)
+
+Stage Summary:
+- The Evolution loop now has BOTH halves: automatic (runner finishes a stalled run → proposal) AND manual (user sees amber row → one click → proposal). Both share one constructor, one dedupe rule (max 1 open per source), one inbox surface
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree: non-modal panel, 90s budget, resume chip, inbox v1, generator, ledger action — restarting it before rebuild reverts ALL; do NOT); 2) boot-server longevity check at next real boot; 3) candidate polish: inbox empty-state hint when proposals were all accepted/dismissed (teach the loop), or accepted-proposals archive view
+- Fleet: heartbeats continuous through 21:07:11Z; no gaps; no failed patrols
