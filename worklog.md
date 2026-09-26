@@ -1258,3 +1258,19 @@ Stage Summary:
 - Evolution Layer now has a visible history surface: scoring spine (21:23) + kanban chip + ledger (this round). Data path renders the moment a pipeline run finishes "done"
 - NOT exercised: ledger with real scored data (needs one done run post-r68) — trivial, self-verifies on first run
 - NEXT ROUND: 1) if :3000 free → prod rebuild (standalone stale vs tree) + planner→pipeline one-click (needs build window); 2) spawn-proposal inbox (Evolution candidate); 3) boot-server longevity check at next real boot
+
+---
+Task ID: 414940 (2026-09-26 23:23 +08 window)
+Agent: main (hourly review loop)
+Task: QA + Evolution feedback-loop closure — 🧬 novelty chip in the run panel history
+
+Work Log:
+- Health: server 200 (concurrent TTY dev server, tenure ~3h15m), tree clean at 6f36d35, no concurrent deltas
+- QA PASS (no bugs found): agent-browser — DOM 115k real app (content doctrine), 0 console errors, title correct; nav-click initially appeared dead → diagnosed as first-visit dev chunk compile latency (resolved on retry with 5s wait, same click pattern as 22:23) — tool note: allow ~5s after first navigation to a view per dev session; Workflows view renders, ledger correctly self-hidden (still zero done runs in profile)
+- INCREMENT (workflow-run-panel.tsx): run history rows now show a compact 🧬 novelty chip on done+scored runs (emerald ≥35 / amber <35 stall, tooltip explains; tabular-nums, shrink-0) between task text and timestamps — EXACT mirror of the kanban chip doctrine; closes the feedback loop at the moment users browse past runs, no ledger visit needed; unscored runs stay chip-free (ledger carries the "not scored" education)
+- Verified: eslint exit 0; HMR recompile clean (server 200); fresh browser load 0 errors / DOM 115k; chip is conditional (done + novelty != null) so current empty-profile absence is correct behavior
+
+Stage Summary:
+- Evolution Layer surfaces now complete: scoring spine (finish hook) → kanban chip → ledger (22:23) → run-panel history chip (this round). Every run completion is visible in 3 places
+- planner→pipeline one-click remains queued — note: it only needs HMR (src edit), the "build window" constraint applies to PROD standalone rebuilds; feasible any round
+- NEXT ROUND: 1) planner→pipeline one-click (HMR-servable); 2) spawn-proposal inbox; 3) prod rebuild when :3000 frees; 4) boot-server longevity at next real boot

@@ -587,6 +587,19 @@ export function WorkflowRunPanel({
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-400" aria-hidden />
                 )}
                 <span className="min-w-0 flex-1 truncate text-xs">{r.task}</span>
+                {r.status === "done" && r.novelty != null && (
+                  <span
+                    title={`Evolution novelty vs recent runs: ${r.novelty}%${r.novelty < 35 ? " — stall signal (near-duplicate output)" : ""}`}
+                    className={cn(
+                      "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                      r.novelty < 35
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    )}
+                  >
+                    🧬 {r.novelty}%
+                  </span>
+                )}
                 <span className="shrink-0 text-[11px] text-muted-foreground">
                   {fmtRel(r.startedAt)}
                 </span>
