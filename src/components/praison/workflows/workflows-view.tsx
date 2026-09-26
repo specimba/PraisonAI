@@ -524,31 +524,65 @@ function EvolutionInbox() {
   const setProposalStatus = useWorkflowsStore((s) => s.setProposalStatus);
   const agents = useAgentsStore((s) => s.agents);
   const addWf = useWorkflowsStore((s) => s.add);
+  const [showArchive, setShowArchive] = React.useState(false);
 
   const open = proposals.filter((p) => p.status === "open");
   const acceptedCount = proposals.filter((p) => p.status === "accepted").length;
   const dismissedCount = proposals.filter((p) => p.status === "dismissed").length;
 
   // Inbox clear? Keep a muted cycle summary instead of vanishing — the strip
-  // teaches the loop (proposals come from stalled runs or the ledger action).
+  // teaches the loop and expands into an archive of handled proposals.
   if (open.length === 0) {
     if (acceptedCount + dismissedCount === 0) return null;
+    const history = proposals
+      .filter((p) => p.status !== "open")
+      .sort((a, b) => b.createdAt - a.createdAt);
     return (
-      <div className="mb-4 flex items-center gap-2 rounded-xl border border-violet-500/15 bg-violet-500/[0.03] px-3 py-2">
-        <Lightbulb className="h-3.5 w-3.5 shrink-0 text-violet-500/70" />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Evolution cycle:{" "}
-          <span className="font-medium text-foreground/80">
-            {acceptedCount} spawned
+      <div className="mb-4 rounded-xl border border-violet-500/15 bg-violet-500/[0.03] p-3">
+        <button
+          onClick={() => setShowArchive((v) => !v)}
+          aria-expanded={showArchive}
+          aria-label="Toggle Evolution proposal archive"
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <Lightbulb className="h-3.5 w-3.5 shrink-0 text-violet-500/70" />
+          <span className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+            Evolution cycle:{" "}
+            <span className="font-medium text-foreground/80">
+              {acceptedCount} spawned
+            </span>
+            {dismissedCount > 0 && <> · {dismissedCount} dismissed</>} — inbox
+            clear. New proposals appear here automatically when runs stall
+            (&lt;35% novelty) or via{" "}
+            <span className="font-medium text-foreground/80">
+              Suggest variation
+            </span>{" "}
+            in the ledger.
           </span>
-          {dismissedCount > 0 && <> · {dismissedCount} dismissed</>} — inbox
-          clear. New proposals appear here automatically when runs stall
-          (&lt;35% novelty) or via{" "}
-          <span className="font-medium text-foreground/80">
-            Suggest variation
-          </span>{" "}
-          in the ledger.
-        </p>
+          <span className="shrink-0 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400">
+            {showArchive ? "Hide history" : `History (${history.length})`}
+          </span>
+        </button>
+        {showArchive && (
+          <div className="mt-2 space-y-1.5">
+            {history.slice(0, 8).map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center gap-2 rounded-lg border bg-background/60 px-2.5 py-1.5"
+              >
+                {p.status === "accepted" ? (
+                  <Sparkles className="h-3 w-3 shrink-0 text-violet-500" aria-hidden />
+                ) : (
+                  <X className="h-3 w-3 shrink-0 text-muted-foreground/60" aria-hidden />
+                )}
+                <span className="min-w-0 flex-1 truncate text-xs">{p.goal}</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  from {p.sourceWorkflowName} · {proposalAge(p.createdAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
