@@ -1421,3 +1421,23 @@ Stage Summary:
 - Shipped: the Evolution inbox now explains its own lifecycle — spawn/dismiss counts persist as a cycle summary, teaching users where proposals come from and how to request them manually
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree — restarting it before rebuild reverts ALL recent fixes; do NOT); 2) boot-server longevity check at next real boot; 3) candidates: accepted-proposals archive view (expand strip into a collapsible history), or novelty-threshold setting surfaced in Settings (currently hardcoded 35 via NOVELTY_SPAWN_THRESHOLD)
 - Fleet: heartbeats continuous through 22:07:10Z; no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 07:23 +08 window)
+Agent: main (hourly review loop)
+Task: collapsible proposal archive — the cycle strip becomes a history viewer
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 06:37+07:07, heartbeats present; 414940 = this task). HEAD f5a4f1c→280f8a3 = platform auto-commit (verified worklog.md +17 only). HTTP 200 (dev tenure ~19h15m) — HMR-only
+- QA GATE: console 0 errors, Studio renders, dom 5135 (baseline) → STABLE → took the queued candidate: archive view (lighter than the Settings-threshold option, which touches 4+ files with hardcoded 35s — deferred)
+- INCREMENT SHIPPED (workflows-view.tsx EvolutionInbox): the cycle strip is now an expandable archive —
+  · whole strip is a <button aria-expanded> with a violet "History (N)" chip; click toggles setShowArchive
+  · expanded: newest-first rows (max 8) — status icon (Sparkles violet = accepted / X muted = dismissed), truncated goal, "from <source workflow> · <relative age>" (reuses proposalAge)
+  · collapsed state unchanged: counts + teaching text; pristine profiles still render nothing
+  · EDITOR LESSON: MultiEdit here is sequential, not atomic — on old_str mismatch the earlier edit HAD applied while the later failed; also JSX text must be copied verbatim (my old_str had "Evolution cycle: {\" \"}" with an extra space vs the file's "Evolution cycle:{\" \"}"). Recovered by reading the file and re-anchoring; useState hook landed in the first application, second edit applied solo
+- VERIFIED: eslint exit 0; LIVE E2E: injected 1 accepted + 1 dismissed (1h/30m ages) → strip + "History (2)" + rows hidden → click → both rows shown with "from E2E Source" meta, "Hide history" label, NEWEST-FIRST order confirmed (B before A) → click → collapsed again, "History (2)" back → double-write cleanup → reload: propsLeft [], strip gone, profile clean
+
+Stage Summary:
+- Shipped: handled proposals are no longer invisible — the strip doubles as a compact archive users can audit (what was spawned/dismissed, from which workflow, when)
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree — restarting it before rebuild reverts ALL recent fixes; do NOT); 2) boot-server longevity check at next real boot; 3) candidate: novelty-threshold surfaced in Settings (NOVELTY_SPAWN_THRESHOLD is referenced in engine+runner+ledger tooltips — centralize before exposing); 4) candidate: Deep Research-style quality pass on the archive (filter by status, "clear history" action)
+- Fleet: heartbeats continuous through 23:07:12Z; no gaps; no failed patrols
