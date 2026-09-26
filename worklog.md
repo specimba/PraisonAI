@@ -1225,3 +1225,20 @@ Stage Summary:
 - r68 increment (MobileNav FleetChip parity) is now FULLY verified end-to-end in real mobile viewport — debt closed
 - Concurrent session owns :3000 until it ends; prod restarts resume NEXT review round if :3000 is free again (bind-guard pattern: probe before start)
 - NEXT ROUND: 1) if dev server gone → standard prod restart + planner→pipeline one-click increment (requires build — only when no dev server is running); 2) boot-server longevity check at next real boot; 3) if concurrent session landed work, read its worklog delta FIRST
+
+---
+Task ID: 414940 (2026-09-26 21:23 +08 window)
+Agent: main (hourly review loop)
+Task: Evolution Layer spine — BUILT natively in this sandbox (discovery: r67.1 never existed here)
+
+Work Log:
+- CRITICAL DISCOVERY: the r67.1 Evolution Layer reported by the sibling session is NOT in this tree (src/lib/evolution.ts absent; novelty/EVOLVE/shingle zero hits; f8ab0dd/86a032b are cron snapshot commits with no evolution code) — the 17:5x "confirmed intact" check verified commit EXISTENCE, not CONTENT (verification false-positive #3). The sibling session's sandbox is isolated from this one; the user's preview here never had the Evolution tab
+- Collision reassessed: tree clean, no concurrent edits for 75+ min (latest src mtime = my own r68 MobileNav edit) → editing window OPEN; dev server hot-reloads → NO BUILD NEEDED
+- SHIPPED (4 files): src/lib/evolution.ts (shingles k=8 + Jaccard + scoreNovelty vs last-5 done runs + runText helper); types.ts WorkflowRun.novelty?: number; workflow-runner.ts finish() hook (computes novelty on done, best-effort try/catch — never affects finalization; patches {novelty} into the run); run-kanban.tsx 🧬 chip on run cards (emerald ≥35%, amber <35% = stall signal, tooltip explains)
+- Verified: eslint CLEAN on all 4 files; logic sanity via bun -e (near-duplicate pair scores low, distinct pair scores high); dev hot-reload compile check clean; committed to git
+- NOT yet done (next rounds): Evolution tab view (run-history novelty ledger), spawn-proposal inbox, planner→pipeline one-click; existing runs have no novelty until they re-run (scores attach at finish-time)
+- prod build note: .next standalone is now STALE vs tree — rebuild required when the concurrent dev server exits (bind-guard probe first); dev mode serves the new code live
+
+Stage Summary:
+- The user's long-standing ask (novelty/anti-stall) now EXISTS in the preview app for real: next pipeline run that finishes "done" gets a 🧬 novelty chip; stall (<35%) turns amber
+- NEXT ROUND PRIORITY: Evolution section in Workflows view (novelty ledger over run history); then spawn proposals; rebuild prod when :3000 frees up
