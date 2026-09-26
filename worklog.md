@@ -1105,3 +1105,21 @@ Stage Summary:
 - Shipped: AIHubMix end-to-end — provider registry + relay chain + picker + preseeded vault key + keyless tracker source (403 models) + gallery/intro. Free-lane quota exhaustion on this account is honestly surfaced and the relay already fails over gracefully; a $1 top-up re-arms 45 free lanes + unlocks frontier at list price.
 - Design notes kept: aihubmix left keyOptional (roster refresh works pre-key); free ids never used as relay fallback targets (platform skips them silently — our rotation is heavy→light tier order); router "auto" shipped as a picker lane, not a relay hop (non-determinism).
 - Next candidates: APP-Code header support (10% off non-Claude), reasoning_effort passthrough for thinking models, relay health chip for aihubmix quota state (429-aware backoff), Kilo/OpenCode-Zen gateways from the r18 matrix as future providers.
+
+---
+Task ID: 414940 (2026-09-26 16:23 +08 window)
+Agent: main (hourly review loop)
+Task: post-restore status assessment + QA + ONE focused improvement
+
+Work Log:
+- SELF-HEAL: cron CLI still ENOENT (session-side outage); fleet=2/2 CONFIRMED via double-fire (414938 fired 16:07, 414940 fired 16:23 +08) — no recreation needed (and impossible without CLI)
+- Diagnosis locked: sandbox was recycled + restored from GitHub backup at r30 (RESTORE.md present; HEAD 121f9e7; auto-commit b9caba4 at 08:11Z captured the dirty tree — platform now auto-commits cron-round work as "<uuid>-cron", so future work is loss-protected)
+- QA: agent-browser open+snapshot+console — app fully renders (sidebar/nav/ticker/chat), console clean (HMR info only), health 200 → phase STABLE, so focused increment chosen
+- Increment (restores lost r31+ ops tooling): 1) ops/cron.jobs.json reconstructed verbatim from both jobs' own task texts (canonical recreation source + bannedKinds:[webDevReview] + dedupe doctrine); 2) /api/cron/forensics route rebuilt (registry+heartbeat read, CLI probe, doctrine[]); 3) sidebar FleetChip restored (cron n/2 pill: emerald+soft-pulse healthy / amber degraded / muted unknown; next-fire countdown parsed from cron minute slots; 60s poll; click=recheck; tooltip shows last heartbeat + cli state)
+- Verified live: jobs.json valid JSON; forensics 200 in 376ms (jobs [(414938,agentTurn,enabled),(414940,agentTurn,enabled)]); chip renders "cron 2/2 · next 7m" (aria "Cron fleet 2 of 2 alive"); dev.log clean, no compile errors
+
+Stage Summary:
+- Fleet observability rebuilt post-r30-restore: patrol fallback endpoint + canonical jobs registry + UI chip, all live
+- Pre-recycle r31-r64 working tree remains lost (only r30-era work + this round's additions exist on disk); user browser-side data (localStorage praison-*) was never affected
+- Honest gaps: cron CLI ENOENT persists (self-heal via CLI impossible; forensics is THE verification path); lint/tsc pass on new route+chip deferred (no-heavy-suites rule)
+- Next priorities: 1) lint/tsc check of src/app/api/cron/forensics/route.ts + shell.tsx FleetChip; 2) MobileNav parity (chip currently desktop-sidebar only); 3) USER REQUEST pending re-plan against r30 codebase: workflow self-generation (workflows create new workflows/tasks, background autonomous progression, diversified sequential work instead of repeat research); 4) optional re-add of stall chips / RSI pipeline enhancements

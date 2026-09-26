@@ -105,6 +105,93 @@ function NewChatButton({ onDone }: { onDone?: () => void }) {
   );
 }
 
+// ─── Fleet chip (post-restore rebuild of the sidebar fleet indicator) ───────
+type FleetState = {
+  n: number;
+  total: number;
+  nextMin: number | null;
+  lastHeartbeat: string;
+  cli: boolean;
+};
+
+function parseMinuteSlots(expr: unknown): number[] {
+  if (typeof expr !== "string") return [];
+  const first = expr.trim().split(/\s+/)[0];
+  if (!/^\d+(,\d+)*$/.test(first)) return []; // simple cron minutes only
+  return first
+    .split(",")
+    .map(Number)
+    .filter((m) => m >= 0 && m < 60);
+}
+
+function FleetChip() {
+  const [fleet, setFleet] = React.useState<FleetState | null>(null);
+  const [tick, setTick] = React.useState(0);
+
+  React.useEffect(() => {
+    let alive = true;
+    fetch("/api/cron/forensics")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (!alive) return;
+        const jobs: Array<{ kind?: string; enabled?: boolean; schedule?: { expr?: unknown } }> =
+          d?.registry?.jobs ?? [];
+        const total = jobs.length;
+        const n = jobs.filter((j) => (j.enabled ?? true) && j.kind === "agentTurn").length;
+        const slots = Array.from(
+          new Set(jobs.flatMap((j) => parseMinuteSlots(j.schedule?.expr)))
+        ).sort((a, b) => a - b);
+        const cur = new Date().getUTCMinutes();
+        let nextMin: number | null = null;
+        for (const s of slots) {
+          const delta = ((s - cur + 60) % 60) || 60;
+          if (nextMin === null || delta < nextMin) nextMin = delta;
+        }
+        const last = (d?.heartbeat?.last ?? []).slice(-1)[0] ?? "";
+        setFleet({ n, total, nextMin, lastHeartbeat: last, cli: d?.cli?.available === true });
+      })
+      .catch(() => {
+        if (alive) setFleet(null);
+      });
+    const t = setInterval(() => setTick((x) => x + 1), 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [tick]);
+
+  const healthy = !!fleet && fleet.total > 0 && fleet.n === fleet.total;
+  const degraded = !!fleet && fleet.n < fleet.total;
+  return (
+    <button
+      type="button"
+      onClick={() => setTick((x) => x + 1)}
+      title={
+        fleet
+          ? `cron fleet ${fleet.n}/${fleet.total} (agentTurn)${fleet.cli ? " · cli ok" : " · cli n/a — double-fire doctrine"}${fleet.lastHeartbeat ? `\nlast heartbeat: ${fleet.lastHeartbeat}` : ""}\nclick to re-check`
+          : "fleet status unavailable — /api/cron/forensics unreachable\nclick to retry"
+      }
+      aria-label={`Cron fleet ${fleet ? `${fleet.n} of ${fleet.total} alive` : "status unknown"}`}
+      className={cn(
+        "mt-2 flex w-full items-center gap-1.5 rounded-md border px-2 py-1 text-left text-[10px] transition-colors",
+        healthy && "border-emerald-500/25 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10",
+        degraded && "border-amber-500/30 bg-amber-500/5 text-amber-400 hover:bg-amber-500/10",
+        !fleet && "border-border/60 text-muted-foreground hover:bg-accent/40"
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "h-1.5 w-1.5 shrink-0 rounded-full",
+          healthy ? "bg-emerald-400 soft-pulse" : degraded ? "bg-amber-400" : "bg-muted-foreground/40"
+        )}
+      />
+      <span className="font-medium">cron {fleet ? `${fleet.n}/${fleet.total}` : "?/2"}</span>
+      {fleet?.nextMin != null && <span className="ml-auto text-muted-foreground">next {fleet.nextMin}m</span>}
+    </button>
+  );
+}
+
 // ─── Sidebar (desktop) ───────────────────────────────────────────────────────
 export function AppSidebar() {
   return (
@@ -129,6 +216,7 @@ export function AppSidebar() {
           </a>
           <ThemeToggle />
         </div>
+        <FleetChip />
         <div className="mt-2 px-1 text-[10px] text-muted-foreground">
           v{APP_VERSION} · local-first · BYOK
         </div>
