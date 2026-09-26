@@ -4,6 +4,7 @@
 
 import { toast } from "sonner";
 import { runText, scoreNovelty } from "@/lib/evolution";
+import { maybeProposeSpawn } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveLlm } from "@/lib/llm-config";
 import { decide, SYSTEMONE_GATE_CONFIDENCE } from "@/lib/systemone";
@@ -361,6 +362,40 @@ export async function executeWorkflowRun(
         if (score != null) novelty = score;
       } catch {
         /* novelty is best-effort */
+      }
+    }
+    // Evolution Layer (r70): a done run with low novelty = the pipeline keeps
+    // producing near-duplicates. Best-effort: propose a variation to the
+    // spawn inbox (max ONE open proposal per source workflow — anti-spam).
+    if (status === "done" && novelty !== undefined && novelty < 35) {
+      try {
+        const st = useWorkflowsStore.getState();
+        const openSourceIds = st.proposals
+          .filter((p) => p.status === "open")
+          .map((p) => p.sourceWorkflowId);
+        const liveWf2 = st.workflows.find((w) => w.id === wf.id);
+        const taskExcerpt =
+          liveWf2?.steps[0]?.instruction ||
+          liveWf2?.steps.map((s) => s.label).join(" → ") ||
+          wf.name;
+        const proposal = maybeProposeSpawn({
+          status,
+          novelty,
+          openSourceIds,
+          sourceWorkflowId: wf.id,
+          sourceWorkflowName: wf.name,
+          sourceRunId: runId,
+          taskExcerpt,
+        });
+        if (proposal) {
+          st.addProposal(proposal);
+          toast("Evolution proposal added to the inbox", {
+            icon: "🧬",
+            description: `${wf.name} keeps producing similar output (novelty ${Math.round(novelty)}%) — a variation was suggested`,
+          });
+        }
+      } catch {
+        /* spawn proposals are best-effort — never affect run finalization */
       }
     }
     patchRun({

@@ -480,6 +480,15 @@ function PlanPipelineDialog({
 
 // ─── Evolution Inbox · pipeline-born spawn proposals ───────────────────────
 
+/** Compact relative time for inbox rows ("just now", "5m ago", "3h ago", date fallback). */
+function proposalAge(ts: number): string {
+  const dt = Date.now() - ts;
+  if (dt < 60_000) return "just now";
+  if (dt < 3_600_000) return `${Math.floor(dt / 60_000)}m ago`;
+  if (dt < 86_400_000) return `${Math.floor(dt / 3_600_000)}h ago`;
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function EvolutionInbox() {
   const proposals = useWorkflowsStore((s) => s.proposals);
   const setProposalStatus = useWorkflowsStore((s) => s.setProposalStatus);
@@ -552,10 +561,12 @@ function EvolutionInbox() {
                   {p.sourceWorkflowName}
                 </span>{" "}
                 ·{" "}
-                {new Date(p.createdAt).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}
+                <span
+                  className="ml-0.5 inline-flex items-center rounded-full border border-violet-500/25 bg-violet-500/10 px-1.5 py-px text-[10px] font-medium text-violet-600 dark:text-violet-400"
+                  title={new Date(p.createdAt).toLocaleString()}
+                >
+                  {proposalAge(p.createdAt)}
+                </span>
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
