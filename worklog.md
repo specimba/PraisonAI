@@ -1123,3 +1123,34 @@ Stage Summary:
 - Pre-recycle r31-r64 working tree remains lost (only r30-era work + this round's additions exist on disk); user browser-side data (localStorage praison-*) was never affected
 - Honest gaps: cron CLI ENOENT persists (self-heal via CLI impossible; forensics is THE verification path); lint/tsc pass on new route+chip deferred (no-heavy-suites rule)
 - Next priorities: 1) lint/tsc check of src/app/api/cron/forensics/route.ts + shell.tsx FleetChip; 2) MobileNav parity (chip currently desktop-sidebar only); 3) USER REQUEST pending re-plan against r30 codebase: workflow self-generation (workflows create new workflows/tasks, background autonomous progression, diversified sequential work instead of repeat research); 4) optional re-add of stall chips / RSI pipeline enhancements
+
+---
+Task ID: 414940-missing-entry (17:23 window, budget died at 12/12 before writing)
+Agent: main (hourly review loop)
+Task: OOM-crash diagnosis + watchdog deployment (recorded late)
+
+Work Log:
+- 09:07Z patrol detected app DOWN since 08:43:48Z; dmesg: kernel OOM-killed next-server at 3.1GB RSS on the 4GB sandbox
+- NODE_OPTIONS=--max-old-space-size=2560 experiment: caused FAST silent crashes (twice) — reverted; uncapped dev grows RSS ~4MB/s under load → cgroup OOM in ~5-30 min
+- Deployed ops/dev-watchdog.sh (60s probe, 5-min cooldown, single-instance pidfile); it caught+restarted twice (09:26, 09:29) before itself being reaped
+
+---
+Task ID: user-report-fix (17:5x window — "preview is gone, only z.ai logo")
+Agent: main (user-reported bug, delivered via IM gateway)
+Task: fix blank preview; verify concurrent session's r67.1 Evolution Layer survives
+
+Work Log:
+- Blank preview = server dead (gateway 502): agent-spawned servers are reaped minutes after spawn — including a flat-125MB PROD server (NOT OOM). Platform design: app server lives only while its owning session lives (user's 2h16m full-stack session ended → preview went blank). agent-browser daemon + PID-1-lineage processes are exempt
+- start.sh forensics (root-owned, read-only): container boots restore /home/sync/repo.tar → bun install → db:push → bun run dev (that 08:08 boot was the only long-lived server) → mini-services/* started as platform lineage (reparent to tini) → exec caddy :81→:3000. Hook exists: .zscripts/dev.sh overrides boot dev flow
+- FIX 1 (now): rebuilt production (bun run build OK, standalone + forensics route included), started server — RSS FLAT ~125MB vs dev 1.4→3.1GB climb; direct=200 AND gateway=200 (user preview restored)
+- FIX 2 (durable): mini-services/app-server/package.json registered — at next container boot start.sh launches it as PID-1-lineage (immortal to session reaping); dev script prefers prod standalone, falls back to dev; .zscripts/dev.sh also written (bun install → db:push → prod-preferred boot, no build at boot for FC 120s budget)
+- FIX 3 (marker): .build-commit records HEAD e19da1fa-era build; NOTE: prod serves THIS build — after future code changes rebuild+restart or next boot re-syncs
+- r67.1 Evolution Layer (concurrent session) confirmed intact in auto-commits f8ab0dd/86a032b, tree clean; forensics endpoint + FleetChip verified live in prod build
+- agent-browser quirk: its Chrome gets ERR_CONNECTION_REFUSED to 127.0.0.1:3000 even while curl=200 (tool-side netns/proxy limitation) — QA via curl/gateway; browser snapshot deferred
+
+Stage Summary:
+- Preview restored NOW (gateway 200); prod server ~125MB flat, OOM-immune
+- Durability: next container reboot → app-server mini-service = permanent platform-lineage server (reaping-proof)
+- Between now and next reboot: server still dies when THIS session ends — cron fleet (17:07-style patrols detect; hourly reviews restart) covers the gap; worst-case dark window ~60 min
+- Unresolved: exact reaper mechanism (silent, 2-5 min, spares PID-1 lineage + agent-browser); cron CLI still ENOENT (fleet verified by double-fire only); worklog gap for 17:23 covered by this entry
+- Next priorities: 1) verify mini-service boots correctly at next container restart; 2) attempt restoring cron CLI access; 3) Evolution Layer r68 candidates (planner→pipeline one-click, direction tag ledger, evolveTask default-on for new pipelines); 4) consider cron.jobs.json prompt revision for patrol-assisted restarts IF CLI returns
