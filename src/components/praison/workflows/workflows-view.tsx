@@ -123,6 +123,155 @@ function sanitizeWorkflow(raw: unknown, validAgentIds: Set<string>): Workflow | 
   };
 }
 
+// ─── Evolution ledger · per-workflow novelty trajectory (r68 follow-up) ──────
+
+/**
+ * Compact novelty ledger over run history: one row per workflow that has done
+ * runs, showing the last 6 done runs' novelty scores as a colored trail strip
+ * (oldest → newest), a ▲/▼ delta vs the previous scored run, and the latest
+ * score chip. Amber <35% = stall signal, matching the kanban 🧬 chip doctrine.
+ * Self-hides when no workflow has finished a run yet.
+ */
+function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
+  const rows = React.useMemo(
+    () =>
+      workflows
+        .map((wf) => ({ wf, done: wf.runs.filter((r) => r.status === "done") }))
+        .filter((r) => r.done.length > 0),
+    [workflows]
+  );
+
+  const allScored = React.useMemo(
+    () => rows.flatMap((r) => r.done.filter((x) => x.novelty != null)),
+    [rows]
+  );
+  const avg = allScored.length
+    ? Math.round(allScored.reduce((s, r) => s + (r.novelty ?? 0), 0) / allScored.length)
+    : null;
+  const stalled = allScored.filter((r) => (r.novelty ?? 0) < 35).length;
+
+  if (rows.length === 0) return null;
+
+  return (
+    <Card className="mb-4 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span aria-hidden>🧬</span>
+          <h3 className="text-sm font-semibold">Evolution ledger</h3>
+          <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+            output novelty vs recent done runs · &lt;35% = stall
+          </span>
+        </div>
+        {allScored.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium">
+            <span
+              title={`${allScored.length} run${allScored.length === 1 ? "" : "s"} scored by the Evolution Layer (runs finish with a novelty score vs their workflow's recent output)`}
+              className="rounded-full border bg-muted/40 px-2 py-0.5 text-muted-foreground"
+            >
+              {allScored.length} scored
+            </span>
+            <span
+              title={`Average novelty across all scored runs${avg != null ? `: ${avg}%` : ""}`}
+              className={cn(
+                "rounded-full border px-2 py-0.5",
+                avg != null && avg < 35
+                  ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              )}
+            >
+              avg {avg}%
+            </span>
+            {stalled > 0 && (
+              <span
+                title={`${stalled} near-duplicate run${stalled === 1 ? "" : "s"} — the pipeline is treading water; widen the task or vary instructions`}
+                className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-600 dark:text-amber-400"
+              >
+                {stalled} stalled
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        {rows.map(({ wf, done }) => {
+          const latest = done[0];
+          const n = latest.novelty;
+          const prevScored = done.slice(1).find((r) => r.novelty != null);
+          const delta =
+            n != null && prevScored?.novelty != null ? n - prevScored.novelty : null;
+          const trail = done.slice(0, 6).reverse(); // oldest → newest
+          return (
+            <div
+              key={wf.id}
+              className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-xs font-medium">{wf.name}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {done.length} done run{done.length === 1 ? "" : "s"}
+                  {latest.finishedAt ? ` · last ${fmtRel(latest.finishedAt)}` : ""}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {trail.map((r) => {
+                  const v = r.novelty;
+                  return (
+                    <span
+                      key={r.id}
+                      title={`${fmtRel(r.startedAt)}${v != null ? ` · novelty ${v}%${v < 35 ? " — stall signal" : ""}` : " · not scored (finished before the Evolution Layer landed; re-run to score)"}`}
+                      className={cn(
+                        "flex h-5 min-w-8 items-center justify-center rounded px-1 text-[10px] font-medium tabular-nums",
+                        v == null
+                          ? "bg-muted text-muted-foreground/60"
+                          : v < 35
+                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      )}
+                    >
+                      {v != null ? v : "·"}
+                    </span>
+                  );
+                })}
+                {delta != null && delta !== 0 && (
+                  <span
+                    title={`${delta > 0 ? "+" : ""}${delta}% vs the previous scored run`}
+                    className={cn(
+                      "text-[10px] font-semibold",
+                      delta > 0
+                        ? "text-emerald-500"
+                        : "text-amber-500"
+                    )}
+                  >
+                    {delta > 0 ? "▲" : "▼"}
+                  </span>
+                )}
+                <span
+                  title={
+                    n != null
+                      ? `Evolution novelty vs recent runs: ${n}%${n < 35 ? " — stall signal (near-duplicate output)" : ""}`
+                      : "Latest run finished before the Evolution Layer landed — re-run to score"
+                  }
+                  className={cn(
+                    "ml-1 inline-flex h-6 items-center rounded-full border px-2 text-[10px] font-semibold",
+                    n == null
+                      ? "text-muted-foreground"
+                      : n < 35
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                        : "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  )}
+                >
+                  {n != null ? `🧬 ${n}%` : "not scored"}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 // ─── Workflow Studio · grid of pipelines, editor dialog + run panel ─────────
 
 export function WorkflowsView() {
@@ -369,6 +518,8 @@ export function WorkflowsView() {
             </AlertDescription>
           </Alert>
         ) : null}
+
+        <EvolutionLedger workflows={workflows} />
 
         {boardOpen ? (
           <RunKanban onSelect={openRunFromBoard} />

@@ -1242,3 +1242,19 @@ Work Log:
 Stage Summary:
 - The user's long-standing ask (novelty/anti-stall) now EXISTS in the preview app for real: next pipeline run that finishes "done" gets a 🧬 novelty chip; stall (<35%) turns amber
 - NEXT ROUND PRIORITY: Evolution section in Workflows view (novelty ledger over run history); then spawn proposals; rebuild prod when :3000 frees up
+
+---
+Task ID: 414940 (2026-09-26 22:23 +08 window)
+Agent: main (hourly review loop)
+Task: queued r68 follow-up — Evolution novelty ledger in the Workflows view
+
+Work Log:
+- Collision check: tree clean, no concurrent edits since 21:23 round; concurrent-session dev server still owns :3000 (200, TTY lineage ~2h15m) — edited src via HMR, NO BUILD (doctrine respected)
+- SHIPPED: EvolutionLedger component in workflows-view.tsx (~150 lines, self-contained) — per-workflow novelty trajectory: last-6 done runs as colored trail strip (oldest→newest, emerald ≥35 / amber <35 / muted dot = unscored pre-Evolution runs), ▲/▼ delta vs previous scored run, latest-score chip, header summary chips (N scored · avg % · N stalled with actionable tooltips); mounts above grid/board in both layout modes; self-hides when zero done runs
+- Verified: eslint exit 0; HMR recompile clean (server 200 post-edit); agent-browser QA — DOM 94.6k (content-verified real app per doctrine), nav-click → Workflow Studio renders without crash, ledger correctly SELF-HIDDEN (this browser profile has no done runs yet — "not scored yet" path exercised instead of data path)
+- Fleet: 414938 patrol 22:07Z clean (http=200 fleet=2/2); 414940 = this task
+
+Stage Summary:
+- Evolution Layer now has a visible history surface: scoring spine (21:23) + kanban chip + ledger (this round). Data path renders the moment a pipeline run finishes "done"
+- NOT exercised: ledger with real scored data (needs one done run post-r68) — trivial, self-verifies on first run
+- NEXT ROUND: 1) if :3000 free → prod rebuild (standalone stale vs tree) + planner→pipeline one-click (needs build window); 2) spawn-proposal inbox (Evolution candidate); 3) boot-server longevity check at next real boot
