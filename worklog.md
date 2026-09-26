@@ -1191,3 +1191,21 @@ Stage Summary:
 - User's "still no preview" = refreshed during a dead window; 17:5x's "preview restored" was a placeholder false-positive (200-but-placeholder), now corrected by content-level verification doctrine
 - Durable path unchanged: next sandbox boot → dev.sh → boot-lineage prod server (boot servers historically live hours vs agent-spawned minutes)
 - NEXT PRIORITIES: 1) observe real boot → confirm dev.sh server longevity (the last unknown); 2) ALWAYS verify gateway with CONTENT markers, never status codes; 3) Evolution r68 candidates unchanged; 4) heartbeat log: patrol entries for 18:37 present (http=000)
+
+---
+Task ID: 414940 (2026-09-26 19:23 +08 window)
+Agent: main (hourly review loop)
+Task: focused increment — MobileNav FleetChip parity (queued since 16:23) + boot-guard deploy + lint debt closure
+
+Work Log:
+- Server restarted (prod standalone): direct=200, gateway content-verified (12667B app markers) — window opened
+- INCREMENT: MobileNav footer now matches desktop parity — FleetChip + ThemeToggle + version text added to the mobile Sheet (src/components/praison/shell.tsx); same self-contained component as desktop, ~zero-risk
+- Debt closed: eslint CLEAN on shell.tsx + forensics route (16:23 deferred item); production build exit 0; server redeployed on new build (.build-commit=6612046); direct=200 + gateway markers verified post-deploy
+- BOOT GUARD deployed+verified earlier this window: mini-services/app-server is bind-aware (stand-down if :3000 served — live-tested, exit 0, no duplicate); legacy-branch OOM risk documented (main "dev" is plain next dev — dev.sh must stay)
+- agent-browser TOOL QUIRK #2 discovered: Chrome serves the CACHED Z-logo placeholder (DOM=1344B) for :81 even while curl gets the 12.7KB app shell — placeholder cached during dead-window visits; cache-bust via query param (?cb=ts) is the workaround; NOTE: console-clean checks against cached placeholder are meaningless — content-verify FIRST (eval outerHTML.length ~12.6k = app, ~1.3k = stale placeholder)
+- Desktop snapshot inconclusive due to cache quirk; verification basis for this increment = build exit 0 + lint 0 + curl content check + identical-component parity argument; mobile drawer interaction test QUEUED next round (agent-browser supports viewport/device)
+
+Stage Summary:
+- Shipped: mobile users now see cron fleet health + theme toggle + version in the nav drawer (parity with desktop sidebar)
+- Fleet: 414938 self-evidenced 19:07; server window open at round end; dark-window doctrine unchanged pending next boot
+- NEXT ROUND: 1) cache-busted agent-browser QA + mobile viewport drawer test (FleetChip visible?) 2) planner→pipeline one-click (r68 candidate) 3) confirm boot-server longevity at next real boot
