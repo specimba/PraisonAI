@@ -13,6 +13,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RotateCcw,
   ShieldAlert,
   Trash2,
   Upload,
@@ -482,6 +483,7 @@ export function WorkflowsView() {
   const addWf = useWorkflowsStore((s) => s.add);
   const duplicateWf = useWorkflowsStore((s) => s.duplicate);
   const removeWf = useWorkflowsStore((s) => s.remove);
+  const updateWf = useWorkflowsStore((s) => s.update);
 
   // Keep schedule countdowns honest (cheap re-render every 30s when needed)
   const hasSchedules = workflows.some((w) => w.schedule?.enabled);
@@ -561,6 +563,17 @@ export function WorkflowsView() {
     setPendingRunFocus(runId ?? null);
     setRunOpen(true);
   }, []);
+
+  /** One-click resume for an auto-paused schedule (inverse of the runner's failStreak auto-pause). */
+  const resumeSchedule = (wf: Workflow) => {
+    if (!wf.schedule) return;
+    updateWf(wf.id, {
+      schedule: { ...wf.schedule, enabled: true, failStreak: 0, nextRunAt: undefined },
+    });
+    toast.success(`Schedule resumed — "${wf.name}" fires on the next tick`, {
+      description: "Failure counter reset · the scheduler re-arms from now",
+    });
+  };
 
   const handleDuplicate = (wf: Workflow) => {
     const id = duplicateWf(wf.id);
@@ -873,16 +886,18 @@ export function WorkflowsView() {
                         </span>
                       )}
                       {wf.schedule && !wf.schedule.enabled && (wf.schedule.failStreak ?? 0) >= 3 && (
-                        <span
-                          title="The schedule auto-paused after 3 consecutive failed runs. Fix the pipeline, then re-enable the schedule in its editor."
-                          className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400"
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resumeSchedule(wf);
+                          }}
+                          title="Auto-paused after 3 consecutive failed runs. Click to re-enable the schedule and reset the failure counter — it fires on the next 10s tick while the tab is open."
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-500/20 dark:text-red-400"
                         >
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-60" />
-                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
-                          </span>
-                          auto-paused · check runs
-                        </span>
+                          <RotateCcw className="h-3 w-3" />
+                          auto-paused · click to resume
+                        </button>
                       )}
                       <Button size="sm" onClick={() => openRun(wf)}>
                         <Play className="h-3.5 w-3.5" />

@@ -1326,3 +1326,20 @@ Stage Summary:
 - App healthy at 1c246b6 with both user fixes live via HMR dev server (non-modal run panel + 90s stream idle budget)
 - NEXT ROUND PRIORITY: 1) grid-card run-history trigger (small verified increment); 2) spawn-proposal inbox (Evolution candidate); 3) prod standalone rebuild ONLY when :3000 frees AND build allowed — standalone is stale vs tree, restarting it before rebuild would REVERT both user fixes, do NOT; 4) boot-server longevity check at next real boot
 - RSIinFIELD reminder unchanged: schedule auto-paused by failStreak safety — user should re-enable it in the editor; 90s budget should stop the stall failures
+
+---
+Task ID: 414940 (2026-09-27 02:23 +08 window)
+Agent: main (hourly review loop)
+Task: increment — one-click schedule resume on the auto-paused chip + correction of the 01:23 QA finding
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 01:37+02:07, heartbeats present; 414940 = this task). Dev server still owns :3000 (tenure ~14h15m, HTTP 200) — HMR-only, no builds/restarts. HEAD moved 1c246b6→51b1790 = platform auto-commit of worklog only (verified via git show --stat: worklog.md +17, zero src changes)
+- CORRECTION (01:23 finding was a FALSE POSITIVE): code read shows the grid card's "Run" button (workflows-view.tsx L902) calls openRun(wf) → opens WorkflowRunPanel (history + live view); the Actions dropdown has the same via L774. The panel was never unreachable from grid — I had avoided clicking Run assuming it would START a run. No fix needed
+- INCREMENT SHIPPED (workflows-view.tsx, 4 edits): the red "auto-paused · check runs" chip is now a real BUTTON — "auto-paused · click to resume" with RotateCcw icon, hover:bg-red-500/20 affordance, explanatory tooltip. onClick → resumeSchedule(wf): updateWf(id, {schedule: {...sched, enabled:true, failStreak:0, nextRunAt:undefined}}) + success toast — the EXACT inverse of the runner's auto-pause write (workflow-runner.ts L386 sets {failStreak: streak, enabled:false}); nextRunAt:undefined matches the scheduler's own catch-up semantics (fires on next 10s tick, re-arms from now). Bonus: directly answers the user's RSIinFIELD situation — re-enabling no longer requires opening the schedule editor
+- VERIFIED E2E IN LIVE APP: eslint exit 0; throwaway workflow crafted via localStorage (clone of Deep Research Dossier, id e2e-pause-test, steps:[] so the scheduler can never fire it, schedule {enabled:false, failStreak:3}) → red chip rendered → CLICKED → red chip gone + "Schedule resumed" toast appeared → throwaway removed from localStorage + reload clean (DOM 95.3k, test gone). Store update path exercised for real
+- Safety notes: steps:[] clone cannot fire (scheduler gates on steps.length>0); cleanup wrote localStorage AFTER the 450ms debounced persist window; red-chip condition requires failStreak>=3 so normal paused-by-user schedules are unaffected (they keep the emerald/neutral affordances in the editor)
+
+Stage Summary:
+- Shipped: auto-paused schedules are now one-click recoverable in the grid view (was: passive tooltip pointing at the editor)
+- 01:23's "grid-card run-history trigger" queue item is CLOSED as already-working (false positive); no backlog debt
+- NEXT ROUND: 1) spawn-proposal inbox (Evolution candidate); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed — restarting the stale standalone before rebuild would revert the non-modal panel + 90s budget fixes, do NOT; 3) boot-server longevity check at next real boot
