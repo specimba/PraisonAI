@@ -526,7 +526,32 @@ function EvolutionInbox() {
   const addWf = useWorkflowsStore((s) => s.add);
 
   const open = proposals.filter((p) => p.status === "open");
-  if (open.length === 0) return null;
+  const acceptedCount = proposals.filter((p) => p.status === "accepted").length;
+  const dismissedCount = proposals.filter((p) => p.status === "dismissed").length;
+
+  // Inbox clear? Keep a muted cycle summary instead of vanishing — the strip
+  // teaches the loop (proposals come from stalled runs or the ledger action).
+  if (open.length === 0) {
+    if (acceptedCount + dismissedCount === 0) return null;
+    return (
+      <div className="mb-4 flex items-center gap-2 rounded-xl border border-violet-500/15 bg-violet-500/[0.03] px-3 py-2">
+        <Lightbulb className="h-3.5 w-3.5 shrink-0 text-violet-500/70" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Evolution cycle:{" "}
+          <span className="font-medium text-foreground/80">
+            {acceptedCount} spawned
+          </span>
+          {dismissedCount > 0 && <> · {dismissedCount} dismissed</>} — inbox
+          clear. New proposals appear here automatically when runs stall
+          (&lt;35% novelty) or via{" "}
+          <span className="font-medium text-foreground/80">
+            Suggest variation
+          </span>{" "}
+          in the ledger.
+        </p>
+      </div>
+    );
+  }
 
   const accept = (p: SpawnProposal) => {
     const roster = agents.map((a) => a.id);
