@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { copyText } from "@/lib/helpers";
+import { relayHealthSnapshot, relayHopBadge, type RelayHealthBadge, type RelayHealthEntry } from "@/lib/relay";
 import { useConversationsStore, useSettingsStore, useUiStore } from "@/lib/stores";
 import {
   fmtAge,
@@ -183,6 +184,11 @@ export function ModelTicker() {
   }, [refresh]);
 
   const feed = data ? tickerFeed(data) : [];
+  // r74: rotator verdicts inline in the tracker — the ClawLabs/free-ai-models
+  // doctrine (their ok/sick/dead column) on OUR hop memory. TrackedModelRow.id
+  // IS "providerId::modelId" = the rotator's hopKey, so rows light up with
+  // zero join logic. Never-dialed lanes stay unmarked (no data, no opinion).
+  const healthMap = React.useMemo(() => (data ? relayHealthSnapshot() : null), [data]);
   const newCount = data ? data.tracked.filter((m) => m.isNew).length : 0;
   const freeCount = data ? data.tracked.filter((m) => m.free).length : 0;
   const syncedRel = data?.status.lastSyncAt ? fmtAge(data.status.lastSyncAt) : "never";
@@ -235,9 +241,22 @@ export function ModelTicker() {
               <div key={dup} className="flex items-center gap-6">
                 {feed.map((m) => {
                   const pm = providerMeta(m.providerId);
+                  const hb = healthMap ? relayHopBadge(m.providerId, m.modelId, healthMap) : undefined;
                   const bits = [fmtCtx(m.contextWindow), fmtPrice(m), m.free ? "free" : null].filter(Boolean);
                   return (
                     <span key={`${dup}-${m.id}`} className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                      {hb && (
+                        <span
+                          aria-hidden
+                          title={`${m.modelId}: relay verdict ${hb.label}`}
+                          className={cn(
+                            "h-1.5 w-1.5 shrink-0 rounded-full",
+                            hb.tone === "emerald" && "bg-emerald-500",
+                            hb.tone === "amber" && "bg-amber-500",
+                            hb.tone === "muted" && "bg-muted-foreground/50"
+                          )}
+                        />
+                      )}
                       <span aria-hidden>{pm.glyph}</span>
                       <span className="font-mono text-foreground/80">{m.modelId}</span>
                       {m.isNew && (
@@ -281,7 +300,7 @@ export function ModelTicker() {
         <ScrollArea className="max-h-[46vh]">
           <ul className="divide-y">
             {data.tracked.slice(0, 60).map((m) => (
-              <TickerRow key={m.id} row={m} onPin={() => pinModel(m)} />
+              <TickerRow key={m.id} row={m} onPin={() => pinModel(m)} health={healthMap} />
             ))}
           </ul>
         </ScrollArea>
@@ -305,8 +324,23 @@ export function ModelTicker() {
   );
 }
 
-function TickerRow({ row, onPin }: { row: TrackedModelRow; onPin: () => void }) {
+const TONED_BADGE: Record<RelayHealthBadge["tone"], string> = {
+  emerald: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  amber: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  muted: "border-border bg-muted/50 text-muted-foreground",
+};
+
+function TickerRow({
+  row,
+  onPin,
+  health,
+}: {
+  row: TrackedModelRow;
+  onPin: () => void;
+  health: Record<string, RelayHealthEntry> | null;
+}) {
   const pm = providerMeta(row.providerId);
+  const hb = health ? relayHopBadge(row.providerId, row.modelId, health) : undefined;
   const bits = [fmtCtx(row.contextWindow), fmtPrice(row), row.free ? "free" : null].filter(Boolean) as string[];
   return (
     <li className="flex items-center gap-2 px-3 py-2 transition-colors hover:bg-accent/40">
@@ -324,6 +358,15 @@ function TickerRow({ row, onPin }: { row: TrackedModelRow; onPin: () => void }) 
           {row.free && (
             <Badge variant="secondary" className="h-4 rounded bg-amber-500/15 px-1 text-[9px] font-bold uppercase text-amber-600 dark:text-amber-400">
               free
+            </Badge>
+          )}
+          {hb && (
+            <Badge
+              variant="outline"
+              title={hb.detail ? `${row.modelId}: ${hb.detail}` : `${row.modelId}: ${hb.label} on the relay`}
+              className={cn("h-4 rounded px-1 text-[9px] font-bold uppercase", TONED_BADGE[hb.tone])}
+            >
+              {hb.label}
             </Badge>
           )}
         </div>

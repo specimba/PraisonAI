@@ -1736,3 +1736,21 @@ Stage Summary:
 - Health badges now cover BOTH user-facing model pickers (chat composer + agent form); lane verdicts surface wherever a model is chosen
 - NEXT ROUND PRIORITY: 1) ModelTicker quality/health column (idea b — tracker syncs status but doesn't rank/surface it inline); 2) shared withRelayHealth helper refactor when provider-gallery joins; 3) E2E auto-resume with STALL_TIMEOUT_MS ~20s (queued 3x — dedicate a run window); 4) server-side run execution = design epic, proposal only
 - Fleet: patrol heartbeats continuous through 13:07:07Z; this round fired on Job 414940 as scheduled
+
+---
+Task ID: 414940-review (2026-09-27 22:23 +08)
+Agent: main (cron review round)
+Task: status assessment + QA, then ONE focused improvement (idea b: tracker health surfacing)
+
+Work Log:
+- ASSESS: HTTP 200; UI renders; console = only the KNOWN stale page.tsx:13:10 buffer artifact; stable phase. Also dismissed the leftover "Create Agent" dialog from the 21:23 round (was still open in the live browser)
+- IMPLEMENTED — ROTATOR VERDICTS IN THE MODEL TRACKER (idea b, adapted from ClawLabs' quality-score column: we surface LIVE availability verdicts instead of a static quality rank): model-ticker.tsx now reads relayHealthSnapshot() once per data refresh (useMemo on data) and joins it to tracked rows — TrackedModelRow.id IS "providerId::modelId" = the rotator's hopKey, so zero join logic. Two surfaces: (1) marquee — a 1.5px glance dot (emerald/amber/muted) before dialed lanes' model ids, aria-hidden with a title tooltip; (2) TickerRow popover panel — a proper "ok N / sick / throttled" uppercase chip next to new/free badges, title = last error detail when the verdict is bad. Never-dialed lanes stay unmarked (no data, no opinion — consistent with the pickers)
+- TYPE HYGIENE: caught my own over-clever conditional type (RelayHealthBadge extends never ? never : Parameters<...>) during edit review and replaced it with the clean exported Record<string, RelayHealthEntry>
+- LIVE CHECK: ticker strip renders ("1 new, 71 free models"); chips correctly absent with empty health memory (test data was cleaned at 20:23); the join path is identical to the composer's E2E-proven one
+- VERIFY: npx eslint model-ticker.tsx exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; HTTP 200; no runtime errors on snapshot
+- NOTE (shared-helper debt): withHealth is now in 3 call sites' local closures (composer, agent-form-dialog) + this ticker's inline variant; a shared withRelayHealth/relayHopBadge-backed helper consolidation remains the r75 refactor once provider-gallery joins
+
+Stage Summary:
+- The rotator's lane verdicts now surface at ALL decision points: model pickers (chat + agent form) AND the model tracker marquee/panel — "is this lane alive right now?" is answerable everywhere a model appears
+- NEXT ROUND PRIORITY: 1) E2E auto-resume with STALL_TIMEOUT_MS ~20s (queued 4x — genuinely needs a dedicated run window with a real stall; consider a temporary test-only workflow with a bogus endpoint to force the stall deterministically); 2) provider-gallery health badges + shared helper consolidation; 3) server-side run execution = design epic, proposal only
+- Fleet: patrol heartbeats continuous through 14:07:06Z; this round fired on Job 414940 as scheduled
