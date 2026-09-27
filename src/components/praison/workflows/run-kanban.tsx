@@ -121,12 +121,19 @@ function RunCard({
   card: BoardCard;
   onSelect: (workflowId: string, runId?: string) => void;
 }) {
+  const highlightId = useUiStore((s) => s.highlightWorkflowId);
+  const spotlighted = highlightId === card.workflowId;
   if (card.scheduled) {
     return (
       <button
         type="button"
         onClick={() => onSelect(card.workflowId)}
-        className="group w-full rounded-xl border border-pink-500/25 bg-card/80 p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-pink-500/50 hover:shadow-md hover:shadow-pink-500/10"
+        data-wf-card={card.workflowId}
+        className={cn(
+          "group w-full rounded-xl border border-pink-500/25 bg-card/80 p-3 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-pink-500/50 hover:shadow-md hover:shadow-pink-500/10",
+          spotlighted &&
+            "ring-2 ring-violet-500/60 ring-offset-2 ring-offset-background"
+        )}
       >
         <div className="flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5 shrink-0 text-pink-500" aria-hidden />
@@ -162,8 +169,11 @@ function RunCard({
     <button
       type="button"
       onClick={() => onSelect(card.workflowId, run.id)}
+      data-wf-card={card.workflowId}
       className={cn(
         "card-in group w-full rounded-xl border bg-card/80 p-3 text-left shadow-sm transition-all duration-200",
+        spotlighted &&
+          "ring-2 ring-violet-500/60 ring-offset-2 ring-offset-background",
         "hover:-translate-y-0.5 hover:shadow-md",
         run.status === "running" &&
           "border-violet-500/30 hover:border-violet-500/60 hover:shadow-violet-500/10",
