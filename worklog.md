@@ -1500,3 +1500,20 @@ Stage Summary:
 - All Evolution threshold surfaces (runner gate, ledger chips, inbox copy, manual proposals) now draw from ONE persisted setting; the Settings → Evolution slider is fully wired end-to-end at the code level
 - NEXT ROUND PRIORITY: 1) browser E2E of the slider via command-palette nav (press Control+k → type workflows → Enter; then Settings → Evolution: set 20 → verify localStorage praison-settings.noveltySpawnThreshold=20 persists across reload → Reset → 35); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild); 3) boot-server longevity check at next real boot; 4) cosmetic: update EvolutionLedger docstring line 149 (<35% → threshold reference)
 - Fleet: heartbeats continuous through 02:07:10Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 11:23 +08 window)
+Agent: main (hourly review loop)
+Task: slider E2E round-trip + nav mystery resolved + preview strip
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 10:37+11:07, heartbeats present; 414940 = this task). HEAD 714abcb→0194378 = platform auto-commit (verified worklog.md +18 only). HTTP 200 (dev tenure ~23h) — HMR-only
+- NAV MYSTERY RESOLVED (closes the 09:23/10:23 thread — NOT a bug): the app was ALREADY in the Workflows view both rounds; body.innerText starts with rail labels but continues into "Workflows — Orchestrate agent pipelines" PageHeader with 4 workflows in profile. dom 793 is a lean EMPTY-data view — EvolutionLedger/EvolutionInbox self-hide without scored runs (by design). Prior dom-5144 baselines included board/run-panel accumulated state. The sidebar buttons always worked; earlier clicks had hit launchpad card headings, not sidebar items
+- SLIDER E2E — FULL ROUND-TRIP GREEN (Settings → Evolution): sidebar nav click → section live at default (chip 35%, "default sensitivity") → thumb focus + 3× ArrowLeft → chip 20%, preview flips "customized sensitivity", praison-settings.noveltySpawnThreshold=20 → RELOAD → chip still 20%, store 20 (persisted across sessions) → "Reset to default (35%)" click → chip 35%, "default sensitivity", store 35. The Radix slider honors step 5 and the whole feature is user-verified end-to-end
+- INCREMENT SHIPPED (commit 246c88c): Settings → Evolution gains a live stall-rule preview strip — violet-tinted card: 🧬 "Runs scoring below {N}% novelty will propose variations · default/customized sensitivity" — updates instantly with the slider; EvolutionLedger docstring now references the configurable threshold instead of a hardcoded <35%
+- VERIFIED: npx eslint exit 0 (both files); bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; live E2E above; profile left at default 35 (clean)
+
+Stage Summary:
+- The Settings → Evolution feature is now code-verified AND user-journey-verified (keyboard a11y, persistence, reset); the long-standing Studio-nav false alarm is closed with a diagnosis future rounds can trust
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild — reverts all fixes); 2) boot-server longevity check at next real boot; 3) candidates: deep-link from archive rows to spawned workflow (sourceWorkflowId → highlight card); ledger "stall <N%" mini-chip visible even when custom (=35 hidden to avoid noise); 4) optional: seeded demo workflow with scored runs so the ledger is visible out-of-the-box
+- Fleet: heartbeats continuous through 03:07:10Z (27 Sep); no gaps; no failed patrols
