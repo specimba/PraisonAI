@@ -1572,3 +1572,20 @@ Stage Summary:
 - The Settings -> Evolution slider is now traceable on the ledger surface itself: customize it and every ledger header announces the active stall rule in violet; reset and the surface goes quiet again
 - NEXT ROUND PRIORITY: 1) visual E2E of the stall mini-chip (inject wf+threshold via localStorage, nav to Workflows via sidebar hint anchor, grep "stall <20%", cleanup); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 3) boot-server longevity check at next real boot; 4) Evolution loop is feature-complete - candidates: board-mode scrollIntoView polish, seeded demo workflow with scored runs so ledger+chip are visible out-of-the-box
 - Fleet: heartbeats continuous through 06:07:09Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 15:23 +08 window)
+Agent: main (hourly review loop)
+Task: seeded demo workflow with scored runs (final queued candidate) + ledger out-of-the-box visibility
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 14:37+15:07, heartbeats present; 414940 = this task). HEAD 7e8dbc8 = platform auto-commit over 67eadc2 (verified). HTTP 200 (dev tenure ~26h) - HMR-only
+- QA GATE: console 0 errors; app renders
+- INCREMENT SHIPPED (stores.ts, commit see HEAD): new idempotent seed block "wf-novelty-lab" (Novelty Lab (sample)) - one authored researcher step + FOUR done runs (novelty 62/48/31/22, spread over the last 4 days, ~2min each) attached via update() because add() hardcodes runs: []; gated on researcher agent existing; description tells the user it is disposable. First Workflows visit now shows: Evolution ledger with trail strip (emerald 62/48, amber 31/22), "4 scored", "avg 41%" (emerald), "2 stalled" (amber), latest-run amber chip + Suggest variation button
+- E2E GREEN (live, fresh-profile signature): cleared praison-workflows + praison-ui -> reload -> sidebar nav via "Multi-agent pipelines" hint anchor -> heading "Evolution ledger" with "4 scored / avg 41% / 2 stalled" (exact predicted math) + Novelty Lab card + ledger row; idempotency: wf-novelty-lab count 1 -> reload -> count still 1
+- VERIFIED: npx eslint exit 0 (stores.ts; WorkflowRun already imported line 16); bun scripts/test-spawn-engine.ts ALL CHECKS PASSED
+
+Stage Summary:
+- The Evolution story is now visible the moment a user opens Workflows: seed data demonstrates scoring, stall detection, averages and the variation path without running anything; the last queued candidate from the Evolution feature chain is delivered
+- NEXT ROUND PRIORITY: 1) optional visual check of the violet custom-threshold ledger chip (set threshold via Settings -> Evolution, ledger header should show "stall <N%"; channel already E2E-verified 11:23, chip verified at code level 14:23); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 3) boot-server longevity check at next real boot; 4) Evolution loop + seeding complete - next: pick a NEW surface (e.g. workflow run export, board filters, or onboarding touch) or a polish pass
+- Fleet: heartbeats continuous through 07:07:11Z (27 Sep); no gaps; no failed patrols
