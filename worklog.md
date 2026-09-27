@@ -1754,3 +1754,22 @@ Stage Summary:
 - The rotator's lane verdicts now surface at ALL decision points: model pickers (chat + agent form) AND the model tracker marquee/panel — "is this lane alive right now?" is answerable everywhere a model appears
 - NEXT ROUND PRIORITY: 1) E2E auto-resume with STALL_TIMEOUT_MS ~20s (queued 4x — genuinely needs a dedicated run window with a real stall; consider a temporary test-only workflow with a bogus endpoint to force the stall deterministically); 2) provider-gallery health badges + shared helper consolidation; 3) server-side run execution = design epic, proposal only
 - Fleet: patrol heartbeats continuous through 14:07:06Z; this round fired on Job 414940 as scheduled
+
+---
+Task ID: 414940-review (2026-09-27 23:23 +08)
+Agent: main (cron review round)
+Task: status assessment + QA, then the 4x-queued auto-resume E2E enabler (safe half)
+
+Work Log:
+- ASSESS: HTTP 200; UI renders; console = only the KNOWN stale page.tsx:13:10 buffer artifact; stable phase
+- IMPLEMENTED — RUNTIME-TUNABLE STALL WATCHDOG (unblocks the auto-resume E2E with ZERO per-test code edits, so no debug state can be left behind):
+  1. workflow-runner.ts: STALL_TIMEOUT_MS const → stallTimeoutMs() — reads localStorage "praison-stall-timeout-ms" per watchdog tick, clamped 20s–10min, default unchanged 4min; check interval adaptive (min(15s, timeout/4)) so a 20s timeout detects in ≤5s; stallTimeoutLabel() renders "4 minutes"/"20 seconds" honestly in ALL timeout messages (abort reason + both auto-resume paths + both manual-resume paths — 5 message sites templated)
+  2. scripts/hang-server.ts (new harness): fake OpenAI-compatible endpoint; POST /v1/chat/completions hangs FOREVER (the exact silent-stall failure mode); ?hang=ms → 504 bounded mode; /health → 200. LIVE-TESTED: health 200, chat probe hung until killed at 2.0s
+- LESSON (tooling): this round's 7-edit MultiEdit did NOT roll back atomically on the final anchor mismatch — edits 1-6 landed, edit 7 (16-space vs my 18-space anchor) failed silently-ish; caught by grepping the applied state before proceeding. ALWAYS verify MultiEdit outcomes with a targeted grep when any single edit errors, even when the tool reports failure
+- VERIFY: npx eslint workflow-runner.ts + hang-server.ts exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; HTTP 200; hang-server booted and killed cleanly (no stray processes)
+- E2E RECIPE (next round, pure UI+localStorage — no code edits): start hang-server :4319 → localStorage praison-stall-timeout-ms=20000 + reload → Settings: custom provider baseUrl http://localhost:4319/v1 (real-UI doctrine) → 1-step test workflow → Run → expect: stall ~20-25s → "Auto-resuming (attempt 1/3)" toast → 3 auto-resumes → manual-resume timeout card at cap; THEN remove praison-stall-timeout-ms (rotator-adjacent hygiene: plain key, not zustand)
+
+Stage Summary:
+- The stall/auto-resume chain is now testable deterministically in seconds; next round runs the first true end-to-end proof of r72's auto-resume (watchdog → abort → resume ×3 → capped manual card)
+- NEXT ROUND PRIORITY: 1) the E2E itself per the recipe above (dedicated run window, ~2-3 min of wall clock); 2) provider-gallery health badges + shared withRelayHealth consolidation; 3) server-side run execution = design epic, proposal only
+- Fleet: patrol heartbeats continuous through 15:07:10Z; this round fired on Job 414940 as scheduled

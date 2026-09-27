@@ -49,7 +49,26 @@ const activeRuns = new Set<string>();
 const activeControllers = new Map<string, AbortController>();
 const lastRunActivity = new Map<string, number>();
 const stalledRuns = new Set<string>();
-const STALL_TIMEOUT_MS = 4 * 60_000;
+/** Stall watchdog threshold — runtime-tunable (r75): set localStorage
+ * "praison-stall-timeout-ms" and reload; clamped 20s–10min so an E2E can
+ * force stalls in seconds WITHOUT a rebuild, while production keeps 4min.
+ * Read live per watchdog tick (one localStorage read per tick). */
+function stallTimeoutMs(): number {
+  const DEF = 4 * 60_000;
+  try {
+    const raw = localStorage.getItem("praison-stall-timeout-ms");
+    if (!raw) return DEF;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.min(Math.max(Math.floor(n), 20_000), 600_000) : DEF;
+  } catch {
+    return DEF;
+  }
+}
+/** Human label for timeout messages, so tuned timeouts don't lie in the UI. */
+function stallTimeoutLabel(): string {
+  const ms = stallTimeoutMs();
+  return ms >= 60_000 ? `${Math.round(ms / 60_000)} minutes` : `${Math.round(ms / 1000)} seconds`;
+}
 /** Bounded self-recovery (r72): a watchdog-stalled run auto-resumes from its
  * failed step up to MAX_AUTO_RESUMES times (shared budget with manual resumes
  * — both bump resumeCount) before falling back to the manual-resume card. */
@@ -67,7 +86,7 @@ function ensureStallWatchdog(): void {
   stallWatchdog = setInterval(() => {
     const now = Date.now();
     for (const wfId of [...activeRuns]) {
-      if (now - (lastRunActivity.get(wfId) ?? 0) > STALL_TIMEOUT_MS) {
+      if (now - (lastRunActivity.get(wfId) ?? 0) > stallTimeoutMs()) {
         // Mark + abort: the pending fetch rejects with an AbortError, the
         // runner's abort handlers check stalledRuns and finalize as timeout.
         stalledRuns.add(wfId);
@@ -75,7 +94,7 @@ function ensureStallWatchdog(): void {
           .get(wfId)
           ?.abort(
             new Error(
-              "no model output for over 4 minutes — the stream stalled"
+              `no model output for over ${stallTimeoutLabel()} — the stream stalled`
             )
           );
       }
@@ -84,7 +103,7 @@ function ensureStallWatchdog(): void {
       clearInterval(stallWatchdog);
       stallWatchdog = null;
     }
-  }, STALL_CHECK_MS);
+  }, Math.min(STALL_CHECK_MS, Math.floor(stallTimeoutMs() / 4)));
 }
 
 export function isWorkflowRunning(workflowId: string): boolean {
@@ -903,7 +922,7 @@ export async function executeWorkflowRun(
                   failRun(
                     i,
                     new Error(
-                      `Step timed out — no model output for over 4 minutes. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
+                      `Step timed out — no model output for over ${stallTimeoutLabel()}. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
                     )
                   );
                   scheduleAutoResume(wf.id, runId, i, stalledRun?.resumeCount ?? 0);
@@ -912,7 +931,7 @@ export async function executeWorkflowRun(
                 failRun(
                   i,
                   new Error(
-                    "Step timed out — no model output for over 4 minutes. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here."
+                    `Step timed out — no model output for over ${stallTimeoutLabel()}. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here.`
                   )
                 );
                 return runId;
@@ -995,7 +1014,7 @@ export async function executeWorkflowRun(
               failRun(
                 i,
                 new Error(
-                  `Step timed out — no model output for over 4 minutes. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
+                  `Step timed out — no model output for over ${stallTimeoutLabel()}. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
                 )
               );
               scheduleAutoResume(wf.id, runId, i, stalledRun?.resumeCount ?? 0);
@@ -1004,7 +1023,7 @@ export async function executeWorkflowRun(
             failRun(
               i,
               new Error(
-                "Step timed out — no model output for over 4 minutes. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here."
+                `Step timed out — no model output for over ${stallTimeoutLabel()}. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here.`
               )
             );
             return runId;
