@@ -264,8 +264,10 @@ export function RunKanban({
   }, [boardOpen, tick]);
 
   const columns = React.useMemo(() => groupRuns(workflows), [workflows]);
-  // Pipeline filter: null = all pipelines; a workflow id narrows every column.
-  const [filter, setFilter] = React.useState<string | null>(null);
+  // Pipeline filter lives in the ui store (persisted): it survives layout
+  // switches (grid <-> board) and reloads instead of resetting on unmount.
+  const filter = useUiStore((s) => s.boardWorkflowFilter);
+  const setFilter = useUiStore((s) => s.setBoardWorkflowFilter);
   const unfilteredTotal = Object.values(columns).reduce((n, c) => n + c.length, 0);
   const visible = React.useMemo(() => {
     if (!filter) return columns;
@@ -322,7 +324,7 @@ export function RunKanban({
             <button
               key={id}
               type="button"
-              onClick={() => setFilter((f) => (f === id ? null : id))}
+              onClick={() => setFilter(filter === id ? null : id)}
               aria-pressed={filter === id}
               title={`Show only cards from "${e.name}"`}
               className={cn(

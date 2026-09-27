@@ -518,6 +518,8 @@ interface UiState {
   busy: boolean;
   /** Workflows view layout: card grid or the runs kanban board. */
   workflowBoardOpen: boolean;
+  /** Runs board pipeline filter: workflow id or null = all pipelines. Persisted so the filter survives layout switches and reloads. */
+  boardWorkflowFilter: string | null;
   /** Guided "get your free frontier key" wizard visibility (+ optional deep-linked provider). */
   setupWizardOpen: boolean;
   setupWizardProviderId: string | null;
@@ -538,6 +540,7 @@ interface UiState {
   clearPendingFocus: () => void;
   setBusy: (v: boolean) => void;
   setWorkflowBoardOpen: (v: boolean) => void;
+  setBoardWorkflowFilter: (id: string | null) => void;
   openSetupWizard: (providerId?: string) => void;
   setSetupWizardOpen: (v: boolean) => void;
   setSettingsAnchor: (a: "providers" | "local-models" | null) => void;
@@ -557,6 +560,7 @@ export const useUiStore = create<UiState>()(
       pendingFocus: null,
       busy: false,
       workflowBoardOpen: false,
+      boardWorkflowFilter: null,
       setupWizardOpen: false,
       setupWizardProviderId: null,
       imageStudioOpen: false,
@@ -579,6 +583,7 @@ export const useUiStore = create<UiState>()(
       clearPendingFocus: () => set({ pendingFocus: null }),
       setBusy: (busy) => set({ busy }),
       setWorkflowBoardOpen: (workflowBoardOpen) => set({ workflowBoardOpen }),
+      setBoardWorkflowFilter: (boardWorkflowFilter) => set({ boardWorkflowFilter }),
       openSetupWizard: (providerId) =>
         set({
           setupWizardOpen: true,
@@ -596,6 +601,7 @@ export const useUiStore = create<UiState>()(
         activeAgentId: s.activeAgentId,
         chatListOpen: s.chatListOpen,
         workflowBoardOpen: s.workflowBoardOpen,
+        boardWorkflowFilter: s.boardWorkflowFilter,
       }),
       storage: createJSONStorage(() => localStorage),
     }
