@@ -36,6 +36,8 @@ import {
   type LiveCatalog,
 } from "@/lib/providers";
 import { ModelPicker } from "@/components/praison/model-picker";
+import { relayHealthSnapshot } from "@/lib/relay";
+import { withRelayHealth } from "@/lib/relay-health";
 import { browserRefreshModels } from "@/lib/provider-refresh";
 import { truncate, downloadJson } from "@/lib/helpers";
 import { useSettingsStore, useUiStore } from "@/lib/stores";
@@ -402,8 +404,17 @@ export function ProviderGallery() {
     }
   }
 
+  // r75: relay health badges in every provider's model picker — the rotator's
+  // verdict (ok N / sick / throttled) rides on each option row, so a lane that
+  // died recently is visible BEFORE you commit it as the provider default.
+  // Health is applied BEFORE withSavedOption so the "saved" marker still wins
+  // on the row it marks (the stronger signal on your own active lane).
+  const relayHealth = relayHealthSnapshot();
   const modelOptionsFor = (p: FreeProvider): { id: string; label: string; note?: string; badge?: string; badgeTone?: "violet" | "emerald" | "amber" | "muted" }[] =>
-    withSavedOption(providerModelOptions(p, live), entryFor(p).model || p.models[0]?.id);
+    withSavedOption(
+      providerModelOptions(p, live).map((o) => withRelayHealth(o, relayHealth)),
+      entryFor(p).model || p.models[0]?.id
+    );
 
   /** Universal per-provider refresh button (works for every registry provider). */
   const renderRefreshButton = (p: FreeProvider, className = "") => {

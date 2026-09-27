@@ -53,7 +53,8 @@ import { useConversationsStore, useSettingsStore, useUiStore } from "@/lib/store
 import { UI_THEMES, uiThemeById } from "@/lib/constants";
 import { providerReady, resolveLlm } from "@/lib/llm-config";
 import { FREE_PROVIDERS, loadLiveCatalog } from "@/lib/providers";
-import { relayHealthSnapshot, relayHopBadge } from "@/lib/relay";
+import { relayHealthSnapshot } from "@/lib/relay";
+import { withRelayHealth } from "@/lib/relay-health";
 import { ModelPicker, type PickerOption } from "@/components/praison/model-picker";
 import type { Agent, MessageAttachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -581,14 +582,9 @@ export function Composer({
     // rebuild; a health verdict overrides static row badges (actionable beats
     // decorative) and lanes never dialed keep their existing badge or none.
     const health = relayHealthSnapshot();
-    const withHealth = (o: PickerOption): PickerOption => {
-      const sep = o.id.indexOf("::");
-      const hb =
-        sep > 0
-          ? relayHopBadge(o.id.slice(0, sep), o.id.slice(sep + 2), health)
-          : undefined;
-      return hb ? { ...o, badge: hb.label, badgeTone: hb.tone } : o;
-    };
+    // r75: badge application consolidated into lib/relay-health (was a
+    // copy-pasted closure here AND in the agent form dialog).
+    const withHealth = (o: PickerOption): PickerOption => withRelayHealth(o, health);
     const opts: PickerOption[] = [
       {
         id: "default",

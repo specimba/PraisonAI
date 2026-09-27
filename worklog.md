@@ -1792,3 +1792,20 @@ Stage Summary:
 - QUEUED FIX (next round, ONLY when no run is active): add "pending" to the status union; materializeRunSteps + resume map mark ONLY the executing step "running" (fresh: step 0; resume: startIndex), all others "pending"; add an explicit status:"running" patch at each step's start in the engine loop; verify the run panel renders pending steps dimmed/queued
 - SECOND QUEUED ITEM: optional scheduler surface — when a scheduled fire is skipped due to an active run, note it (toast or row chip) so "why didn't it trigger at 16:10" is answerable from the UI
 - Fleet: patrol heartbeats continuous through 15:07:10Z
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 00:23 +08)
+Agent: main (review round)
+Task: QA + one focused improvement — shipped r75: withRelayHealth consolidation + provider-gallery health badges
+
+Work Log:
+- QA: HTTP 200; root + /workflows snapshots clean (404 on /workflows is expected — single-page tab nav, not a route); console error-free, HMR connected. Fleet 2/2 alive (414938 heartbeat 16:07Z on-schedule; this firing = 414940).
+- SAFETY GATE HONORED: the queued workflow "pending status" fix remains GATED on "no run active" — the user's deep-research run was streaming 40 min before this round and their browser state is unverifiable, so workflow-runner/types were NOT touched this round either.
+- HMR-safety design: new helper lives in NEW file src/lib/relay-health.ts (not appended to lib/relay.ts) — creating a module invalidates nothing in the existing import graph, so relay.ts's importer chain (incl. any engine-adjacent libs) was never invalidated mid-run. Only pure component files edited (react-refresh boundaries, state-preserving).
+- r75 SHIPPED: (1) src/lib/relay-health.ts — shared withRelayHealth<T extends {id, badge?, badgeTone?}>(o, snapshot) applies relayHopBadge to any hopKey-shaped row; badgeTone stays string so caller unions (gallery "violet") pass. (2) chat/composer.tsx + agents/agent-form-dialog.tsx — copy-pasted withHealth closures (id-split + badge merge, 2×7 lines) replaced by one-liners delegating to the helper; relayHopBadge imports dropped. (3) settings/provider-gallery.tsx — NEW health badges in every provider's model picker: options mapped through withRelayHealth BEFORE withSavedOption so the "saved" marker still wins on its own row (stronger signal on the active lane); health snapshot read once per render.
+- Verified: eslint clean on all 4 touched files (silent pass); rg confirms 0 leftover relayHopBadge refs in composer/agent-form, helper wired in 3 consumers + 1 definition; live browser: full render + clean console after rebuild (a transient page.tsx:13 compile error appeared mid-edit-batch and self-healed in the subsequent 1.75s rebuild — final state error-free).
+
+Stage Summary:
+- Closure duplication 2 → 0; provider-gallery now surfaces ok N / sick / throttled verdicts at provider-default selection time — a recently-dead lane is visible BEFORE being committed.
+- UNCHANGED next priorities: 1) workflow "pending" step status fix (STILL GATED — apply only when confirmed no run active; recipe in prior entry), 2) auto-resume E2E via hang-server, 3) server-side run execution epic (proposal only).
+- Risk note for next round: if a transient "Ecmascript file had an error" appears right after a multi-file edit batch, re-open the page and re-check console before treating it as real — mid-batch Turbopack states self-heal.

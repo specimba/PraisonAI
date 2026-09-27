@@ -19,7 +19,8 @@ import { Switch } from "@/components/ui/switch";
 import { ModelPicker, type PickerOption } from "@/components/praison/model-picker";
 import { AUTO_MODEL, TOOL_IDS, TOOL_META } from "@/lib/constants";
 import { FREE_PROVIDERS, loadLiveCatalog, providerModelOptions } from "@/lib/providers";
-import { relayHealthSnapshot, relayHopBadge } from "@/lib/relay";
+import { relayHealthSnapshot } from "@/lib/relay";
+import { withRelayHealth } from "@/lib/relay-health";
 import type { Agent, AgentColor, ToolId } from "@/lib/types";
 import { uid } from "@/lib/helpers";
 import { useAgentsStore, useSettingsStore } from "@/lib/stores";
@@ -68,14 +69,9 @@ export function AgentFormDialog({
     // chat composer): a rotator verdict overrides static row badges; lanes
     // never dialed keep theirs. Snapshot read ONCE per rebuild.
     const health = relayHealthSnapshot();
-    const withHealth = (o: PickerOption): PickerOption => {
-      const sep = o.id.indexOf("::");
-      const hb =
-        sep > 0
-          ? relayHopBadge(o.id.slice(0, sep), o.id.slice(sep + 2), health)
-          : undefined;
-      return hb ? { ...o, badge: hb.label, badgeTone: hb.tone } : o;
-    };
+    // r75: badge application consolidated into lib/relay-health (same doctrine
+    // as the chat composer — one shared implementation, zero copies).
+    const withHealth = (o: PickerOption): PickerOption => withRelayHealth(o, health);
     const out: PickerOption[] = [
       { id: AUTO_MODEL.id, label: AUTO_MODEL.label, note: AUTO_MODEL.note, group: "Built-in" },
     ];
