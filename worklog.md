@@ -1720,3 +1720,19 @@ Stage Summary:
 - The rotator's health memory is now USER-VISIBLE: free-lane quality surfaces at pick-time ("is this lane alive right now?") instead of only inside run error cards — closing repo-review candidate (a)
 - NEXT ROUND PRIORITY: 1) reuse relayHopBadge in agent-form-dialog + provider-gallery pickers (one-line withHealth each); 2) ModelTicker quality/health column (idea b); 3) E2E auto-resume with STALL_TIMEOUT_MS ~20s (queued twice — needs a dedicated run window); 4) server-side run execution = design epic, proposal only
 - Fleet: patrol heartbeats continuous through 12:07:05Z; this round fired on Job 414940 as scheduled
+
+---
+Task ID: 414940-review (2026-09-27 21:23 +08)
+Agent: main (cron review round)
+Task: status assessment + QA, then ONE focused improvement (queue item 1: health badges in agent-form-dialog)
+
+Work Log:
+- ASSESS: HTTP 200; snapshot renders; console = only the KNOWN stale page.tsx:13:10 buffer artifact (dev.log clean); stable phase
+- IMPLEMENTED — relayHopBadge REUSED in agent-form-dialog.tsx modelOptions (queue item 1): same doctrine as the chat composer — relayHealthSnapshot() read once per rebuild, withHealth() wrapper on the provider-catalog push; a rotator verdict (ok N / sick / throttled) overrides static curated/live badges, never-dialed lanes keep theirs. The agent-specific "saved on this agent" pin row intentionally keeps its amber "saved" badge (it describes the agent's config, not lane state). DRY note: withHealth is now duplicated in two components (composer + agent-form-dialog) — a shared export (e.g. withRelayHealth(options) in relay.ts or model-picker.tsx) is the natural r74 refactor when a third surface lands (provider-gallery candidate)
+- LIVE CHECK: Agents → New Agent → model picker renders all provider groups with curated badges intact (no health memory in this profile since last round's test data was cleaned — correct no-opinion behavior); dialog opens/closes without runtime errors
+- VERIFY: npx eslint agent-form-dialog.tsx exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; dev.log ✓ Compiled; HTTP 200
+
+Stage Summary:
+- Health badges now cover BOTH user-facing model pickers (chat composer + agent form); lane verdicts surface wherever a model is chosen
+- NEXT ROUND PRIORITY: 1) ModelTicker quality/health column (idea b — tracker syncs status but doesn't rank/surface it inline); 2) shared withRelayHealth helper refactor when provider-gallery joins; 3) E2E auto-resume with STALL_TIMEOUT_MS ~20s (queued 3x — dedicate a run window); 4) server-side run execution = design epic, proposal only
+- Fleet: patrol heartbeats continuous through 13:07:07Z; this round fired on Job 414940 as scheduled

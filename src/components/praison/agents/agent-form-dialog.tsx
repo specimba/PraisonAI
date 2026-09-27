@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { ModelPicker, type PickerOption } from "@/components/praison/model-picker";
 import { AUTO_MODEL, TOOL_IDS, TOOL_META } from "@/lib/constants";
 import { FREE_PROVIDERS, loadLiveCatalog, providerModelOptions } from "@/lib/providers";
+import { relayHealthSnapshot, relayHopBadge } from "@/lib/relay";
 import type { Agent, AgentColor, ToolId } from "@/lib/types";
 import { uid } from "@/lib/helpers";
 import { useAgentsStore, useSettingsStore } from "@/lib/stores";
@@ -63,6 +64,18 @@ export function AgentFormDialog({
   // the persisted live :free catalog — searchable via the ModelPicker.
   const modelOptions = React.useMemo<PickerOption[]>(() => {
     const live = loadLiveCatalog();
+    // r73: relay health memory → live per-model badges (same doctrine as the
+    // chat composer): a rotator verdict overrides static row badges; lanes
+    // never dialed keep theirs. Snapshot read ONCE per rebuild.
+    const health = relayHealthSnapshot();
+    const withHealth = (o: PickerOption): PickerOption => {
+      const sep = o.id.indexOf("::");
+      const hb =
+        sep > 0
+          ? relayHopBadge(o.id.slice(0, sep), o.id.slice(sep + 2), health)
+          : undefined;
+      return hb ? { ...o, badge: hb.label, badgeTone: hb.tone } : o;
+    };
     const out: PickerOption[] = [
       { id: AUTO_MODEL.id, label: AUTO_MODEL.label, note: AUTO_MODEL.note, group: "Built-in" },
     ];
@@ -70,7 +83,7 @@ export function AgentFormDialog({
       const ready = p.noKey || !!providerSettings.providerKeys?.[p.id]?.key?.trim();
       const group = ready ? p.name : `${p.name} — no key yet`;
       for (const o of providerModelOptions(p, live)) {
-        out.push({ ...o, group, note: o.note ?? o.id });
+        out.push(withHealth({ ...o, group, note: o.note ?? o.id }));
       }
     }
     if (model && model !== AUTO_MODEL.id && !out.some((o) => o.id === model)) {
