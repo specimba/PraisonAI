@@ -50,6 +50,10 @@ const activeControllers = new Map<string, AbortController>();
 const lastRunActivity = new Map<string, number>();
 const stalledRuns = new Set<string>();
 const STALL_TIMEOUT_MS = 4 * 60_000;
+/** Bounded self-recovery (r72): a watchdog-stalled run auto-resumes from its
+ * failed step up to MAX_AUTO_RESUMES times (shared budget with manual resumes
+ * — both bump resumeCount) before falling back to the manual-resume card. */
+const MAX_AUTO_RESUMES = 3;
 const STALL_CHECK_MS = 15_000;
 let stallWatchdog: ReturnType<typeof setInterval> | null = null;
 
@@ -89,6 +93,41 @@ export function isWorkflowRunning(workflowId: string): boolean {
 
 export function activeRunCount(): number {
   return activeRuns.size;
+}
+
+/**
+ * Bounded stall self-recovery (r72): ~1.2s after a watchdog-aborted run has
+ * been finalized, re-enter executeWorkflowRun through the normal resume path
+ * (completed steps preserved, execution restarts at the failed step).
+ * The delay is load-bearing: the dying invocation's `finally` wipes the module
+ * registries (activeRuns/activeControllers) and the resumed call re-registers
+ * them SYNCHRONOUSLY — firing immediately would let that finally delete the
+ * NEW registration. Guarded re-entry: skipped when the run vanished, a user
+ * already resumed/stopped it, or another run holds the engine.
+ */
+function scheduleAutoResume(
+  workflowId: string,
+  runId: string,
+  fromStepIndex: number,
+  previousResumes: number
+): void {
+  setTimeout(() => {
+    const wf = useWorkflowsStore
+      .getState()
+      .workflows.find((w) => w.id === workflowId);
+    const run = wf?.runs.find((r) => r.id === runId);
+    if (!wf || !run || run.status === "running") return; // user resumed/stopped
+    if (activeRuns.has(workflowId)) return; // engine busy with another run
+    toast("Stall auto-recovery engaged", {
+      icon: "⏱️",
+      description: `"${run.steps[fromStepIndex]?.label ?? "Failed step"}" went silent for 4+ minutes — resuming "${wf.name}" from there (auto-resume ${previousResumes + 1}/${MAX_AUTO_RESUMES}, completed steps preserved).`,
+    });
+    void executeWorkflowRun({
+      workflow: wf,
+      resume: { runId, fromStepIndex },
+      source: "scheduled",
+    });
+  }, 1200);
 }
 
 export interface ExecuteRunOptions {
@@ -854,8 +893,22 @@ export async function executeWorkflowRun(
           } catch (err) {
             if (isAbortError(err)) {
               if (stalledRuns.has(wf.id)) {
-                // Watchdog abort: finalize as a resumable timeout, never a hang.
+                // Watchdog abort: bounded auto-resume, else manual-resume card.
                 stalledRuns.delete(wf.id);
+                const stalledRun = useWorkflowsStore
+                  .getState()
+                  .workflows.find((w) => w.id === wf.id)
+                  ?.runs.find((r) => r.id === runId);
+                if ((stalledRun?.resumeCount ?? 0) < MAX_AUTO_RESUMES) {
+                  failRun(
+                    i,
+                    new Error(
+                      `Step timed out — no model output for over 4 minutes. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
+                    )
+                  );
+                  scheduleAutoResume(wf.id, runId, i, stalledRun?.resumeCount ?? 0);
+                  return runId;
+                }
                 failRun(
                   i,
                   new Error(
@@ -932,8 +985,22 @@ export async function executeWorkflowRun(
       } catch (err) {
         if (isAbortError(err)) {
           if (stalledRuns.has(wf.id)) {
-            // Watchdog abort: finalize as a resumable timeout, never a hang.
+            // Watchdog abort: bounded auto-resume, else manual-resume card.
             stalledRuns.delete(wf.id);
+            const stalledRun = useWorkflowsStore
+              .getState()
+              .workflows.find((w) => w.id === wf.id)
+              ?.runs.find((r) => r.id === runId);
+            if ((stalledRun?.resumeCount ?? 0) < MAX_AUTO_RESUMES) {
+              failRun(
+                i,
+                new Error(
+                  `Step timed out — no model output for over 4 minutes. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
+                )
+              );
+              scheduleAutoResume(wf.id, runId, i, stalledRun?.resumeCount ?? 0);
+              return runId;
+            }
             failRun(
               i,
               new Error(

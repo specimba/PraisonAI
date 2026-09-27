@@ -1685,3 +1685,19 @@ Stage Summary:
 - Diagnosis complete for all three user asks; two concrete fixes queued: (A) auto-resume on stall-timeout (small, runner-local), (B) free-lane auto-router with failover (medium, llm-config/evolution adjacent). Server-side runs = design epic, proposal only for now
 - NEXT ROUND PRIORITY (19:23): implement (A) auto-resume bounded retry in workflow-runner.ts (watchdog timeout -> auto resume from failed step, cap 3, toast "auto-resumed"); then (B) if budget allows or 20:23 round. KEEP the break-notification closed (platform UI, no action possible)
 - Fleet: heartbeats continuous through 11:08:27Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940-review (2026-09-27 19:23 +08)
+Agent: main (cron review round)
+Task: status assessment + QA, then ONE focused improvement from the 19:07 queue
+
+Work Log:
+- ASSESS: HTTP 200; agent-browser snapshot = full Workflows UI renders, "cron 2/2" badge live, next fire in 14m; console buffer clean apart from the KNOWN stale page.tsx:13:10 artifact (buffer is cumulative across navigations; dev.log shows only clean compiles; my edits touched runner only — confirmed stale again)
+- IMPLEMENTED — BOUNDED STALL AUTO-RESUME (worklog 19:07 fix candidate A): a watchdog-stalled run no longer waits for a manual resume click. Both watchdog-abort catch sites (rework + regular generate) now check the run's resumeCount: below MAX_AUTO_RESUMES (3) the run finalizes cleanly then scheduleAutoResume() re-enters executeWorkflowRun via the normal resume path (completed steps preserved, restarts at failed step, toast "Stall auto-recovery engaged" with attempt N/3); at/above cap it falls back to the existing manual-resume timeout card. KEY DESIGN: the 1.2s deferred re-entry is load-bearing — the dying invocation's finally wipes activeRuns/activeControllers and the resumed call re-registers them synchronously, so firing immediately would let the finally delete the NEW registration (Stop/watchdog would strand). Guarded re-entry: skipped if run vanished / user resumed-stopped / another run holds the engine. resumeCount is shared between auto+manual resumes so total disruption stays bounded
+- VERIFY: npx eslint workflow-runner.ts exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; dev.log "✓ Compiled"; HTTP 200 post-edit; MultiEdit echoes checked line-by-line — no adjacent-line swallowing this time
+- NOT DONE (budget): live E2E of a real 4-min stall→auto-resume cycle (needs an artificially shortened STALL_TIMEOUT_MS + a run window — candidate for a dedicated round); styling/feature increments beyond this fix
+
+Stage Summary:
+- Scheduled runs are now self-healing end-to-end: model relay rotates dead lanes → step self-heal retries transient hiccups → stall watchdog aborts silent streams → auto-resume restarts the run (≤3x) → only then does the manual-resume card appear. The "runs not finishing automatically" user pain is closed at the client-engine level
+- NEXT ROUND PRIORITY: 1) E2E the auto-resume with STALL_TIMEOUT_MS temporarily dropped to ~20s (revert after); 2) candidate B — free-lane auto-router polish OR per-model health badges from relay hop memory (repo-review idea a); 3) ModelTicker quality column (idea b). Server-side run execution remains a design epic, proposal only
+- Fleet: patrol heartbeats continuous; this round fired on Job 414940 as scheduled
