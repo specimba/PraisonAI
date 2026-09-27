@@ -1460,3 +1460,25 @@ Stage Summary:
 - The archive is now a real audit surface: filter by outcome, and a safe (confirm-gated) reset that never destroys open proposals
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree — restarting it before rebuild reverts ALL recent fixes; do NOT); 2) boot-server longevity check at next real boot; 3) candidate: centralize the hardcoded novelty threshold 35 (engine const + runner + ledger tooltips + ledger conditions) into one import, THEN surface it in Settings; 4) candidate: deep-link from archive rows to the spawned workflow (sourceWorkflowId → highlight card)
 - Fleet: heartbeats continuous through 00:07:12Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 09:23 +08 window)
+Agent: main (hourly review loop)
+Task: centralize + surface the novelty stall threshold in Settings
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 08:37+09:07, heartbeats present; 414940 = this task). HEAD 469af2c→e142e22 = 9800b72 (08:23 round's archive quality pass, confirmed in worklog) + platform worklog-only e142e22 (+19, verified). HTTP 200 (dev tenure ~21h) — HMR-only
+- QA GATE: console 0 errors (HMR info only), landing + nav render clean; synthetic click could not reach Studio view this round (dom 793 = landing state) — browser E2E deferred to next round's first action; eslint+unit suite used as the gate instead
+- INCREMENT SHIPPED (7 files, commit dedee26): the hardcoded 35 is now a first-class setting —
+  · engine: MaybeProposeSpawnInput + BuildVariationProposalInput gain optional threshold (?? NOVELTY_SPAWN_THRESHOLD) — default behavior byte-identical (14-assertion suite untouched, ALL PASS)
+  · types/constants: Settings.noveltySpawnThreshold?: number (deep-merge persist keeps old profiles on default 35)
+  · runner finish(): reads the setting best-effort (IIFE + try/catch → never affects finalization), gates + passes it into maybeProposeSpawn
+  · workflows-view: EvolutionLedger + EvolutionInbox each read the setting via useSettingsStore hook — stalled counter, avg chip, trail chips, big novelty chip, Suggest-variation condition, ledger subtitle and inbox teaching text all now render the live threshold
+  · settings-view: new "Evolution" section (nav + scroll-spy auto-integrate) — Slider 10–90% step 5, violet live-value chip, strict/default/lenient tick labels, explanatory copy, "Reset to default (35%)" action
+- VERIFIED: npx eslint exit 0 on all 7 changed files; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; rg confirms zero functional "< 35" remnants (only a docstring comment at line 149, cosmetic follow-up)
+- KNOWN FOLLOW-UPS: (1) manual "Suggest variation" still omits the threshold passthrough → reason text shows default 35 wording when user changed the slider; (2) browser E2E of the slider pending (Studio nav click was inert this round)
+
+Stage Summary:
+- The Evolution stall rule is no longer a magic number — users tune originality strictness in Settings, and every surface (ledger chips, inbox copy, runner gating, proposal reasons) honors it from one persisted value
+- NEXT ROUND PRIORITY: 1) browser E2E: Settings → Evolution slider round-trip (set 20 → ledger chips re-render amber at <20 → reset) + first-visit Studio nav retry; 2) pass threshold into the manual buildVariationProposal call; 3) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild); 4) boot-server longevity check at next real boot
+- Fleet: heartbeats continuous through 01:07:10Z (27 Sep); no gaps; no failed patrols
