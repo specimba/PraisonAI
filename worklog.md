@@ -1589,3 +1589,22 @@ Stage Summary:
 - The Evolution story is now visible the moment a user opens Workflows: seed data demonstrates scoring, stall detection, averages and the variation path without running anything; the last queued candidate from the Evolution feature chain is delivered
 - NEXT ROUND PRIORITY: 1) optional visual check of the violet custom-threshold ledger chip (set threshold via Settings -> Evolution, ledger header should show "stall <N%"; channel already E2E-verified 11:23, chip verified at code level 14:23); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 3) boot-server longevity check at next real boot; 4) Evolution loop + seeding complete - next: pick a NEW surface (e.g. workflow run export, board filters, or onboarding touch) or a polish pass
 - Fleet: heartbeats continuous through 07:07:11Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 16:23 +08 window)
+Agent: main (hourly review loop)
+Task: NEW SURFACE - board pipeline filter chip row + harness doctrine on settings injection
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 15:37+16:07, heartbeats present; 414940 = this task). HEAD 2c2f85f = platform auto-commit over 8f9aa96. HTTP 200 (dev tenure ~27h) - HMR-only
+- QA GATE: console 0 errors; app healthy
+- HARNESS DOCTRINE SETTLED (2 rounds of evidence, 14:23 + 16:23): direct localStorage injection of praison-settings does NOT drive the zustand settings store (injected noveltySpawnThreshold=20 still rendered "2 stalled" = threshold 35), while praison-workflows injection DOES rehydrate (Filter Probe appeared + persisted across reload). Future rounds: to change the threshold in E2E, use the REAL slider UI (11:23 pattern); localStorage injection is only valid for workflows/proposals
+- VIOLET CHIP VISUAL CHECK: still queued (needs slider-UI route; code-level verification stands from 14:23)
+- INCREMENT SHIPPED (run-kanban.tsx, commit see HEAD): pipeline filter chip row above the runs kanban - renders only when >=2 pipelines have cards (noise doctrine); "All pipelines" reset chip + one chip per pipeline (name + card count, busiest first, max-w-52 truncate, aria-pressed, toggle on re-click); active chip violet (matches Evolution doctrine); filter narrows all four columns via visible map; unfiltered-empty and filtered-empty states separated (filtered-empty copy: "No cards match this filter - the selected pipeline has nothing on the board right now")
+- E2E GREEN (live): board toggle aria-label "Runs board layout" -> board shows 4 Novelty Lab cards -> injected wf-demo-filter (1 done run, novelty 50) via localStorage -> reload -> chip row rendered ("All pipelines" / "Filter Probe 1" / "Novelty Lab (sample) 4") -> clicked Novelty chip -> Done column 5 -> 4 cards, probe card hidden -> cleanup eval removed wf-demo-filter -> reload clean
+- VERIFIED: npx eslint exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED
+
+Stage Summary:
+- The runs board is now filterable when multiple pipelines have cards; with the seeded Novelty Lab the board finally has real content to filter; harness doctrine for future E2E settled (settings via slider UI only)
+- NEXT ROUND PRIORITY: 1) violet custom-threshold chip visual check via the REAL slider (Settings -> Evolution: set 20 -> Workflows ledger header shows "stall <20%" violet chip -> Reset); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 3) boot-server longevity check at next real boot; 4) candidates: run export (copy report to clipboard), board filter persistence (keep filter across layout switches), scheduled-card seed so the Scheduled column demos out-of-the-box
+- Fleet: heartbeats continuous through 08:07:16Z (27 Sep); no gaps; no failed patrols
