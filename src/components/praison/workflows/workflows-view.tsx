@@ -299,6 +299,7 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
                             wf.steps.map((s) => s.label).join(" → ") ||
                             wf.name,
                           novelty: n,
+                          threshold,
                           manual: true,
                         })
                       );
