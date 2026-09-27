@@ -1627,3 +1627,20 @@ Stage Summary:
 - The violet stall-rule chip is now user-journey-verified end-to-end (slider -> chip -> reset -> quiet), and the board filter is a persisted preference instead of ephemeral component state
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 2) boot-server longevity check at next real boot; 3) candidates: run export (copy run report to clipboard as markdown), scheduled-card seed so the Scheduled column demos out-of-the-box, board filter count badge live-update check, keyboard a11y pass on the new chip row (Tab order + Enter/Space)
 - Fleet: heartbeats continuous through 09:07:12Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 18:23 +08 window)
+Agent: main (hourly review loop)
+Task: novelty trail strip on grid cards (Evolution -> card surface parity)
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 17:37+18:07, heartbeats present; 414940 = this task). HEAD 5c3c775 = platform auto-commit over c841010. HTTP 200 (dev tenure ~29h) - HMR-only
+- QA GATE: console 0 errors; app healthy
+- INCREMENT SHIPPED (workflows-view.tsx, commit see HEAD): grid workflow cards now carry a novelty trail strip in the footer (next to "N runs . last X") - up to 6 most recent scored done runs rendered oldest->newest as 1.5px dots, emerald >= threshold / amber < threshold (same doctrine as the ledger trail); aria-label "Novelty trail: 62, 48, ..." + title tooltip explaining the amber rule and linking to Settings -> Evolution; hidden on cards with no scored runs (noise doctrine). Component-level hook noveltyThreshold added to WorkflowsView (rules of hooks - NOT inside the map IIFE)
+- E2E GREEN (live): board was still the mounted layout (persisted from 17:23 - layout persistence working as designed, which initially masked the trail) -> clicked "Card grid layout" -> DOM check: span[title*="Recent novelty scores"] count 1 with exactly 4 dots (Novelty Lab 62/48/31/22; other seeds have no runs -> no strip). NOTE: bare-span aria-labels do NOT surface in the a11y snapshot tree - DOM attribute selectors are the reliable verification hook for non-interactive decorations
+- VERIFIED: npx eslint exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED
+
+Stage Summary:
+- The Evolution signal now reaches the primary browsing surface: every scored pipeline announces its recent novelty trend right on its card, amber-warning at the active stall rule; grid <-> board <-> ledger <-> settings all tell one consistent story
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 2) boot-server longevity check at next real boot; 3) candidates: run export (copy run report to clipboard as markdown - clipboard perms in headless need a fallback plan), scheduled-card seed for the Scheduled column (careful: schedules trigger real recurring runs), keyboard focus-visible polish on the board filter chips, board RunCard trail mini-parity (tiny dots under the novelty chip)
+- Fleet: heartbeats continuous through 10:07:13Z (27 Sep); no gaps; no failed patrols
