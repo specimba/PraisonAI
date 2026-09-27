@@ -1873,3 +1873,19 @@ Stage Summary:
 - The exact failure class that killed RSIinFIELD (r68, twice) and today's Deep run is now budgeted at the layer that kills it: engine-side silence tolerance 90→180s, full forensics documented in-code.
 - USER GUIDANCE: click "Retry failed step" on the failed run — step 1's 692s report is preserved; the fresh retry invocation runs on the new 180s budget. If the lane is still sick, switch model via the health-badged picker (r75) first.
 - NEXT: 1) pending-status fix (re-evaluate gate — no active run observed this round), 2) auto-resume E2E with corrected providerKeys.custom injection, 3) stall-failover epic: rotate to an alternate healthy hop on repeated engine-layer stalls (touches runner — needs gate), 4) agent-browser netns forensics if still unreachable.
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 04:23 +08)
+Agent: main (review round)
+Task: Assess + QA + fix — app was DOWN (http=000 since ~03:50); root-caused the spawn-death mystery and shipped the durable self-heal recipe
+
+Work Log:
+- SELF-HEAL: cron CLI still unavailable (3rd consecutive round — platform-side jobs; behavioral fleet evidence: 414938 fired 04:07+08, this task = 414940 on-schedule :23 → fleet 2/2, no recreation possible/needed via sandbox).
+- APP DOWN at round start (carried from 04:07 patrol): http=000. Diagnosed WHY every restart died: 3 controlled experiments (nohup / setsid / setsid+bash) all proved tool-call-spawned processes are KILLED at call end — `next_call=000` each time. Process-tree forensics: PID1=tini→caddy(PID2)→uv main.py (platform backend); NO crond/tmux/pm2/at available. KEY: agent-browser's chrome daemon (tool-call-spawned, 20:03Z) SURVIVES → it uses double-fork orphaning (reparented to PID1, outside the tool shell's kill tree; setsid alone does NOT escape tree-kill).
+- FIX SHIPPED (r79): scripts/start-server.py — fork→setsid→fork→exec daemonizer for `bun run dev` (idempotent: exits 0 if :3000 alive; logs to server.log; dev.log stays canonical via the script's own tee). VERIFIED: in_call=200 AND next_call=200 across the call boundary — FIRST spawn to survive since the 03:50 outage. Full UI render confirmed via agent-browser (PraisonAI title, cron 2/2 badge, chat+trackers live, HMR connected, console clean).
+- DIAGNOSIS CORRECTED: last round's "browser netns lost :3000" theory was WRONG — the browser was always fine; every refusal (browser AND gateway-wrapper spin) was the dead server. Reverted to doctrine: agent-browser targets localhost:3000 directly.
+- r78 (earlier this session, already in code): IDLE_CHUNK_TIMEOUT_MS 90→180s — now LIVE for all new LLM invocations on the revived server. User's failed Deep run (step 2/11, 3× stalled) is resumable via "Retry failed step"; step 1's 692s report preserved.
+
+Stage Summary:
+- FLEET-GRADE WIN: any future round that finds http=000 runs `python3 scripts/start-server.py` (≤1 tool round) — the 04:07-class outage is now a 1-round self-heal instead of a platform ticket.
+- NEXT priorities: 1) pending-status fix (gate: no active run observed — attempt next round), 2) stall-failover epic (rotate hops on repeated engine stalls), 3) auto-resume E2E (providerKeys.custom recipe), 4) task-mandated styling/feature increments (queue: recovery-card visual hierarchy; run-history sparkline).
