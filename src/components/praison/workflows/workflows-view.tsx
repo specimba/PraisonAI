@@ -62,6 +62,7 @@ import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
 import { buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { useSettingsStore } from "@/lib/stores";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, uid } from "@/lib/helpers";
+import { isWorkflowRunning } from "@/lib/workflow-runner";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DepthChip, EmptyState, PageHeader } from "@/components/praison/atoms";
 import { WorkflowEditorDialog } from "./workflow-editor-dialog";
@@ -1247,18 +1248,44 @@ export function WorkflowsView() {
       })()}
                     </div>
                     <div className="flex items-center gap-2">
-                      {wf.schedule?.enabled && wf.steps.length > 0 && (
-                        <span
-                          title={`Recurring schedule · next ${fmtIn(wf.schedule.nextRunAt)}${wf.schedule.failStreak ? ` · ${wf.schedule.failStreak} consecutive failure${wf.schedule.failStreak === 1 ? "" : "s"}` : ""}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
-                        >
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {wf.schedule?.enabled && wf.steps.length > 0 && (() => {
+                        // r76: honest skip-surface. The scheduler's due-filter
+                        // EXCLUDES workflows with an active run (deliberate —
+                        // no double-fire; the first tick after the run ends
+                        // fires immediately, so nothing is lost). That hidden
+                        // state is now visible: a due schedule whose run is
+                        // still going shows an amber "due — blocked by run"
+                        // chip instead of a green countdown pretending all is
+                        // nominal. Derived live at render — run start/end are
+                        // store updates, so the flip is reactive for free.
+                        const scheduleDue =
+                          wf.schedule.nextRunAt == null ||
+                          wf.schedule.nextRunAt <= Date.now();
+                        const blockedByRun = scheduleDue && isWorkflowRunning(wf.id);
+                        if (blockedByRun) {
+                          return (
+                            <span
+                              title="Schedule is due, but a run of this workflow is already active — it fires on the first scheduler tick after the run ends. Nothing is lost; the schedule never double-fires."
+                              className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              {fmtIntervalShort(wf.schedule.intervalMs)} · due — blocked by run
+                            </span>
+                          );
+                        }
+                        return (
+                          <span
+                            title={`Recurring schedule · next ${fmtIn(wf.schedule.nextRunAt)}${wf.schedule.failStreak ? ` · ${wf.schedule.failStreak} consecutive failure${wf.schedule.failStreak === 1 ? "" : "s"}` : ""}`}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                          >
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            </span>
+                            {fmtIntervalShort(wf.schedule.intervalMs)} · next {fmtIn(wf.schedule.nextRunAt)}
                           </span>
-                          {fmtIntervalShort(wf.schedule.intervalMs)} · next {fmtIn(wf.schedule.nextRunAt)}
-                        </span>
-                      )}
+                        );
+                       })()}
                       {wf.schedule && !wf.schedule.enabled && (wf.schedule.failStreak ?? 0) >= 3 && (
                         <button
                           type="button"

@@ -1809,3 +1809,19 @@ Stage Summary:
 - Closure duplication 2 → 0; provider-gallery now surfaces ok N / sick / throttled verdicts at provider-default selection time — a recently-dead lane is visible BEFORE being committed.
 - UNCHANGED next priorities: 1) workflow "pending" step status fix (STILL GATED — apply only when confirmed no run active; recipe in prior entry), 2) auto-resume E2E via hang-server, 3) server-side run execution epic (proposal only).
 - Risk note for next round: if a transient "Ecmascript file had an error" appears right after a multi-file edit batch, re-open the page and re-check console before treating it as real — mid-batch Turbopack states self-heal.
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 01:23 +08)
+Agent: main (review round)
+Task: QA + one focused improvement — shipped r76: scheduler skip-surface ("due — blocked by run" chip)
+
+Work Log:
+- QA: HTTP 200; root snapshot + Workflows tab (via nav click) render clean; eslint clean; dev.log server-side compile 100% clean (live, prisma noise only). Browser console still shows page.tsx:13:10 + full-reload lines on FRESH opens — re-triaged and CONFIRMED STALE-BUFFER ARTIFACT: page.tsx is the root (a real RadarView failure would blank the whole app, yet everything renders), dev.log shows zero compile errors, and the signature matches the known agent-browser persistent buffer doctrine.
+- GATED FIX STILL GATED: workflow "pending" status fix untouched again — same run-safety doctrine (user's run state unverifiable; now ~2h since last sighting of the streaming run, but discipline holds).
+- r76 SHIPPED (the worklog's SECOND QUEUED ITEM — answers the user's original "scheduled ones not triggered themselves" from the UI): workflows-view.tsx schedule chip now derives skip state LIVE at render. When a schedule is enabled + due (nextRunAt past/null) AND isWorkflowRunning(wf.id) → the green "every Xm · next in Y" chip flips to an AMBER "every Xm · due — blocked by run" chip (static dot, no pulse) with an honest tooltip: fires on the first scheduler tick after the run ends, nothing lost, never double-fires. Otherwise the original emerald countdown renders byte-identical.
+- DESIGN: zero plumbing — no stores, events, or scheduler changes. isWorkflowRunning is a synchronous module-registry check; run start/end are store updates, so the flip is reactive for free. Single component file edited (react-refresh boundary). workflow-runner.ts UNTOUCHED (import-only edge added from the view — no invalidation of the engine module mid-run).
+- Verified: eslint clean; Workflows tab renders with chip logic live (amber variant correctly absent in agent profile — needs due+running combo simultaneously, i.e. the user's exact scenario).
+
+Stage Summary:
+- The user's three original observations now ALL have UI-honest answers: (1) all-Running display → pending-status fix (still queued, gated), (2) restarts → auto-resume by design (r72), (3) non-triggering → amber "due — blocked by run" chip (r76, shipped this round).
+- NEXT priorities unchanged: 1) pending-status fix (gate: confirm no run active — recipe in the 23:4x entry), 2) auto-resume E2E via hang-server, 3) server-side run epic (proposal only).
