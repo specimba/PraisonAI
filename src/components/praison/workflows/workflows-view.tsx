@@ -171,6 +171,7 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
     useSettingsStore((s) => s.settings.noveltySpawnThreshold) ??
     NOVELTY_SPAWN_THRESHOLD;
   const stalled = allScored.filter((r) => (r.novelty ?? 0) < threshold).length;
+  const isCustom = threshold !== NOVELTY_SPAWN_THRESHOLD;
 
   if (rows.length === 0) return null;
 
@@ -184,14 +185,25 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
             output novelty vs recent done runs · &lt;{threshold}% = stall
           </span>
         </div>
-        {allScored.length > 0 && (
+        {(allScored.length > 0 || isCustom) && (
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium">
+            {isCustom && (
+              <span
+                title={`Custom stall rule set in Settings → Evolution (default ${NOVELTY_SPAWN_THRESHOLD}%) — stall detection and variation proposals use ${threshold}%`}
+                className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-violet-600 dark:text-violet-400"
+              >
+                stall &lt;{threshold}%
+              </span>
+            )}
+            {allScored.length > 0 && (
             <span
               title={`${allScored.length} run${allScored.length === 1 ? "" : "s"} scored by the Evolution Layer (runs finish with a novelty score vs their workflow's recent output)`}
               className="rounded-full border bg-muted/40 px-2 py-0.5 text-muted-foreground"
             >
               {allScored.length} scored
             </span>
+            )}
+            {allScored.length > 0 && (
             <span
               title={`Average novelty across all scored runs${avg != null ? `: ${avg}%` : ""}`}
               className={cn(
@@ -203,7 +215,8 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
             >
               avg {avg}%
             </span>
-            {stalled > 0 && (
+            )}
+            {allScored.length > 0 && stalled > 0 && (
               <span
                 title={`${stalled} near-duplicate run${stalled === 1 ? "" : "s"} — the pipeline is treading water; widen the task or vary instructions`}
                 className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-600 dark:text-amber-400"
