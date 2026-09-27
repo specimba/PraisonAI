@@ -1608,3 +1608,22 @@ Stage Summary:
 - The runs board is now filterable when multiple pipelines have cards; with the seeded Novelty Lab the board finally has real content to filter; harness doctrine for future E2E settled (settings via slider UI only)
 - NEXT ROUND PRIORITY: 1) violet custom-threshold chip visual check via the REAL slider (Settings -> Evolution: set 20 -> Workflows ledger header shows "stall <20%" violet chip -> Reset); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 3) boot-server longevity check at next real boot; 4) candidates: run export (copy report to clipboard), board filter persistence (keep filter across layout switches), scheduled-card seed so the Scheduled column demos out-of-the-box
 - Fleet: heartbeats continuous through 08:07:16Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 17:23 +08 window)
+Agent: main (hourly review loop)
+Task: violet chip slider-UI verification (CLOSED) + board filter persistence
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 16:37+17:07, heartbeats present; 414940 = this task). HEAD 730a4ca = platform auto-commit over e8c6c04. HTTP 200 (dev tenure ~28h) - HMR-only
+- QA GATE: console 0 errors; app healthy
+- VIOLET CHIP VERIFICATION CLOSED (full user journey via REAL slider, per harness doctrine): Settings -> threshold slider (aria ref e346, value 35) -> click + 3x ArrowLeft (agent-browser press) -> slider 20, preview "customized sensitivity" -> nav Workflows -> ledger header shows StaticText "stall <20%" (the violet mini-chip from 14:23) -> back to Settings -> "Reset to default" click -> "default sensitivity" -> Workflows grep "stall <" count 0 (chip hidden at default). Feature verified both directions
+- INCREMENT SHIPPED (stores.ts + run-kanban.tsx, commit see HEAD): board pipeline filter moved from RunKanban local useState to the ui store - boardWorkflowFilter: string | null + setBoardWorkflowFilter, initial null, added to persist partialize (praison-ui) so the filter survives grid<->board switches AND reloads; chip toggle onClick now computes from the store value (zustand setters are not functional)
+- SELF-Caught REGRESSION: the stores.ts MultiEdit anchor consumed the "setupWizardOpen: false," initial line - caught in the edit diff echo, restored immediately, eslint confirms
+- E2E GREEN (live): injected wf-demo-filter (1 done run) -> reload -> board on -> chip "Novelty Lab (sample) 4" click (filter set, persisted) -> switch to Card grid -> back to Runs board -> Done column STILL 4 cards (filter survived the round-trip; probe card hidden; probe chip still listed as a choice) -> cleanup: All pipelines reset + probe removed + reload
+- VERIFIED: npx eslint exit 0 (both files); bun scripts/test-spawn-engine.ts ALL CHECKS PASSED
+
+Stage Summary:
+- The violet stall-rule chip is now user-journey-verified end-to-end (slider -> chip -> reset -> quiet), and the board filter is a persisted preference instead of ephemeral component state
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 2) boot-server longevity check at next real boot; 3) candidates: run export (copy run report to clipboard as markdown), scheduled-card seed so the Scheduled column demos out-of-the-box, board filter count badge live-update check, keyboard a11y pass on the new chip row (Tab order + Enter/Space)
+- Fleet: heartbeats continuous through 09:07:12Z (27 Sep); no gaps; no failed patrols
