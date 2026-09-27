@@ -1664,3 +1664,24 @@ Stage Summary:
 - Runs can no longer hang forever (watchdog), schedules fire with the tab backgrounded, Stop survives navigation, and the break nag is gone; repo intel queued as three concrete Evolution-style candidates
 - NEXT ROUND PRIORITY: 1) real end-to-end run of a multi-step workflow to observe the watchdog in the wild (needs a run window); 2) model health badges from relay memory (candidate a - smallest); 3) ModelTicker score column (candidate b); 4) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed
 - Fleet: heartbeats continuous through 10:37:16Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: USER-REQUESTS (2026-09-27 19:07 +08, merged with 19:07 patrol)
+Agent: main
+Task: user triage - repo review, break-notification, background-run reliability
+
+Work Log:
+- PATROL: HTTP 200; heartbeat 11:08:27Z; fleet 2/2 live-fire
+- BREAK NOTIFICATION ("Long session - time for a break? / Snooze 10m"): NOT in the codebase (rg -i across src/, src/app/ = zero hits; repo-wide rg timed out on build dirs but app text lives in src). It is the HOSTING PLATFORM's agent-session reminder (it counts OUR cron agents' activity), not PraisonAI UI - no code path can remove it; the only lever is the platform's own dismiss/snooze control. Reported honestly to the user
+- RUN RELIABILITY RECON (user: "runs not finishing automatically + not working in background when the tab is closed"):
+  1. Engine is a CLIENT-SIDE module singleton (workflow-runner.ts): activeRuns Set + AbortController map + 4-min stall watchdog (STALL_TIMEOUT_MS 4min / check 15s). executeWorkflowRun = one await-chain; runs survive view switches WITHIN the app but DIE when the browser tab closes/refreshes (JS context destroyed). Client-side by design (documented in scheduler header r71)
+  2. Scheduler (workflow-scheduler.tsx) is mounted APP-WIDE (page.tsx:116, not in Workflows view), 10s tick, background-tab throttling absorbed by re-arm logic - scheduled firing is NOT the gap
+  3. "Not finishing automatically" root cause: a stalled provider stream gets watchdog-aborted after 4 min and finalizes as a RESUMABLE TIMEOUT ERROR that waits for a MANUAL resume click. Fix candidate: AUTO-RESUME on timeout (bounded, e.g. <=3 auto-resumes/run, reusing the existing resume path + resumeCount)
+  4. Structural fix for true background: server-side run execution (Prisma-backed run state + server loop; the project already has SQLite/Prisma). EPIC - needs design: stores are localStorage-zustand today
+  5. Provider-level failover (free lanes die mid-run) is the other finisher-killer: an auto-router across Vyce/Pollinations/AIHubMix lanes would rescue runs automatically
+- REPO REVIEW (ClawLabsAI/free-ai-models): "Daily-updated list of free AI models (free LLM APIs), ranked by quality with live status. Plus one OpenAI-compatible endpoint that routes to the best one." vs OUR arsenal: 3 preseeded lanes (Vyce DeepSeek V4.1, Pollinations openai-fast, AIHubMix 45 $0 lanes + frontier, coding-glm-5.3-free), AUTO built-in GLM, Groq presets, and a Model Tracker that ALREADY syncs live status + free flags (TrackedModel). Verdict: our lane count and breadth are stronger; their two adaptable ideas: (a) quality RANKING surfaced in the picker (we track availability, not quality order), (b) the single auto-routing endpoint pattern -> implement as a free-lane auto-router with failover (doubles as the run-reliability fix above)
+
+Stage Summary:
+- Diagnosis complete for all three user asks; two concrete fixes queued: (A) auto-resume on stall-timeout (small, runner-local), (B) free-lane auto-router with failover (medium, llm-config/evolution adjacent). Server-side runs = design epic, proposal only for now
+- NEXT ROUND PRIORITY (19:23): implement (A) auto-resume bounded retry in workflow-runner.ts (watchdog timeout -> auto resume from failed step, cap 3, toast "auto-resumed"); then (B) if budget allows or 20:23 round. KEEP the break-notification closed (platform UI, no action possible)
+- Fleet: heartbeats continuous through 11:08:27Z (27 Sep); no gaps; no failed patrols
