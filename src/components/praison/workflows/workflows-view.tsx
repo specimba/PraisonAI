@@ -63,6 +63,7 @@ import { buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-pro
 import { useSettingsStore } from "@/lib/stores";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, uid } from "@/lib/helpers";
 import { isWorkflowRunning } from "@/lib/workflow-runner";
+import { readScheduleSkips } from "@/lib/schedule-skips";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DepthChip, EmptyState, PageHeader } from "@/components/praison/atoms";
 import { WorkflowEditorDialog } from "./workflow-editor-dialog";
@@ -914,6 +915,14 @@ export function WorkflowsView() {
     });
   };
 
+  // r77: schedule deferral audit — the historical half of the amber
+  // "blocked by run" chip (see lib/schedule-skips.ts). Parsed per render;
+  // the trail is ≤20 tiny entries, so this is cheaper than memo plumbing.
+  const lastSkipFor = (id: string) => {
+    const list = readScheduleSkips().filter((e) => e.id === id);
+    return list.length > 0 ? list[list.length - 1] : undefined;
+  };
+
   const handleDuplicate = (wf: Workflow) => {
     const id = duplicateWf(wf.id);
     if (id) toast.success(`Duplicated "${wf.name}"`);
@@ -1309,6 +1318,32 @@ export function WorkflowsView() {
                         Edit
                       </Button>
                     </div>
+                      {(() => {
+                        // r77: deferral audit line — live while an episode is
+                        // open ("since HH:MM"), historical once it closes
+                        // ("deferred X — fired Y", shown for 6h).
+                        const skip = lastSkipFor(wf.id);
+                        if (!skip) return null;
+                        const since = new Date(skip.at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+                        if (!skip.firedAt) {
+                          return (
+                            <div className="text-[10px] text-muted-foreground/80">
+                              ⏳ schedule deferred since {since} — waiting for the active run to finish
+                            </div>
+                          );
+                        }
+                        if (Date.now() - skip.firedAt < 6 * 60 * 60_000) {
+                          return (
+                            <div className="text-[10px] text-muted-foreground/70">
+                              ⏳ deferred {fmtRel(skip.at)} while a run was active — fired {fmtRel(skip.firedAt)}
+                            </div>
+                          );
+                        }
+                        return null;
+                       })()}
                   </div>
                 </Card>
               );

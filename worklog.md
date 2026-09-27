@@ -1825,3 +1825,18 @@ Work Log:
 Stage Summary:
 - The user's three original observations now ALL have UI-honest answers: (1) all-Running display → pending-status fix (still queued, gated), (2) restarts → auto-resume by design (r72), (3) non-triggering → amber "due — blocked by run" chip (r76, shipped this round).
 - NEXT priorities unchanged: 1) pending-status fix (gate: confirm no run active — recipe in the 23:4x entry), 2) auto-resume E2E via hang-server, 3) server-side run epic (proposal only).
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 02:23 +08)
+Agent: main (review round)
+Task: QA + one focused improvement — shipped r77: schedule deferral AUDIT TRAIL (historical half of r76's amber chip)
+
+Work Log:
+- QA: HTTP 200; root + Workflows tab render clean; eslint clean on all 3 touched files. Console page.tsx:13 line = confirmed stale-buffer artifact (unchanged doctrine).
+- GATED FIX STILL GATED (3rd round honoring it): workflow "pending" status fix untouched — user's run state remains unverifiable.
+- r77 SHIPPED: (1) NEW src/lib/schedule-skips.ts — append-only, capped-20 localStorage trail of deferral episodes {id, name, at, firedAt?}; noteScheduleDeferred is idempotent per episode (the 10s tick does NOT spam; new episode only after the previous closed or went stale>24h — tab-closed-mid-run guard); closeScheduleDeferral stamps firedAt when the schedule finally fires; readScheduleSkips drops stale opens. Lives in a NEW lib file because a component file exporting a non-component function loses react-refresh state preservation (full reload → would destroy an in-flight run). (2) workflow-scheduler.tsx (STILL a pure component — no new exports): each tick computes the blocked mirror-set (due + isWorkflowRunning) → noteScheduleDeferred; the fire loop calls closeScheduleDeferral after re-arm. (3) workflows-view.tsx: per-card audit line under the actions row — open episode: "⏳ schedule deferred since HH:MM — waiting for the active run to finish"; closed episode ≤6h old: "⏳ deferred X ago while a run was active — fired Y ago"; else null.
+- E2E-VERIFIED IN THE LIVE UI (agent profile, zero impact on user's browser): injected a probe episode via eval → card rendered "⏳ deferred 1h ago while a run was active — fired 30m ago" → cleared the key → line correctly gone. GOTCHA for future E2E: agent-browser eval returns JSON-quoted strings — bash-capturing the value bakes literal quotes into the captured var (first injection stored id "\"wf-novelty-lab\"" and matched nothing; feature was fine, probe was dirty). Strip quotes or inject literals directly.
+
+Stage Summary:
+- The scheduler's hidden deferral behavior is now fully honest BOTH live (r76 amber chip) and historically (r77 audit line): "why didn't it trigger at 16:10?" is answerable from the UI minutes or hours later.
+- NEXT priorities unchanged: 1) pending-status fix (STILL GATED), 2) auto-resume E2E via hang-server (recipe stands), 3) server-side run epic (proposal only).

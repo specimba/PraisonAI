@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { useWorkflowsStore } from "@/lib/stores";
 import { executeWorkflowRun, isWorkflowRunning } from "@/lib/workflow-runner";
+import { closeScheduleDeferral, noteScheduleDeferred } from "@/lib/schedule-skips";
 
 // ─── In-app workflow scheduler ───────────────────────────────────────────────
 // Ticks every 10s and fires any enabled workflow schedule whose nextRunAt is
@@ -34,6 +35,20 @@ export function WorkflowScheduler() {
             !isWorkflowRunning(w.id)
         );
 
+        // r77: audit the deliberate skips — a due schedule whose workflow is
+        // already running is deferred (never lost; the first tick after the
+        // run ends fires). Episodes are logged ONCE (noteScheduleDeferred is
+        // idempotent per episode — no 10s-tick spam) and closed when the
+        // schedule finally fires below.
+        const blocked = store.workflows.filter(
+          (w) =>
+            w.schedule?.enabled === true &&
+            w.steps.length > 0 &&
+            (w.schedule.nextRunAt == null || w.schedule.nextRunAt <= now) &&
+            isWorkflowRunning(w.id)
+        );
+        for (const wf of blocked) noteScheduleDeferred(wf.id, wf.name);
+
         for (const wf of due) {
           const schedule = wf.schedule;
           if (!schedule) continue;
@@ -49,6 +64,10 @@ export function WorkflowScheduler() {
           store.update(wf.id, {
             schedule: { ...schedule, lastRunAt: now, nextRunAt: nextAt },
           });
+
+          // r77: if this fire ends a deferral episode, stamp it — the audit
+          // line under the workflow card then reads "deferred X — fired Y".
+          closeScheduleDeferral(wf.id, now);
 
           toast(`Scheduled run started`, {
             icon: "⏰",
