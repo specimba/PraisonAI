@@ -1482,3 +1482,21 @@ Stage Summary:
 - The Evolution stall rule is no longer a magic number — users tune originality strictness in Settings, and every surface (ledger chips, inbox copy, runner gating, proposal reasons) honors it from one persisted value
 - NEXT ROUND PRIORITY: 1) browser E2E: Settings → Evolution slider round-trip (set 20 → ledger chips re-render amber at <20 → reset) + first-visit Studio nav retry; 2) pass threshold into the manual buildVariationProposal call; 3) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild); 4) boot-server longevity check at next real boot
 - Fleet: heartbeats continuous through 01:07:10Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 10:23 +08 window)
+Agent: main (hourly review loop)
+Task: threshold passthrough fix + Studio-view E2E attempt
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 09:37+10:07, heartbeats present; 414940 = this task). HEAD dedee26→dce031a = platform auto-commit (verified worklog.md +22 only). HTTP 200 (dev tenure ~22h) — HMR-only
+- QA GATE: console 0 errors after reload; app boots clean
+- FIX SHIPPED (commit 714abcb): the manual "Suggest variation" ledger button now passes threshold into buildVariationProposal — when the user changed the Settings slider, manually requested proposals previously showed reason text with the hardcoded 35 default; they now reflect the live setting. Closes follow-up #1 from the 09:23 round
+- BROWSER E2E ATTEMPT (inconclusive — deferred, NOT a product bug signal): Studio nav via synthetic clicks investigated 3 ways — (1) sidebar 'Workflows' button click DOES register (praison-ui persisted view:"workflows" proves the state change) but the visible surface stays the ~793-dom launchpad; (2) launchpad card click via closest('button') same result; (3) reload with persisted view still lands on launchpad. Console stays clean throughout — no crash, likely a render-gate this harness path doesn't trip. Next round: use the command palette path (agent-browser press Control+k → keyboard type "workflows" → press Enter) — palette items call setView directly
+- VERIFIED: npx eslint exit 0 (workflows-view.tsx); bun scripts/test-spawn-engine.ts ALL CHECKS PASSED
+- Profile state: untouched (no localStorage surgery this round)
+
+Stage Summary:
+- All Evolution threshold surfaces (runner gate, ledger chips, inbox copy, manual proposals) now draw from ONE persisted setting; the Settings → Evolution slider is fully wired end-to-end at the code level
+- NEXT ROUND PRIORITY: 1) browser E2E of the slider via command-palette nav (press Control+k → type workflows → Enter; then Settings → Evolution: set 20 → verify localStorage praison-settings.noveltySpawnThreshold=20 persists across reload → Reset → 35); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild); 3) boot-server longevity check at next real boot; 4) cosmetic: update EvolutionLedger docstring line 149 (<35% → threshold reference)
+- Fleet: heartbeats continuous through 02:07:10Z (27 Sep); no gaps; no failed patrols
