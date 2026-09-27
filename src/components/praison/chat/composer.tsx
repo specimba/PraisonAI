@@ -53,6 +53,7 @@ import { useConversationsStore, useSettingsStore, useUiStore } from "@/lib/store
 import { UI_THEMES, uiThemeById } from "@/lib/constants";
 import { providerReady, resolveLlm } from "@/lib/llm-config";
 import { FREE_PROVIDERS, loadLiveCatalog } from "@/lib/providers";
+import { relayHealthSnapshot, relayHopBadge } from "@/lib/relay";
 import { ModelPicker, type PickerOption } from "@/components/praison/model-picker";
 import type { Agent, MessageAttachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -576,6 +577,18 @@ export function Composer({
   const setModelOverride = useConversationsStore((s) => s.setModelOverride);
 
   const modelOptions = React.useMemo<PickerOption[]>(() => {
+    // r73: relay health memory → live per-model badges. Snapshot read ONCE per
+    // rebuild; a health verdict overrides static row badges (actionable beats
+    // decorative) and lanes never dialed keep their existing badge or none.
+    const health = relayHealthSnapshot();
+    const withHealth = (o: PickerOption): PickerOption => {
+      const sep = o.id.indexOf("::");
+      const hb =
+        sep > 0
+          ? relayHopBadge(o.id.slice(0, sep), o.id.slice(sep + 2), health)
+          : undefined;
+      return hb ? { ...o, badge: hb.label, badgeTone: hb.tone } : o;
+    };
     const opts: PickerOption[] = [
       {
         id: "default",
@@ -591,18 +604,18 @@ export function Composer({
       const seen = new Set<string>();
       for (const m of p.models) {
         seen.add(m.id);
-        opts.push({
+        opts.push(withHealth({
           id: `${p.id}::${m.id}`,
           label: m.label,
           note: m.note ?? m.id,
           group: p.name,
           keywords: [m.id],
-        });
+        }));
       }
       for (const m of (live[p.id] ?? []).slice(0, 20)) {
         if (seen.has(m.id) || /embed|whisper|tts|image|imagine/i.test(m.id)) continue;
         seen.add(m.id);
-        opts.push({
+        opts.push(withHealth({
           id: `${p.id}::${m.id}`,
           label: m.id,
           note: "live roster",
@@ -610,7 +623,7 @@ export function Composer({
           badge: "live",
           badgeTone: "emerald",
           keywords: [m.id],
-        });
+        }));
       }
     }
     // r26.2: the legacy custom endpoint (any OpenAI-compatible URL) — its
@@ -627,12 +640,12 @@ export function Composer({
       if (settings.defaultModel?.trim()) {
         const dm = settings.defaultModel.trim();
         pinned.add(dm);
-        opts.push({ id: `custom::${dm}`, label: modelLabel(dm), note: `Default on ${host}`, group: host });
+        opts.push(withHealth({ id: `custom::${dm}`, label: modelLabel(dm), note: `Default on ${host}`, group: host }));
       }
       for (const m of CUSTOM_MODELS) {
         if (pinned.has(m.id)) continue;
         pinned.add(m.id);
-        opts.push({ id: `custom::${m.id}`, label: m.label, note: m.note ?? m.id, group: host });
+        opts.push(withHealth({ id: `custom::${m.id}`, label: m.label, note: m.note ?? m.id, group: host }));
       }
     }
     return opts;

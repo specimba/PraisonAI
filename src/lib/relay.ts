@@ -288,6 +288,42 @@ export function relayHealthSnapshot(): RelayHealth {
   return loadHealth();
 }
 
+// ─── Health badge (r73): the rotator's memory, surfaced in model pickers ──────
+// ClawLabs/free-ai-models doctrine: catalog presence means nothing if the last
+// dials died — pickers should show a lane's LIVE verdict next to its name.
+// Hard/soft rules mirror the rotator exactly (no parallel truth).
+
+export interface RelayHealthBadge {
+  label: string;
+  tone: "emerald" | "amber" | "muted";
+  /** Last error text when the verdict is bad (note / tooltip fodder). */
+  detail?: string;
+}
+
+/** One-hop health verdict from the rotator's memory. `snapshot` lets callers
+ * building many rows pass relayHealthSnapshot() ONCE instead of re-reading
+ * localStorage per row. Undefined = never dialed (no data, no opinion):
+ * hard death inside the cooldown window → "sick" (amber); soft capacity
+ * failure → "throttled" (muted); otherwise any history → "ok <n>" (emerald). */
+export function relayHopBadge(
+  providerId: string,
+  model: string,
+  snapshot?: Record<string, RelayHealthEntry>
+): RelayHealthBadge | undefined {
+  const entry = (snapshot ?? loadHealth())[hopKey(providerId, model)];
+  if (!entry || (entry.ok === 0 && entry.fail === 0)) return undefined;
+  const failedRecently =
+    entry.lastFailAt !== undefined &&
+    Date.now() - entry.lastFailAt < HEALTH_COOLDOWN_MS;
+  if (failedRecently && !entry.soft) {
+    return { label: "sick", tone: "amber", detail: entry.lastError };
+  }
+  if (failedRecently && entry.soft) {
+    return { label: "throttled", tone: "muted", detail: entry.lastError };
+  }
+  return { label: `ok ${entry.ok}`, tone: "emerald" };
+}
+
 /** Wipe the rotator's health memory (settings card button). */
 export function resetRelayHealth(): void {
   try {

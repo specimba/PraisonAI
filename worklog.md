@@ -1701,3 +1701,22 @@ Stage Summary:
 - Scheduled runs are now self-healing end-to-end: model relay rotates dead lanes → step self-heal retries transient hiccups → stall watchdog aborts silent streams → auto-resume restarts the run (≤3x) → only then does the manual-resume card appear. The "runs not finishing automatically" user pain is closed at the client-engine level
 - NEXT ROUND PRIORITY: 1) E2E the auto-resume with STALL_TIMEOUT_MS temporarily dropped to ~20s (revert after); 2) candidate B — free-lane auto-router polish OR per-model health badges from relay hop memory (repo-review idea a); 3) ModelTicker quality column (idea b). Server-side run execution remains a design epic, proposal only
 - Fleet: patrol heartbeats continuous; this round fired on Job 414940 as scheduled
+
+---
+Task ID: 414940-review (2026-09-27 20:23 +08)
+Agent: main (cron review round)
+Task: status assessment + QA, then ONE focused improvement (repo-review idea a: per-model health badges)
+
+Work Log:
+- ASSESS: HTTP 200; snapshot = UI renders, cron 2/2; console = only the KNOWN stale page.tsx:13:10 buffer artifact (dev.log clean compiles); stable phase → feature increment per the 19:23 queue
+- IMPLEMENTED — RELAY HEALTH BADGES in the chat model picker (ClawLabs/free-ai-models idea a: their ok/sick/dead per-model status, ported onto OUR existing relay hop memory — zero new state):
+  1. relay.ts: relayHopBadge(providerId, model, snapshot?) — one-hop verdict from the rotator's OWN memory (no parallel truth): hard death inside the 5-min cooldown → "sick" amber; soft 429/capacity → "throttled" muted; otherwise any history → "ok <n>" emerald; never-dialed → undefined (no data, no opinion). Takes a pre-read snapshot so multi-row callers parse localStorage ONCE
+  2. chat/composer.tsx modelOptions: reads relayHealthSnapshot() once per rebuild + a withHealth() wrapper applied to ALL FOUR push sites (curated / live roster / custom default / custom presets); a health verdict OVERRIDES static row badges (actionable beats decorative), ids split on "::" match the rotator's hopKey exactly; "default"/"auto::builtin" immune (no "::" / never recorded)
+- E2E PROOF (live): injected praison-relay-health {vyce::deepseek-v4.1: ok7} + {vyce::deepseek-v4-flash: 3 hard fails, recent} → reloaded → Chat → model picker snapshot shows "DeepSeek V4.1 ok 7" (emerald) and "DeepSeek V4 Flash sick" (amber). INJECTED TEST DATA REMOVED afterwards (critical: the rotator's recentlyFailed() demotion reads the SAME store — fake sick entries would silently degrade real runs)
+- VERIFY: npx eslint relay.ts + composer.tsx exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; dev.log ✓ Compiled; HTTP 200; picker renders + closes cleanly post-test
+- KNOWN LIMIT (documented, acceptable): the picker's useMemo deps are [settings, agent?.model] — health badges refresh on picker rebuild triggers, not the instant a hop fails mid-session; next settings/agent change picks it up
+
+Stage Summary:
+- The rotator's health memory is now USER-VISIBLE: free-lane quality surfaces at pick-time ("is this lane alive right now?") instead of only inside run error cards — closing repo-review candidate (a)
+- NEXT ROUND PRIORITY: 1) reuse relayHopBadge in agent-form-dialog + provider-gallery pickers (one-line withHealth each); 2) ModelTicker quality/health column (idea b); 3) E2E auto-resume with STALL_TIMEOUT_MS ~20s (queued twice — needs a dedicated run window); 4) server-side run execution = design epic, proposal only
+- Fleet: patrol heartbeats continuous through 12:07:05Z; this round fired on Job 414940 as scheduled
