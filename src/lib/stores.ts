@@ -365,6 +365,8 @@ interface WorkflowsState {
   add: (wf: Partial<Workflow>) => string;
   addProposal: (p: Omit<SpawnProposal, "id" | "createdAt" | "status">) => string;
   setProposalStatus: (id: string, status: SpawnProposal["status"]) => void;
+  /** Remove all handled (accepted/dismissed) proposals — open ones are kept. */
+  clearProposals: () => void;
   update: (id: string, patch: Partial<Workflow>) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => string | null;
@@ -412,6 +414,10 @@ export const useWorkflowsStore = create<WorkflowsState>()(
       setProposalStatus: (id, status) =>
         set((s) => ({
           proposals: s.proposals.map((p) => (p.id === id ? { ...p, status } : p)),
+        })),
+      clearProposals: () =>
+        set((s) => ({
+          proposals: s.proposals.filter((p) => p.status === "open"),
         })),
       duplicate: (id) => {
         const src = get().workflows.find((w) => w.id === id);

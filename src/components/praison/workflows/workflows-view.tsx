@@ -524,7 +524,10 @@ function EvolutionInbox() {
   const setProposalStatus = useWorkflowsStore((s) => s.setProposalStatus);
   const agents = useAgentsStore((s) => s.agents);
   const addWf = useWorkflowsStore((s) => s.add);
+  const clearProposals = useWorkflowsStore((s) => s.clearProposals);
   const [showArchive, setShowArchive] = React.useState(false);
+  const [archiveFilter, setArchiveFilter] = React.useState<"all" | "accepted" | "dismissed">("all");
+  const [confirmClear, setConfirmClear] = React.useState(false);
 
   const open = proposals.filter((p) => p.status === "open");
   const acceptedCount = proposals.filter((p) => p.status === "accepted").length;
@@ -534,9 +537,13 @@ function EvolutionInbox() {
   // teaches the loop and expands into an archive of handled proposals.
   if (open.length === 0) {
     if (acceptedCount + dismissedCount === 0) return null;
-    const history = proposals
+    const handled = proposals
       .filter((p) => p.status !== "open")
       .sort((a, b) => b.createdAt - a.createdAt);
+    const history =
+      archiveFilter === "all"
+        ? handled
+        : handled.filter((p) => p.status === archiveFilter);
     return (
       <div className="mb-4 rounded-xl border border-violet-500/15 bg-violet-500/[0.03] p-3">
         <button
@@ -560,28 +567,80 @@ function EvolutionInbox() {
             in the ledger.
           </span>
           <span className="shrink-0 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400">
-            {showArchive ? "Hide history" : `History (${history.length})`}
+            {showArchive ? "Hide history" : `History (${handled.length})`}
           </span>
         </button>
         {showArchive && (
-          <div className="mt-2 space-y-1.5">
-            {history.slice(0, 8).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-2 rounded-lg border bg-background/60 px-2.5 py-1.5"
-              >
-                {p.status === "accepted" ? (
-                  <Sparkles className="h-3 w-3 shrink-0 text-violet-500" aria-hidden />
-                ) : (
-                  <X className="h-3 w-3 shrink-0 text-muted-foreground/60" aria-hidden />
+          <>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {(
+                [
+                  ["all", `All (${handled.length})`],
+                  ["accepted", `Spawned (${acceptedCount})`],
+                  ["dismissed", `Dismissed (${dismissedCount})`],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setArchiveFilter(key)}
+                  aria-pressed={archiveFilter === key}
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    archiveFilter === key
+                      ? "border-violet-500/40 bg-violet-500/15 text-violet-600 dark:text-violet-400"
+                      : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="flex-1" />
+              <button
+                onClick={() => {
+                  if (!confirmClear) {
+                    setConfirmClear(true);
+                    return;
+                  }
+                  clearProposals();
+                  setConfirmClear(false);
+                  setShowArchive(false);
+                  toast.success("Evolution history cleared — open proposals (if any) are kept");
+                }}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                  confirmClear
+                    ? "border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400"
+                    : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60"
                 )}
-                <span className="min-w-0 flex-1 truncate text-xs">{p.goal}</span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">
-                  from {p.sourceWorkflowName} · {proposalAge(p.createdAt)}
-                </span>
-              </div>
-            ))}
-          </div>
+              >
+                {confirmClear ? "Really clear?" : "Clear history"}
+              </button>
+            </div>
+            <div className="mt-1.5 space-y-1.5">
+              {history.length === 0 ? (
+                <p className="rounded-lg border bg-background/60 px-2.5 py-2 text-xs text-muted-foreground">
+                  Nothing here for this filter yet.
+                </p>
+              ) : (
+                history.slice(0, 8).map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2 rounded-lg border bg-background/60 px-2.5 py-1.5"
+                  >
+                    {p.status === "accepted" ? (
+                      <Sparkles className="h-3 w-3 shrink-0 text-violet-500" aria-hidden />
+                    ) : (
+                      <X className="h-3 w-3 shrink-0 text-muted-foreground/60" aria-hidden />
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-xs">{p.goal}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      from {p.sourceWorkflowName} · {proposalAge(p.createdAt)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
         )}
       </div>
     );
