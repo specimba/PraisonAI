@@ -1441,3 +1441,22 @@ Stage Summary:
 - Shipped: handled proposals are no longer invisible — the strip doubles as a compact archive users can audit (what was spawned/dismissed, from which workflow, when)
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree — restarting it before rebuild reverts ALL recent fixes; do NOT); 2) boot-server longevity check at next real boot; 3) candidate: novelty-threshold surfaced in Settings (NOVELTY_SPAWN_THRESHOLD is referenced in engine+runner+ledger tooltips — centralize before exposing); 4) candidate: Deep Research-style quality pass on the archive (filter by status, "clear history" action)
 - Fleet: heartbeats continuous through 23:07:12Z; no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 08:23 +08 window)
+Agent: main (hourly review loop)
+Task: archive quality pass — status filter chips + two-click Clear history
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 07:37+08:07, heartbeats present; 414940 = this task). HEAD 469af2c→571a3e3 = platform auto-commit (verified worklog.md +20 only). HTTP 200 (dev tenure ~20h15m) — HMR-only
+- QA GATE: console 0 errors, Studio renders, dom 5144 (baseline) → STABLE → took queued candidate 4 (archive quality pass; Settings-threshold deferred again — needs centralizing hardcoded 35s first)
+- INCREMENT SHIPPED (2 files):
+  · stores.ts: new clearProposals() store action — filters OUT handled proposals while PRESERVING open ones (defensive: a runner-generated proposal landing mid-interaction survives the wipe); additive to the persisted slice
+  · workflows-view.tsx EvolutionInbox expanded archive: filter chip row — All (N) / Spawned (N) / Dismissed (N) with live counts, aria-pressed, violet active state vs muted outline; "Clear history" ghost button with TWO-CLICK confirm (arms to red "Really clear?" first); filtered-empty state line; History (N) chip now counts the full archive regardless of active filter
+- VERIFIED: eslint exit 0 on both files; LIVE E2E (injected 1 accepted + 2 dismissed): collapsed History (3) → expand → chips + 3 rows → Dismissed filter = exactly 2 rows → Spawned filter = exactly 1 → All restores 3 → Clear arms red "Really clear?" → second click wipes: store proposals [], strip self-removed (pristine path) → reload clean. The clear action doubles as E2E cleanup — no localStorage surgery needed this round
+- Profile state: clean (proposals [])
+
+Stage Summary:
+- The archive is now a real audit surface: filter by outcome, and a safe (confirm-gated) reset that never destroys open proposals
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (standalone stale vs tree — restarting it before rebuild reverts ALL recent fixes; do NOT); 2) boot-server longevity check at next real boot; 3) candidate: centralize the hardcoded novelty threshold 35 (engine const + runner + ledger tooltips + ledger conditions) into one import, THEN surface it in Settings; 4) candidate: deep-link from archive rows to the spawned workflow (sourceWorkflowId → highlight card)
+- Fleet: heartbeats continuous through 00:07:12Z (27 Sep); no gaps; no failed patrols
