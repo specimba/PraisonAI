@@ -337,13 +337,6 @@ export const CONTEXT_TOKEN_BUDGET = 24_000;
 /** How many times a review gate may send the previous step back for rework. */
 export const REWORK_LIMIT = 1;
 
-// ─── Session health (inspired by rcaelers/workrave) ──────────────────────────
-/** Cumulative agent-activity time before a break nudge appears. */
-export const BREAK_THRESHOLD_MS = 25 * 60_000;
-export const BREAK_SNOOZE_MS = 10 * 60_000;
-export const SESSION_HEALTH_KEY = "praison-session-health";
-export const SESSION_HEALTH_TICK_MS = 5_000;
-
 // ─── Chat file attachments ───────────────────────────────────────────────────
 export const MAX_ATTACHMENTS = 4;
 export const MAX_ATTACHMENT_BYTES = 128 * 1024; // 128 KB per file (text)

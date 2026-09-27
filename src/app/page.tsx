@@ -12,7 +12,6 @@ import { WorkflowsView } from "@/components/praison/workflows/workflows-view";
 import { WorkflowScheduler } from "@/components/praison/workflows/workflow-scheduler";
 import { RadarView } from "@/components/praison/radar/radar-view";
 import { ModelTicker } from "@/components/praison/tracker/model-ticker";
-import { SessionHealth } from "@/components/praison/session-health";
 import { SettingsView } from "@/components/praison/settings/settings-view";
 import { ensureSeeded, useSettingsStore, useUiStore } from "@/lib/stores";
 import { useKeyboardShortcuts } from "@/lib/use-shortcuts";
@@ -116,7 +115,6 @@ export default function Page() {
       <GlobalSearchDialog />
       <WorkflowScheduler />
       <HeartbeatEngine />
-      <SessionHealth />
     </div>
   );
 }

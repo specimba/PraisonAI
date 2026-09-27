@@ -7,9 +7,11 @@ import { executeWorkflowRun, isWorkflowRunning } from "@/lib/workflow-runner";
 
 // ─── In-app workflow scheduler ───────────────────────────────────────────────
 // Ticks every 10s and fires any enabled workflow schedule whose nextRunAt is
-// due. Runs only fire while the app tab is open; runs missed while the app
-// was closed are skipped (each due schedule simply runs once on the next
-// tick and re-arms from "now").
+// due — INCLUDING when the browser tab is in the background (r71: users run
+// pipelines unattended; browsers throttle timers there to ~1/min, which the
+// re-arm logic absorbs: each due schedule simply runs once on the next tick
+// and re-arms from "now"). A fully CLOSED tab still cannot run anything —
+// the engine is client-side by design.
 
 const TICK_MS = 10_000;
 
@@ -19,7 +21,7 @@ let ticking = false;
 export function WorkflowScheduler() {
   React.useEffect(() => {
     const tick = () => {
-      if (ticking || document.visibilityState === "hidden") return;
+      if (ticking) return;
       ticking = true;
       try {
         const now = Date.now();

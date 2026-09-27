@@ -65,7 +65,11 @@ import {
   useUiStore,
   useWorkflowsStore,
 } from "@/lib/stores";
-import { executeWorkflowRun, runErrorKindLabel } from "@/lib/workflow-runner";
+import {
+  executeWorkflowRun,
+  getRunController,
+  runErrorKindLabel,
+} from "@/lib/workflow-runner";
 import { SCHEDULE_INTERVALS } from "@/lib/constants";
 import type { Workflow, WorkflowRunStep } from "@/lib/types";
 import { TOOL_META } from "@/lib/constants";
@@ -416,6 +420,14 @@ export function WorkflowRunPanel({
   const viewedRun = viewingRunId
     ? liveWorkflow?.runs.find((r) => r.id === viewingRunId)
     : undefined;
+  // Stop must survive navigation: after a remount the local abort handle is
+  // gone, so derive "in flight" from the followed run and fall back to the
+  // runner's live controller registry when stopping.
+  const runInFlight = running || viewedRun?.status === "running";
+  const stopActiveRun = () => {
+    if (abortRef.current) abortRef.current.abort();
+    else if (liveWorkflow) getRunController(liveWorkflow.id)?.abort();
+  };
   const schedule = liveWorkflow?.schedule;
 
   // Reset the panel state whenever it opens for a workflow
@@ -804,12 +816,12 @@ export function WorkflowRunPanel({
                   )}
                 </PopoverContent>
               </Popover>
-              {running ? (
+              {runInFlight ? (
                 <Button
                   variant="outline"
                   size="sm"
                   className="border-red-500/40 text-red-500 hover:bg-red-500/10 hover:text-red-600"
-                  onClick={() => abortRef.current?.abort()}
+                  onClick={stopActiveRun}
                 >
                   <Square className="h-3.5 w-3.5" />
                   Stop

@@ -40,6 +40,49 @@ import type {
 /** Workflows with a run currently streaming — guards concurrent triggers. */
 const activeRuns = new Set<string>();
 
+// ─── Run liveness (r71): every run is guaranteed to reach a terminal state ──
+// A streaming fetch can hang forever (provider drops the connection without
+// closing it, laptop sleep, heavy background-tab throttling) and the run row
+// would sit at "running" for eternity. The watchdog aborts any active run
+// with no store activity for STALL_TIMEOUT_MS; the run then finalizes as a
+// RESUMABLE timeout error — never a silent hang.
+const activeControllers = new Map<string, AbortController>();
+const lastRunActivity = new Map<string, number>();
+const stalledRuns = new Set<string>();
+const STALL_TIMEOUT_MS = 4 * 60_000;
+const STALL_CHECK_MS = 15_000;
+let stallWatchdog: ReturnType<typeof setInterval> | null = null;
+
+/** Live controller for a workflow's active run — lets the UI re-acquire Stop after a remount. */
+export function getRunController(workflowId: string): AbortController | undefined {
+  return activeControllers.get(workflowId);
+}
+
+function ensureStallWatchdog(): void {
+  if (stallWatchdog) return;
+  stallWatchdog = setInterval(() => {
+    const now = Date.now();
+    for (const wfId of [...activeRuns]) {
+      if (now - (lastRunActivity.get(wfId) ?? 0) > STALL_TIMEOUT_MS) {
+        // Mark + abort: the pending fetch rejects with an AbortError, the
+        // runner's abort handlers check stalledRuns and finalize as timeout.
+        stalledRuns.add(wfId);
+        activeControllers
+          .get(wfId)
+          ?.abort(
+            new Error(
+              "no model output for over 4 minutes — the stream stalled"
+            )
+          );
+      }
+    }
+    if (activeRuns.size === 0) {
+      clearInterval(stallWatchdog);
+      stallWatchdog = null;
+    }
+  }, STALL_CHECK_MS);
+}
+
 export function isWorkflowRunning(workflowId: string): boolean {
   return activeRuns.has(workflowId);
 }
@@ -314,15 +357,23 @@ export async function executeWorkflowRun(
   const controller = new AbortController();
   const signal = options.signal ?? controller.signal;
   activeRuns.add(wf.id);
+  activeControllers.set(wf.id, controller);
+  lastRunActivity.set(wf.id, Date.now());
+  ensureStallWatchdog();
   useUiStore.getState().setBusy(true);
   onStarted?.(runId, controller);
 
   const patchRunStep = (
     stepId: string,
     patch: Partial<WorkflowRunStep>
-  ) => useWorkflowsStore.getState().patchRunStep(wf.id, runId, stepId, patch);
-  const patchRun = (patch: Partial<WorkflowRun>) =>
+  ) => {
+    lastRunActivity.set(wf.id, Date.now());
+    useWorkflowsStore.getState().patchRunStep(wf.id, runId, stepId, patch);
+  };
+  const patchRun = (patch: Partial<WorkflowRun>) => {
+    lastRunActivity.set(wf.id, Date.now());
     useWorkflowsStore.getState().patchRun(wf.id, runId, patch);
+  };
 
   /** Append one LLM-call record to the run's call log (harness rank-② slice). */
   const pushCall = (entry: Omit<RunCallLogEntry, "at">) => {
@@ -802,6 +853,17 @@ export async function executeWorkflowRun(
             // Loop → the review gate runs again on the improved output
           } catch (err) {
             if (isAbortError(err)) {
+              if (stalledRuns.has(wf.id)) {
+                // Watchdog abort: finalize as a resumable timeout, never a hang.
+                stalledRuns.delete(wf.id);
+                failRun(
+                  i,
+                  new Error(
+                    "Step timed out — no model output for over 4 minutes. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here."
+                  )
+                );
+                return runId;
+              }
               stopRemaining(i);
               finish("stopped", "Pipeline stopped");
               return runId;
@@ -869,6 +931,17 @@ export async function executeWorkflowRun(
         prev.push({ label: step.label, agentName: agentRow.name, degraded: /^_The model ended/.test(content) || undefined, output: content });
       } catch (err) {
         if (isAbortError(err)) {
+          if (stalledRuns.has(wf.id)) {
+            // Watchdog abort: finalize as a resumable timeout, never a hang.
+            stalledRuns.delete(wf.id);
+            failRun(
+              i,
+              new Error(
+                "Step timed out — no model output for over 4 minutes. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here."
+              )
+            );
+            return runId;
+          }
           stopRemaining(i);
           finish("stopped", "Pipeline stopped");
           return runId;
@@ -882,6 +955,9 @@ export async function executeWorkflowRun(
     return runId;
   } finally {
     activeRuns.delete(wf.id);
+    activeControllers.delete(wf.id);
+    lastRunActivity.delete(wf.id);
+    stalledRuns.delete(wf.id);
     useUiStore.getState().setBusy(false);
   }
 }
