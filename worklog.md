@@ -1950,3 +1950,19 @@ Work Log:
 Stage Summary:
 - Cards now read alive at three timescales: LIVE (r81 running badge + emerald ring), RECENT (r82 sparkline of last 10 runs), LAST (outcome dot). The user's "scheduled works look stale/dead" complaint is fully covered without touching the runner.
 - NEXT: 1) stall-failover epic (rotate to healthy lane on repeated engine stalls — needs gate), 2) auto-resume E2E (providerKeys.custom recipe), 3) candidate small polish: sparkline in run dialog history rows / Kanban card echo of the sparkline, 4) user-side: RSIinFIELD auto-paused chip is one click to resume.
+---
+Task ID: user-round (2026-09-28 08:0x +08)
+Agent: main
+Task: User pasted ANOTHER failed deep run (Continuous Research, step 3/11 "network error", 15 tool calls OK first, auto-retried, 3/5 LLM calls failed) + referenced an upload that never landed (upload/ has only the 09-22 paste). Shipped r83: step self-heal retries 2→3.
+
+Work Log:
+- FORENSICS (pasted recovery card + step rows): failure class = mid-stream provider drop (15 tool calls succeeded, step 2 = 457.7s pass SUCCEEDED — r78's 180s budget holding), then step 3 died mid-generation; runner's step-retry consumed ("auto-retried") and ALSO failed. Same class as the QA-profile dossier error ("network error", step 3 of 7) seen 07:23 — two independent profiles hit the same provider-outage window. Upload file praison-run-…(1).md NOT present in /home/z/my-project/upload/ (only the 09-22 txt) — pasted text used as evidence; noted to user.
+- RESILIENCE STACK MAPPED (for the record): (1) engine pre-stream: up to MAX_UPSTREAM_ATTEMPTS w/ 1.2s backoff, gated !streamedAny; (2) mid-stream: NO engine retry by design (throws immediately — a fresh regen would duplicate streamed tokens since the runner draft accumulates across engine attempts, draft += t only resets per STEP attempt); (3) runner step-level: MAX_STEP_ATTEMPTS attempts, each with draft="" reset (clean UI), localToolCalls reset, AND relay wire rebuilt from rotator health memory → retry dials a DIFFERENT lane (r25 doctrine).
+- r83 SHIPPED (workflow-runner.ts, 3 edits, GATE-CHECKED: dev.log showed zero in-flight /api/chat streams — only cron polls): MAX_STEP_ATTEMPTS 2→3 (comment records the two-run forensics + cost bound: each attempt bounded by engine deadlines, dead lane costs minutes not the run); comment "one clean retry"→"up to two"; toast text now truthful: "auto-retry {n}/{MAX} on a fresh lane…".
+- WHY NOT engine-level mid-stream retry: would need an output-reset signal across engine→runner→panel (cross-layer surgery) — queued as part of the stall-failover epic instead.
+- VERIFIED: eslint clean, HMR compiled 326ms, page renders, console 0 errors. Applies to every run starting after HMR.
+
+Stage Summary:
+- Deep pipelines now get 3 lane-dials per step instead of 2 during provider outages — the marginal attempt that would have saved both forensiced runs. Recovery-card UX unchanged; toast is now count-accurate.
+- USER guidance: the failed Continuous Research run is fully recoverable — "Retry failed step" keeps steps 1-2 (32.5s + 457.7s outputs preserved), the retry gets 3 fresh-lane dials. If the lane is still sick, switch model via the health-badged picker first.
+- NEXT: 1) stall-failover epic (now includes: engine-level mid-stream retry w/ output-reset signal + lane rotation), 2) auto-resume E2E (providerKeys.custom), 3) sparkline echo in run-dialog history rows (small polish).

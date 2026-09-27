@@ -641,7 +641,7 @@ export async function executeWorkflowRun(
     // before streaming anything, the server rotates down the vault's fallback
     // chain instead of dying — the exact 7am-scheduled-run failure mode.
     let relayNotes: string[] = [];
-    const MAX_STEP_ATTEMPTS = 2; // 1 real attempt + 1 automatic self-heal retry
+    const MAX_STEP_ATTEMPTS = 3; // 1 real attempt + 2 automatic self-heal retries (r83: 2→3 — forensics from two independent failed deep runs (user's Continuous Research 08:xx, QA-profile dossier 07:xx) showed attempt-2-on-a-fresh-lane ALSO dying during the same provider outage window; a third lane dial is the difference between a saved 457s research pass and a terminal error. Each attempt is bounded by the engine's upstream deadlines, so a dead lane costs minutes, not the run.)
 
     for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt++) {
       // Rebuild the relay wire PER ATTEMPT (r25): attempt 1's failures were
@@ -762,14 +762,14 @@ export async function executeWorkflowRun(
           attempt,
           ...(relayNotes.length > 0 ? { note: relayNotes.join(" → ") } : {}),
         });
-        // ─── Self-heal: one clean retry for transient engine failures ──────
+        // ─── Self-heal: up to two clean retries for transient engine failures ──────
         // r25: the engine now ships a structured `kind` on server errors —
         // use it when present; the message-regex stays as the fallback for
         // browser-direct errors.
         const kind =
           ((err as { kind?: RunErrorKind }).kind ?? classifyRunError(message).kind);
         if (attempt < MAX_STEP_ATTEMPTS && SELF_HEAL_KINDS.includes(kind) && !signal.aborted) {
-          toast.info(`"${runStep.label}" hit a ${kind} hiccup — retrying once automatically…`, {
+          toast.info(`"${runStep.label}" hit a ${kind} hiccup — auto-retry ${attempt + 1}/${MAX_STEP_ATTEMPTS} on a fresh lane…`, {
             icon: "🛟",
             description: "The engine dropped the call mid-step. Tool results already gathered are re-run safely.",
           });
