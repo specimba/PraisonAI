@@ -1905,3 +1905,18 @@ Work Log:
 Stage Summary:
 - The user's original "ALL 8 STEPS RUNNING AT ONCE" display bug is FIXED at the type level: future steps now honestly queue as pending/dimmed and flip to Running only when the engine reaches them. Deep pipelines no longer lie for minutes.
 - NEXT: 1) pending-status E2E visual verify (dossier mid-run snapshot), 2) stall-failover epic (rotate hops on repeated engine stalls — needs gate), 3) auto-resume E2E (providerKeys.custom), 4) styling queue: recovery-card hierarchy, run-history sparkline.
+---
+Task ID: 414940 (hourly review, 2026-09-28 06:23 +08)
+Agent: main (review round)
+Task: r80 E2E visual verify (dossier mid-run snapshot: expect step1 Running + pending/Queued rows) + one improvement
+
+Work Log:
+- QA: HTTP 200 (daemonized server, uptime 2h+ across call boundaries); cron CLI still absent (7th round, platform-side) — fleet 2/2 behavioral (414938 :37/:07 on-schedule, this firing = 414940 :23). Browser QA: HMR connected, console clean (only Fast Refresh rebuild lines from r80 HMR echo).
+- r80 E2E ATTEMPTED, INCONCLUSIVE: started a REAL Deep Research Dossier run via card Run → dialog → task filled → Run. Run is LIVE ("Pipeline run" header, Stop button, task echo, card shows "1 run · last just now"). BUT the dialog body shows NO step rows mid-run (only Task line + Toggle run history + Close) across 2 snapshots ~10s apart. Console clean — no crash. So r80 is neither confirmed nor contradicted: the pending rows' absence means either (a) the run panel renders step rows somewhere else (card grid / separate region the dialog snapshot doesn't capture), (b) rows only mount after the first status patch (step1→running) lands and Deep step 1 LLM call was still buffering, or (c) a real regression where run.steps never reach the panel for deep pipelines. Did NOT touch code (0 edits this round) — diagnosis incomplete, next round must check FIRST with fresh eyes.
+- NEXT-ROUND RECON (this round's last tool call greps): targets = workflow-run-panel.tsx steps.map condition + where WorkflowRunPanel mounts in the run dialog + whether deep pipelines gate row rendering on pass structure. The run likely completed/died by next round — check "Toggle run history" (e88) for the run's terminal state and step statuses as recorded, which ALSO verifies r80 persistence-side (statuses stored per step).
+- Round discipline note: fired the live run believing e60 was dossier's Run (first click e68 hit "Build & Verify" — closed, no run started from it, zero side effects; Build & Verify remains "Never run").
+
+Stage Summary:
+- r80 pending-status E2E: OPEN (inconclusive, no code risk taken). Verification recipe v2: open dossier dialog → Toggle run history → inspect last run's per-step statuses in history (persistence check), then re-run live and snapshot BOTH dialog body and any separately-mounted run panel; grep where step rows render before touching anything.
+- Improvement slot this round intentionally spent on verification-in-progress (no styling change shipped — avoid stacking an edit on an unverified area).
+- NEXT: 1) r80 E2E recipe v2 above, 2) styling queue (recovery-card hierarchy / run-history sparkline), 3) stall-failover epic + auto-resume E2E (providerKeys.custom) unchanged.
