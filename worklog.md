@@ -1840,3 +1840,19 @@ Work Log:
 Stage Summary:
 - The scheduler's hidden deferral behavior is now fully honest BOTH live (r76 amber chip) and historically (r77 audit line): "why didn't it trigger at 16:10?" is answerable from the UI minutes or hours later.
 - NEXT priorities unchanged: 1) pending-status fix (STILL GATED), 2) auto-resume E2E via hang-server (recipe stands), 3) server-side run epic (proposal only).
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 03:23 +08)
+Agent: main (review round)
+Task: QA + auto-resume E2E attempt (queued #2) — partial: harness works end-to-end, stall path not yet reached; recipe corrected
+
+Work Log:
+- QA: HTTP 200; console artifact doctrine unchanged. GATED pending-status fix honored for a 4th round (zero workflow-runner edits).
+- E2E ATTEMPT (zero code edits — pure QA in the isolated agent profile, no HMR risk): hang-server up on :4319 (health ok); injected praison-settings {provider:'custom', baseUrl:'http://localhost:4319/v1', defaultModel:'hang-test', relayEnabled:false} + praison-workflows probe (wf-e2e-hang, 1 step reusing agent a-assistant) + praison-stall-timeout-ms=20000, all with backups, reload-then-hydrate verified; started a real run via the panel UI.
+- RESULT: run COMPLETED via the built-in engine (steps 6.6s/3.0s, real outputs, ZERO sockets on 4319) — the stall never happened. ROOT CAUSE FOUND: resolveLlm's registry branch matches providerById('custom') FIRST (the r26.2 custom provider IS a registry entry) — legacy top-level settings.baseUrl/defaultModel are only consulted when NO registry provider matches; a keyless registry selection gracefully rides Auto (by design, never dead-end). So the correct injection target is settings.providerKeys.custom = { key, model, ...(baseUrl per providerBaseUrl mechanics — VERIFY in providers.ts before next attempt) }.
+- SILVER LINING: the accidental probe validated the whole real-UI run path end-to-end (task gate → panel Run → 2-step handoff → per-step ms → runs[] persistence, run_dd874b19 "done") — the harness recipe is otherwise sound.
+- FULL CLEANUP DONE: settings + workflows restored from backups, stall-timeout + backup keys removed, probe gone, hang-server killed, app 200 after restore.
+
+Stage Summary:
+- Auto-resume E2E remains OPEN with a CORRECTED recipe: 1) read providers.ts custom entry + providerBaseUrl field names; 2) inject settings.providerKeys.custom accordingly (key non-empty so the registry branch takes it); 3) same harness otherwise. Budget note: the attempt fits a dedicated round window (~5-6 tool rounds); do NOT start it in a round that also owes other work.
+- NEXT priorities: 1) pending-status fix (STILL GATED), 2) auto-resume E2E retry with corrected injection, 3) server-side run epic (proposal only).
