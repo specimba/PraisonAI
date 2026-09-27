@@ -281,7 +281,9 @@ export function materializeRunSteps(wf: Workflow, agentsNow: Agent[]): WorkflowR
       label: s.label || "Untitled step",
       output: "",
       toolCalls: [],
-      status: "running" as const,
+      // r80: honest queue state — the engine loop flips the executing step to
+      // "running" via its start-of-step patch (workflow-runner line ~772).
+      status: "pending" as const,
       kind: s.kind ?? "generate",
     };
   });
@@ -310,7 +312,7 @@ export function materializeRunSteps(wf: Workflow, agentsNow: Agent[]): WorkflowR
       label,
       output: "",
       toolCalls: [],
-      status: "running" as const,
+      status: "pending" as const,
       kind: "generate" as const,
       instruction: DEEP_RESEARCH_INSTRUCTION,
       ...(passTools ? { tools: passTools } : {}),
@@ -333,7 +335,7 @@ export function materializeRunSteps(wf: Workflow, agentsNow: Agent[]): WorkflowR
         label: "Verification & synthesis",
         output: "",
         toolCalls: [],
-        status: "running" as const,
+        status: "pending" as const,
         kind: "generate" as const,
         instruction: VERIFICATION_INSTRUCTION,
       },
@@ -382,9 +384,11 @@ export async function executeWorkflowRun(
       Math.max(0, options.resume.fromStepIndex),
       run.steps.length - 1
     );
+    // r80: resumed tail steps start "pending" — the engine loop flips the
+    // resumed-from step to "running" at its start-of-step patch.
     steps = run.steps.map((s, i) =>
       i >= startIndex
-        ? { ...s, output: "", toolCalls: [], status: "running" as const, ms: undefined, verdict: undefined, reworked: undefined }
+        ? { ...s, output: "", toolCalls: [], status: "pending" as const, ms: undefined, verdict: undefined, reworked: undefined }
         : s
     );
     store.patchRun(wf.id, runId, {

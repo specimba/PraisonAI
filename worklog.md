@@ -1889,3 +1889,19 @@ Work Log:
 Stage Summary:
 - FLEET-GRADE WIN: any future round that finds http=000 runs `python3 scripts/start-server.py` (≤1 tool round) — the 04:07-class outage is now a 1-round self-heal instead of a platform ticket.
 - NEXT priorities: 1) pending-status fix (gate: no active run observed — attempt next round), 2) stall-failover epic (rotate hops on repeated engine stalls), 3) auto-resume E2E (providerKeys.custom recipe), 4) task-mandated styling/feature increments (queue: recovery-card visual hierarchy; run-history sparkline).
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 05:23 +08)
+Agent: main (review round)
+Task: GATE OPEN — shipped r80: workflow "pending" step status fix (queued #1, gated since 23:4x)
+
+Work Log:
+- QA: HTTP 200 (daemonized server stable, all call boundaries survived since 04:23 revival). cron CLI still absent; fleet 2/2 behavioral (414938 :37Z on-schedule, this firing = 414940 :23Z).
+- GATE EVALUATION → OPEN: server restart at 04:23 terminated any in-flight client run (client-side engine; SSE died with the old process); last run sighting was TERMINAL (failed + recovery card). workflow-runner.ts/types edits now safe per the gate doctrine.
+- r80 SHIPPED (the 23:4x recipe, verbatim): (1) types.ts — WorkflowRunStep.status union += "pending" (run-level WorkflowRun union untouched — a run IS running from t0). (2) materializeRunSteps — ALL 3 construction sites (base / deep passes / verify) now "pending" instead of "running". (3) resume map — resumed tail steps "pending". The engine loop's EXISTING start-of-step patch (line ~772 status:"running") flips the executing step — recipe's "add explicit patch" item was already satisfied. (4) UI: workflow-run-panel STEP_BORDER + StatusIndicator gained pending = zinc dimmed hollow-ring "Queued" badge + italic "Waiting for the previous step to finish…" body hint; workflow-compare-dialog STATUS_ICON Record gained the pending key (union widening would have been a type error — caught by grep for WorkflowRunStep["status"] Records).
+- Verified: eslint clean on all 4 touched files; rg confirms 0 leftover "running"-at-materialize sites in the runner; live HMR compile evidence in server.log. Next round: E2E visual — start the Standard "Deep Research Dossier" (4 steps) and snapshot mid-run: expect step 1 Running + 3 dimmed Queued rows (the exact bug the user reported, now inverted).
+- r79 recap (04:23 round): scripts/start-server.py double-fork daemonizer = the 1-round self-heal for http=000 outages; browser-netns theory retracted (dead server was the only cause).
+
+Stage Summary:
+- The user's original "ALL 8 STEPS RUNNING AT ONCE" display bug is FIXED at the type level: future steps now honestly queue as pending/dimmed and flip to Running only when the engine reaches them. Deep pipelines no longer lie for minutes.
+- NEXT: 1) pending-status E2E visual verify (dossier mid-run snapshot), 2) stall-failover epic (rotate hops on repeated engine stalls — needs gate), 3) auto-resume E2E (providerKeys.custom), 4) styling queue: recovery-card hierarchy, run-history sparkline.

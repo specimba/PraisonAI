@@ -216,7 +216,10 @@ export interface WorkflowRunStep {
   label: string;
   output: string;
   toolCalls: ToolCallInfo[];
-  status: "running" | "done" | "error" | "stopped";
+  /** "pending" = materialized but not yet reached by the engine loop (r80:
+   * honest queue state — was previously all-"running" from t0, which made
+   * every future step lie "Running…" for many minutes on deep pipelines). */
+  status: "pending" | "running" | "done" | "error" | "stopped";
   ms?: number;
   /** Mirrors the step definition kind (missing = "generate"). */
   kind?: StepKind;

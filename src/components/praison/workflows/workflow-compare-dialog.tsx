@@ -78,6 +78,7 @@ function computeComparison(a: WorkflowRun, b: WorkflowRun): RunComparison {
 const STATUS_ICON: Record<WorkflowRunStep["status"] | "missing", React.ReactNode> = {
   done: <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="Done" />,
   running: <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-400" aria-label="Running" />,
+  pending: <span className="h-2 w-2 shrink-0 rounded-full border border-zinc-500" aria-label="Queued" />,
   stopped: <Ban className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Stopped" />,
   error: <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-label="Failed" />,
   missing: <span className="text-[10px] text-muted-foreground" aria-label="Missing">n/a</span>,

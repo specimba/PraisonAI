@@ -87,6 +87,7 @@ import type {
 // ─── Pipeline run panel: task → live streaming step cards → run history ─────
 
 const STEP_BORDER: Record<WorkflowRunStep["status"], string> = {
+  pending: "border-l-zinc-700",
   running: "border-l-violet-500",
   done: "border-l-emerald-500",
   error: "border-l-red-500",
@@ -94,6 +95,14 @@ const STEP_BORDER: Record<WorkflowRunStep["status"], string> = {
 };
 
 function StatusIndicator({ status, ms }: { status: WorkflowRunStep["status"]; ms?: number }) {
+  if (status === "pending") {
+    return (
+      <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-500">
+        <span className="h-2 w-2 shrink-0 rounded-full border border-zinc-500" aria-hidden />
+        Queued
+      </span>
+    );
+  }
   if (status === "running") {
     return (
       <span className="flex shrink-0 items-center gap-1 text-xs text-violet-400">
@@ -954,6 +963,10 @@ export function WorkflowRunPanel({
                           <span className="typing-dot h-1.5 w-1.5 rounded-full bg-violet-400" />
                           <span className="typing-dot h-1.5 w-1.5 rounded-full bg-violet-400" />
                         </div>
+                      ) : step.status === "pending" ? (
+                        <p className="py-1.5 text-xs italic text-zinc-500">
+                          Waiting for the previous step to finish…
+                        </p>
                       ) : null}
                     </div>
 
