@@ -1773,3 +1773,22 @@ Stage Summary:
 - The stall/auto-resume chain is now testable deterministically in seconds; next round runs the first true end-to-end proof of r72's auto-resume (watchdog → abort → resume ×3 → capped manual card)
 - NEXT ROUND PRIORITY: 1) the E2E itself per the recipe above (dedicated run window, ~2-3 min of wall clock); 2) provider-gallery health badges + shared withRelayHealth consolidation; 3) server-side run execution = design epic, proposal only
 - Fleet: patrol heartbeats continuous through 15:07:10Z; this round fired on Job 414940 as scheduled
+
+---
+Task ID: direct-user-request (2026-09-27 23:4x +08)
+Agent: main (user session — live diagnosis, NO killing, NO code changes)
+Task: user pasted live UI; scheduled runs "restarted themselves and not triggered themselves — check the process without killing them"
+
+Work Log:
+- LIVE DIAGNOSIS of the user's running "Continuous Research…" 1h pipeline (9 steps, deep mode). Zero destructive actions taken; the run was left streaming.
+- FINDING 1 — "ALL 8 STEPS RUNNING… AT ONCE" = DISPLAY BUG, not corruption: WorkflowRunStep status union is "running"|"done"|"error"|"stopped" — NO "pending" state exists. materializeRunSteps (line ~284) AND the resume map (line ~387) set EVERY step to "running" at run/resume start; the engine loop only makes them honest as it reaches each one. With long deep-research passes (158s/469s/pass3), 8 future steps sit falsely "Running…" for many minutes. The resume shape (steps 0-1 done, 2+ running) is exactly what the user pasted.
+- FINDING 2 — the "restarts" the user saw = r72 AUTO-RESUME WORKING AS DESIGNED (first in-the-wild observation): a >4min silent stall in deep pass 3 got watchdog-aborted and auto-resumed from the failed step (capped 3, then manual card). The "not triggered themselves" = the scheduler's due-filter EXCLUDES workflows with an active run (!isWorkflowRunning, scheduler line 34) — missed fires are NOT lost: nextRunAt stays past, so the next tick after the run ends fires immediately. No double-fire by design.
+- FINDING 3 — red herring resolved: the praison-workflows localStorage mirror in MY agent-browser profile looked frozen (5k, 3 workflows) vs the user's live 7-workflow UI. NOT a persist bug: agent-browser (localhost:3000) and the user's browser (preview origin) are DIFFERENT ORIGINS with separate localStorage stores. Quota probe: 53KB total, 512KB write OK — nothing exhausted, nothing lost. debouncedStorage already flushes on pagehide/beforeunload.
+- LIVE RUN IS HEALTHY: tool calls (URL Reader / Web Search / arXiv / GitHub) streaming through the paste; passes completing; no stall active at paste time.
+- DELIBERATELY NOT DONE: any code edit this round — editing workflow-runner/types mid-run risks an HMR full reload, which DESTROYS the in-flight run (client-side engine). Fix queued, not applied.
+
+Stage Summary:
+- User's three observations all explained: (1) all-Running display = missing "pending" status (cosmetic bug), (2) restarts = auto-resume behaving as designed, (3) non-triggering = scheduler's active-run guard (also by design, self-healing)
+- QUEUED FIX (next round, ONLY when no run is active): add "pending" to the status union; materializeRunSteps + resume map mark ONLY the executing step "running" (fresh: step 0; resume: startIndex), all others "pending"; add an explicit status:"running" patch at each step's start in the engine loop; verify the run panel renders pending steps dimmed/queued
+- SECOND QUEUED ITEM: optional scheduler surface — when a scheduled fire is skipped due to an active run, note it (toast or row chip) so "why didn't it trigger at 16:10" is answerable from the UI
+- Fleet: patrol heartbeats continuous through 15:07:10Z
