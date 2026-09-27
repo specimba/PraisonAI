@@ -793,6 +793,53 @@ export function ensureSeeded(): void {
       }
     }
   }
+  // Evolution Layer demo — one sample workflow with four scored done runs so
+  // the Evolution ledger, its trail strip, stall chips and the "Suggest
+  // variation" path have data to render on first visit (fixed id, idempotent;
+  // the description tells the user it is disposable). Runs are attached via
+  // update() because add() hardcodes runs: [].
+  {
+    const wfStore = useWorkflowsStore.getState();
+    if (!wfStore.workflows.some((w) => w.id === "wf-novelty-lab")) {
+      const researcher = useAgentsStore.getState().getById("a-researcher");
+      if (researcher) {
+        wfStore.add({
+          id: "wf-novelty-lab",
+          name: "Novelty Lab (sample)",
+          description:
+            "Sample pipeline that has already run four times — its declining novelty scores (62% → 22%) feed the Evolution ledger with a visible stall signal. Delete it any time.",
+          steps: [
+            {
+              id: uid("step"),
+              agentId: "a-researcher",
+              label: "Write a short essay on today's most interesting AI story",
+            },
+          ],
+        });
+        const day = 86400000;
+        const base = Date.now() - 4 * day;
+        const mkRun = (i: number, novelty: number, task: string): WorkflowRun => ({
+          id: `run-novelty-lab-${i}`,
+          workflowId: "wf-novelty-lab",
+          workflowName: "Novelty Lab (sample)",
+          task,
+          status: "done",
+          startedAt: base + i * day,
+          finishedAt: base + i * day + 132000,
+          steps: [],
+          novelty,
+        });
+        wfStore.update("wf-novelty-lab", {
+          runs: [
+            mkRun(0, 62, "Write a short essay on today's most interesting AI story"),
+            mkRun(1, 48, "Same weekly digest task, second edition"),
+            mkRun(2, 31, "Same weekly digest task, third edition"),
+            mkRun(3, 22, "Same weekly digest task, fourth edition"),
+          ],
+        });
+      }
+    }
+  }
   if (!settings.seeded) {
     useSettingsStore.getState().update({ seeded: true });
   }
