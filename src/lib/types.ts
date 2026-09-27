@@ -358,6 +358,8 @@ export interface SpawnProposal {
   sourceWorkflowId: string;
   sourceWorkflowName: string;
   sourceRunId?: string;
+  /** Set on accept: the id of the pipeline this proposal spawned. */
+  spawnedWorkflowId?: string;
 }
 
 /** A user-saved API key + preferences for one registry provider (BYOK vault). */

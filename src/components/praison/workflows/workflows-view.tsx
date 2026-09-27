@@ -530,6 +530,7 @@ function EvolutionInbox() {
   const agents = useAgentsStore((s) => s.agents);
   const addWf = useWorkflowsStore((s) => s.add);
   const clearProposals = useWorkflowsStore((s) => s.clearProposals);
+  const requestHighlight = useUiStore((s) => s.requestHighlightWorkflow);
   const threshold =
     useSettingsStore((s) => s.settings.noveltySpawnThreshold) ??
     NOVELTY_SPAWN_THRESHOLD;
@@ -630,22 +631,50 @@ function EvolutionInbox() {
                   Nothing here for this filter yet.
                 </p>
               ) : (
-                history.slice(0, 8).map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-2 rounded-lg border bg-background/60 px-2.5 py-1.5"
-                  >
-                    {p.status === "accepted" ? (
-                      <Sparkles className="h-3 w-3 shrink-0 text-violet-500" aria-hidden />
-                    ) : (
-                      <X className="h-3 w-3 shrink-0 text-muted-foreground/60" aria-hidden />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-xs">{p.goal}</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      from {p.sourceWorkflowName} · {proposalAge(p.createdAt)}
-                    </span>
-                  </div>
-                ))
+                history.slice(0, 8).map((p) => {
+                  const spawnedId = p.spawnedWorkflowId;
+                  const linkable = p.status === "accepted" && !!spawnedId;
+                  const rowInner = (
+                    <>
+                      {p.status === "accepted" ? (
+                        <Sparkles className="h-3 w-3 shrink-0 text-violet-500" aria-hidden />
+                      ) : (
+                        <X className="h-3 w-3 shrink-0 text-muted-foreground/60" aria-hidden />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-xs">{p.goal}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        from {p.sourceWorkflowName} · {proposalAge(p.createdAt)}
+                      </span>
+                      {linkable && (
+                        <span
+                          className="shrink-0 text-[10px] font-semibold text-violet-400/80"
+                          aria-hidden
+                        >
+                          ↗
+                        </span>
+                      )}
+                    </>
+                  );
+                  return linkable ? (
+                    <button
+                      key={p.id}
+                      title="Jump to the spawned pipeline"
+                      onClick={() => {
+                        if (spawnedId) requestHighlight(spawnedId);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg border bg-background/60 px-2.5 py-1.5 text-left transition-colors hover:border-violet-500/40 hover:bg-violet-500/[0.06]"
+                    >
+                      {rowInner}
+                    </button>
+                  ) : (
+                    <div
+                      key={p.id}
+                      className="flex items-center gap-2 rounded-lg border bg-background/60 px-2.5 py-1.5"
+                    >
+                      {rowInner}
+                    </div>
+                  );
+                })
               )}
             </div>
           </>
@@ -678,14 +707,16 @@ function EvolutionInbox() {
       instruction: `Audit the final output against the goal — ${parsed.goal}. Force a rework if it falls short.`,
       kind: "review" as const,
     });
+    const spawnedId = uid("wf");
     addWf({
+      id: spawnedId,
       name: parsed.goal.slice(0, 80),
       description: `Evolution spawn · from "${p.sourceWorkflowName}" · ${p.reason}`,
       steps,
       depth: "standard",
       runs: [],
     });
-    setProposalStatus(p.id, "accepted");
+    setProposalStatus(p.id, "accepted", spawnedId);
     toast.success(
       `Spawned "${parsed.goal.slice(0, 80)}" with ${steps.length} steps — review gate included`
     );
@@ -793,6 +824,18 @@ export function WorkflowsView() {
     () => new Map(agents.map((a) => [a.id, a])),
     [agents]
   );
+
+  // Evolution archive rows can spotlight the pipeline a proposal spawned
+  const highlightId = useUiStore((s) => s.highlightWorkflowId);
+  const clearHighlight = useUiStore((s) => s.clearHighlightWorkflow);
+  React.useEffect(() => {
+    if (!highlightId) return;
+    document
+      .querySelector(`[data-wf-card="${highlightId}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = setTimeout(() => clearHighlight(), 2600);
+    return () => clearTimeout(t);
+  }, [highlightId, clearHighlight]);
 
   // The command palette (⌘K) can request a workflow run from anywhere
   const pendingRunId = useUiStore((s) => s.pendingRunWorkflowId);
@@ -1046,7 +1089,15 @@ export function WorkflowsView() {
             {workflows.map((wf) => {
               const lastRun = wf.runs[0];
               return (
-                <Card key={wf.id} className="card-lift gap-3 p-4">
+                <Card
+                  key={wf.id}
+                  data-wf-card={wf.id}
+                  className={cn(
+                    "card-lift gap-3 p-4",
+                    highlightId === wf.id &&
+                      "ring-2 ring-violet-500/60 ring-offset-2 ring-offset-background"
+                  )}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="min-w-0 truncate text-sm font-semibold md:text-[15px]">
                       {wf.name}

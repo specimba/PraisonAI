@@ -364,7 +364,11 @@ interface WorkflowsState {
   proposals: SpawnProposal[];
   add: (wf: Partial<Workflow>) => string;
   addProposal: (p: Omit<SpawnProposal, "id" | "createdAt" | "status">) => string;
-  setProposalStatus: (id: string, status: SpawnProposal["status"]) => void;
+  setProposalStatus: (
+    id: string,
+    status: SpawnProposal["status"],
+    spawnedWorkflowId?: string
+  ) => void;
   /** Remove all handled (accepted/dismissed) proposals — open ones are kept. */
   clearProposals: () => void;
   update: (id: string, patch: Partial<Workflow>) => void;
@@ -411,9 +415,13 @@ export const useWorkflowsStore = create<WorkflowsState>()(
         set((s) => ({ proposals: [proposal, ...s.proposals] }));
         return proposal.id;
       },
-      setProposalStatus: (id, status) =>
+      setProposalStatus: (id, status, spawnedWorkflowId) =>
         set((s) => ({
-          proposals: s.proposals.map((p) => (p.id === id ? { ...p, status } : p)),
+          proposals: s.proposals.map((p) =>
+            p.id === id
+              ? { ...p, status, ...(spawnedWorkflowId ? { spawnedWorkflowId } : {}) }
+              : p
+          ),
         })),
       clearProposals: () =>
         set((s) => ({
@@ -500,6 +508,8 @@ interface UiState {
   paletteOpen: boolean;
   /** Workflow the command palette asked to run — WorkflowsView consumes + clears it. */
   pendingRunWorkflowId: string | null;
+  /** Workflow an Evolution archive row asked to spotlight — WorkflowsView consumes + clears it. */
+  highlightWorkflowId: string | null;
   /** Global search dialog (⌘⇧F) visibility. */
   globalSearchOpen: boolean;
   /** Message to scroll+flash after the chat view mounts the conversation. */
@@ -542,6 +552,7 @@ export const useUiStore = create<UiState>()(
       activeAgentId: "a-assistant",
       paletteOpen: false,
       pendingRunWorkflowId: null,
+      highlightWorkflowId: null,
       globalSearchOpen: false,
       pendingFocus: null,
       busy: false,
@@ -559,6 +570,9 @@ export const useUiStore = create<UiState>()(
         set({ pendingRunWorkflowId, view: "workflows", mobileNavOpen: false }),
       setImageStudioOpen: (imageStudioOpen) => set({ imageStudioOpen }),
       clearPendingRunWorkflow: () => set({ pendingRunWorkflowId: null }),
+      requestHighlightWorkflow: (highlightWorkflowId) =>
+        set({ highlightWorkflowId, view: "workflows", mobileNavOpen: false }),
+      clearHighlightWorkflow: () => set({ highlightWorkflowId: null }),
       setGlobalSearchOpen: (globalSearchOpen) => set({ globalSearchOpen }),
       requestFocusMessage: (convId, msgId) =>
         set({ pendingFocus: { convId, msgId }, view: "chat", mobileNavOpen: false }),
