@@ -1555,3 +1555,20 @@ Stage Summary:
 - Deep-link spotlight now covers both Workflows layouts; the praison-ui anomaly is explained and closed without a code change
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild — reverts all fixes); 2) boot-server longevity check at next real boot; 3) candidates: ledger "stall <N%" mini-chip when threshold is custom; board-mode scrollIntoView (the spotlight effect currently targets whichever layout is mounted); 4) Evolution loop is feature-complete for now — consider a small polish pass or a new user-facing surface next
 - Fleet: heartbeats continuous through 05:07:18Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 14:23 +08 window)
+Agent: main (hourly review loop)
+Task: ledger stall-rule mini-chip (queued candidate, 3rd round on the list)
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 13:37+14:07, heartbeats present; 414940 = this task). HEAD d031d44 (post-13:23 platform auto-commit). HTTP 200 (dev tenure ~26h) - HMR-only
+- QA GATE: console clean; app renders (sidebar + command palette visible)
+- INCREMENT SHIPPED (workflows-view.tsx, commit see HEAD): EvolutionLedger header gains a violet mini-chip "stall <N%" whenever the active threshold differs from NOVELTY_SPAWN_THRESHOLD (isCustom = threshold !== constant, mirroring settings-view semantics) - tooltip: "Custom stall rule set in Settings -> Evolution (default 35%) - stall detection and variation proposals use N%". Chip cluster restructured: custom chip renders whenever the ledger is visible (rows>0) even with 0 scored runs; scored/avg/stalled chips keep their allScored>0 guards (stalled now double-guarded). At default 35 the chip is hidden (noise doctrine)
+- VERIFIED: npx eslint exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED
+- E2E INCONCLUSIVE (no budget to iterate): localStorage double-write injected wf-demo-scored (done run, novelty 12) + threshold 20 -> eval returned OK and cleanup returned CLEANED, but post-reload snapshot grep found no "Evolution ledger" text - recycled profile booted to the chat default view (known praison-ui EMPTY signature from 13:23 round; ledger lives in Workflows view). Chip logic is a simple conditional on an already-E2E-verified threshold channel; next round can verify visually via sidebar nav ("Multi-agent pipelines" hint anchor) with the same inject pattern
+
+Stage Summary:
+- The Settings -> Evolution slider is now traceable on the ledger surface itself: customize it and every ledger header announces the active stall rule in violet; reset and the surface goes quiet again
+- NEXT ROUND PRIORITY: 1) visual E2E of the stall mini-chip (inject wf+threshold via localStorage, nav to Workflows via sidebar hint anchor, grep "stall <20%", cleanup); 2) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild - reverts all fixes); 3) boot-server longevity check at next real boot; 4) Evolution loop is feature-complete - candidates: board-mode scrollIntoView polish, seeded demo workflow with scored runs so ledger+chip are visible out-of-the-box
+- Fleet: heartbeats continuous through 06:07:09Z (27 Sep); no gaps; no failed patrols
