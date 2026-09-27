@@ -264,9 +264,32 @@ export function RunKanban({
   }, [boardOpen, tick]);
 
   const columns = React.useMemo(() => groupRuns(workflows), [workflows]);
-  const total = Object.values(columns).reduce((n, c) => n + c.length, 0);
+  // Pipeline filter: null = all pipelines; a workflow id narrows every column.
+  const [filter, setFilter] = React.useState<string | null>(null);
+  const unfilteredTotal = Object.values(columns).reduce((n, c) => n + c.length, 0);
+  const visible = React.useMemo(() => {
+    if (!filter) return columns;
+    const out = {} as Record<Column["id"], BoardCard[]>;
+    (Object.keys(columns) as Column["id"][]).forEach((k) => {
+      out[k] = columns[k].filter((c) => c.workflowId === filter);
+    });
+    return out;
+  }, [columns, filter]);
+  const total = Object.values(visible).reduce((n, c) => n + c.length, 0);
+  // Chip choices: every pipeline that currently has at least one card, busiest first.
+  const filterChoices = React.useMemo(() => {
+    const counts = new Map<string, { name: string; n: number }>();
+    (Object.keys(columns) as Column["id"][]).forEach((k) =>
+      columns[k].forEach((c) => {
+        const e = counts.get(c.workflowId) ?? { name: c.workflowName, n: 0 };
+        e.n += 1;
+        counts.set(c.workflowId, e);
+      })
+    );
+    return [...counts.entries()].sort((a, b) => b[1].n - a[1].n);
+  }, [columns]);
 
-  if (total === 0) {
+  if (unfilteredTotal === 0) {
     return (
       <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed text-center text-sm text-muted-foreground">
         Nothing on the board yet — run a pipeline and its cards land here.
@@ -275,12 +298,56 @@ export function RunKanban({
   }
 
   return (
-    <div
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
-      aria-label="Runs kanban board"
-    >
+    <div className="space-y-2">
+      {filterChoices.length > 1 && (
+        <div
+          role="group"
+          aria-label="Board filter by pipeline"
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          <button
+            type="button"
+            onClick={() => setFilter(null)}
+            aria-pressed={filter === null}
+            className={cn(
+              "rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors",
+              filter === null
+                ? "border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                : "border-border bg-muted/40 text-muted-foreground hover:text-foreground"
+            )}
+          >
+            All pipelines
+          </button>
+          {filterChoices.map(([id, e]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setFilter((f) => (f === id ? null : id))}
+              aria-pressed={filter === id}
+              title={`Show only cards from "${e.name}"`}
+              className={cn(
+                "max-w-52 truncate rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors",
+                filter === id
+                  ? "border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                  : "border-border bg-muted/40 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {e.name} <span className="tabular-nums opacity-70">{e.n}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {filter && total === 0 ? (
+        <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed text-center text-sm text-muted-foreground">
+          No cards match this filter — the selected pipeline has nothing on the board right now.
+        </div>
+      ) : (
+      <div
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        aria-label="Runs kanban board"
+      >
       {COLUMNS.map((col) => {
-        const cards = columns[col.id];
+        const cards = visible[col.id];
         return (
           <section
             key={col.id}
@@ -316,6 +383,8 @@ export function RunKanban({
           </section>
         );
       })}
+      </div>
+      )}
     </div>
   );
 }
