@@ -1538,3 +1538,20 @@ Stage Summary:
 - The Evolution loop is now fully navigable: stall -> proposal -> spawn -> archive row -> one click back to the pipeline it created; nothing in the cycle is a dead end anymore
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild — reverts all fixes); 2) boot-server longevity check at next real boot; 3) investigate praison-ui EMPTY persistence (why it wiped; consider re-persisting view after boot); 4) candidates: ledger "stall <N%" mini-chip when custom, kanban card highlight parity (data-wf-card on board cards)
 - Fleet: heartbeats continuous through 04:07:11Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 13:23 +08 window)
+Agent: main (hourly review loop)
+Task: praison-ui EMPTY investigation + kanban highlight parity
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 12:37+13:07, heartbeats present; 414940 = this task). HEAD ae79f76→5da613c = platform auto-commit (verified worklog.md +21 only). HTTP 200 (dev tenure ~25h) — HMR-only
+- QA GATE: console clean; app healthy
+- INVESTIGATION CLOSED (praison-ui EMPTY, 12:23 anomaly): NOT a bug — two benign paths explain it. (1) settings-view STORAGE_KEYS ("Your Data" wipe) includes praison-ui by design; (2) the ui store persists ONLY on first set() (no initial write), so a fresh browser profile shows praison-ui absent until the first ui mutation — praison-workflows only LOOKED alive because seeds repopulate on boot. agent-browser profile recycling between rounds triggers exactly this signature. No code change needed; future rounds: treat missing praison-ui as fresh-profile, not data loss
+- INCREMENT SHIPPED (run-kanban.tsx, commit d031d44): kanban highlight parity — RunCard (both run and scheduled variants) now carries data-wf-card={card.workflowId} and subscribes to highlightWorkflowId; a deep-link from an Evolution archive row spotlights the matching board card with the same violet ring-2 + offset used in the grid, auto-clearing via the shared WorkflowsView effect. Board and grid deep-links are now visually identical
+- VERIFIED: npx eslint exit 0; bun scripts/test-spawn-engine.ts ALL CHECKS PASSED (grid-path E2E already green in the 12:23 round; board path shares the same store channel)
+
+Stage Summary:
+- Deep-link spotlight now covers both Workflows layouts; the praison-ui anomaly is explained and closed without a code change
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild — reverts all fixes); 2) boot-server longevity check at next real boot; 3) candidates: ledger "stall <N%" mini-chip when threshold is custom; board-mode scrollIntoView (the spotlight effect currently targets whichever layout is mounted); 4) Evolution loop is feature-complete for now — consider a small polish pass or a new user-facing surface next
+- Fleet: heartbeats continuous through 05:07:18Z (27 Sep); no gaps; no failed patrols
