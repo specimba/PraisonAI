@@ -1935,3 +1935,18 @@ Stage Summary:
 - Scheduled pipelines are now VISIBLE while they run: pulsing "Running · step k/n" badge + emerald ring on the live card, "n running" header counter, and colored last-outcome dots. The user's core complaint ("scheduled works look stale/dead") is fixed at the derivation level — no new state sources, just reading what the runner already writes.
 - r80 E2E side-note: this dossier run was a REAL deep run (7 materialized steps) — when it finishes, run history will carry per-step statuses recorded under the r80 regime (pending→running→done), a persistence-side data point for the still-open r80 verification.
 - NEXT: 1) styling queue (recovery-card visual hierarchy, run-history sparkline), 2) auto-resume E2E with corrected providerKeys.custom recipe, 3) stall-failover epic (needs gate), 4) r80 E2E recipe v2 if the stored run's statuses look off.
+---
+Task ID: 414940 (hourly review, 2026-09-28 07:23 +08)
+Agent: main (review round)
+Task: r82 run-history sparkline on workflow cards + r80 persistence-side verification (bonus)
+
+Work Log:
+- QA: HTTP 200; cron CLI still absent (10th round, platform-side) — fleet 2/2 behavioral. Console clean. Correction of record: the 07:07 patrol reply wrongly said r81 was "queued" — r81 (live run badge/header chip/outcome dots) shipped AND verified in the 06:5x user round; users just refresh their tab.
+- r82 SHIPPED (workflows-view.tsx, 1 edit, view-only): run-history sparkline in the card meta row after the runs-count span — up to 10 bars (oldest→newest), fixed height h-3, colored by terminal status (emerald done / red error / zinc stopped / pulsing emerald running), per-bar tooltip "rel time · status · duration-s | in flight", role=img + full aria-label, hidden below 2 runs (outcome dot covers that). Duration deliberately NOT height-encoded (692s deep runs would flatten everything else).
+- VERIFIED (agent-browser + eval DOM truth): 2 cards render sparklines — "Last 4 runs: done, done, done, done" (4×emerald) and dossier "done, error" (emerald+red). eslint clean; HMR 283ms; console clean.
+- r80 PERSISTENCE-SIDE VERIFICATION (bonus, from the sparkline's red bar): the 06:5x QA dossier run terminated "error" at step 3 with stored step statuses ["done","done","error","stopped","stopped","stopped","stopped"] — honest queue semantics working end-to-end (pre-r80 all 7 would have lied "running"). Error = "network error" (call-level transient, hiccup-retry consumed, recovery card available); resumeCount undefined confirms hiccup retry is a call-level mechanism separate from run-level resume counting. NOT a regression (r81/r82 view-only) — no fix needed; the run is user-recoverable via "Retry failed step".
+- Sparkline QA note: agent-browser fill quirk re-confirmed (use fill alone; click+Control+a+type CLEARS React state).
+
+Stage Summary:
+- Cards now read alive at three timescales: LIVE (r81 running badge + emerald ring), RECENT (r82 sparkline of last 10 runs), LAST (outcome dot). The user's "scheduled works look stale/dead" complaint is fully covered without touching the runner.
+- NEXT: 1) stall-failover epic (rotate to healthy lane on repeated engine stalls — needs gate), 2) auto-resume E2E (providerKeys.custom recipe), 3) candidate small polish: sparkline in run dialog history rows / Kanban card echo of the sparkline, 4) user-side: RSIinFIELD auto-paused chip is one click to resume.

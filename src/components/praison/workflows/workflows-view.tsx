@@ -1308,6 +1308,38 @@ export function WorkflowsView() {
                         )}
                       </span>
                       {(() => {
+                        // r82: run-history sparkline — up to 10 bars, oldest →
+                        // newest left-to-right, colored by terminal status.
+                        // Fixed-height bars read as cadence; duration lives in
+                        // the tooltip (height-normalizing skews hard against
+                        // 692s deep runs). Hidden below 2 runs — the outcome
+                        // dot already tells that story.
+                        const trail = wf.runs.slice(0, 10).reverse();
+                        if (trail.length < 2) return null;
+                        return (
+                          <span
+                            role="img"
+                            aria-label={`Last ${trail.length} runs, oldest to newest: ${trail.map((r) => r.status).join(", ")}`}
+                            className="flex items-end gap-[3px]"
+                          >
+                            {trail.map((r) => (
+                              <span
+                                key={r.id}
+                                title={`${fmtRel(r.startedAt)} · ${r.status}${r.finishedAt ? ` · ${Math.max(1, Math.round((r.finishedAt - r.startedAt) / 1000))}s` : " · in flight"}`}
+                                className={cn(
+                                  "w-[3px] rounded-sm",
+                                  r.status === "done" && "h-3 bg-emerald-500/80",
+                                  r.status === "error" && "h-3 bg-red-500/80",
+                                  r.status === "stopped" && "h-3 bg-zinc-400/80",
+                                  r.status === "running" &&
+                                    "h-3 animate-pulse bg-emerald-500"
+                                )}
+                              />
+                            ))}
+                          </span>
+                        );
+                      })()}
+                      {(() => {
                         const scored = wf.runs
                           .filter((r) => r.status === "done" && r.novelty != null)
                           .slice(0, 6)
