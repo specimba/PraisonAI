@@ -822,6 +822,17 @@ export function WorkflowsView() {
     (w) => w.schedule?.enabled && w.steps.length > 0
   ).length;
 
+  // r81: live-run visibility. Scheduled runs execute entirely outside this
+  // view (the scheduler calls the runner fire-and-forget), so cards looked
+  // stale/dead while their pipelines ran — the user had no way to see a
+  // scheduled run in flight without opening run history. The runner writes
+  // addRun/patchRunStep to the store reactively, so deriving from runs[]
+  // gives live badges for ANY trigger; r25's zombie cleanup keeps reload
+  // orphans from faking a live state.
+  const liveRunCount = workflows.filter((w) =>
+    w.runs.some((r) => r.status === "running")
+  ).length;
+
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [planOpen, setPlanOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Workflow | null>(null);
@@ -989,6 +1000,18 @@ export function WorkflowsView() {
             {activeSchedules} scheduled
           </span>
         )}
+        {liveRunCount > 0 && (
+          <span
+            title={`${liveRunCount} pipeline${liveRunCount === 1 ? "" : "s"} executing right now (manual or scheduled trigger)`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+          >
+            <span className="relative flex h-2 w-2" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            {liveRunCount} running
+          </span>
+        )}
         <div
           role="radiogroup"
           aria-label="Layout"
@@ -1115,6 +1138,19 @@ export function WorkflowsView() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {workflows.map((wf) => {
               const lastRun = wf.runs[0];
+              // r81: live state for ANY run (manual or scheduled) — see the
+              // liveRunCount note. Only one run per workflow can be active
+              // (the runner guards on activeRuns), so the first "running"
+              // entry is the live one.
+              const liveRun = wf.runs.find((r) => r.status === "running");
+              const liveSteps = liveRun?.steps ?? [];
+              const liveDone = liveSteps.filter((s) => s.status === "done").length;
+              const liveCurrent = liveSteps.find((s) => s.status === "running");
+              const liveNextLabel =
+                liveCurrent?.label ||
+                liveCurrent?.agentName ||
+                liveSteps.find((s) => s.status === "pending")?.label ||
+                "";
               return (
                 <Card
                   key={wf.id}
@@ -1122,7 +1158,8 @@ export function WorkflowsView() {
                   className={cn(
                     "card-lift gap-3 p-4",
                     highlightId === wf.id &&
-                      "ring-2 ring-violet-500/60 ring-offset-2 ring-offset-background"
+                      "ring-2 ring-violet-500/60 ring-offset-2 ring-offset-background",
+                    liveRun && "ring-1 ring-emerald-500/40"
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -1175,6 +1212,30 @@ export function WorkflowsView() {
                     </p>
                   ) : null}
 
+                  {liveRun ? (
+                    <div
+                      role="status"
+                      aria-label={`${wf.name} running: step ${Math.min(liveDone + 1, Math.max(liveSteps.length, 1))} of ${Math.max(liveSteps.length, 1)}`}
+                      className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/[0.07] px-2.5 py-1.5 text-[11px]"
+                    >
+                      <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                      </span>
+                      <span className="shrink-0 font-medium text-emerald-600 dark:text-emerald-400">
+                        Running
+                      </span>
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {liveSteps.length > 0
+                          ? `step ${Math.min(liveDone + 1, liveSteps.length)}/${liveSteps.length}${liveCurrent ? ` · ${liveNextLabel}` : " · queued"}`
+                          : "starting…"}
+                      </span>
+                      <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/80">
+                        {fmtRel(liveRun.startedAt)}
+                      </span>
+                    </div>
+                  ) : null}
+
                   <div
                     className="flex flex-wrap items-center gap-1.5"
                     aria-label={`${wf.steps.length} steps`}
@@ -1223,10 +1284,28 @@ export function WorkflowsView() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <DepthChip depth={wf.depth} />
-                      <span className="text-[11px] text-muted-foreground">
-                        {lastRun
-                          ? `${wf.runs.length} run${wf.runs.length === 1 ? "" : "s"} · last ${fmtRel(lastRun.startedAt)}`
-                          : "Never run"}
+                      <span
+                        className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                        title={lastRun ? `Last run: ${lastRun.status}` : undefined}
+                      >
+                        {lastRun ? (
+                          <>
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "inline-block h-1.5 w-1.5 shrink-0 rounded-full",
+                                lastRun.status === "done" && "bg-emerald-500",
+                                lastRun.status === "error" && "bg-red-500",
+                                lastRun.status === "stopped" && "bg-zinc-400",
+                                lastRun.status === "running" &&
+                                  "animate-pulse bg-emerald-500"
+                              )}
+                            />
+                            {`${wf.runs.length} run${wf.runs.length === 1 ? "" : "s"} · last ${fmtRel(lastRun.startedAt)}`}
+                          </>
+                        ) : (
+                          "Never run"
+                        )}
                       </span>
                       {(() => {
                         const scored = wf.runs
