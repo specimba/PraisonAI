@@ -1856,3 +1856,20 @@ Work Log:
 Stage Summary:
 - Auto-resume E2E remains OPEN with a CORRECTED recipe: 1) read providers.ts custom entry + providerBaseUrl field names; 2) inject settings.providerKeys.custom accordingly (key non-empty so the registry branch takes it); 3) same harness otherwise. Budget note: the attempt fits a dedicated round window (~5-6 tool rounds); do NOT start it in a round that also owes other work.
 - NEXT priorities: 1) pending-status fix (STILL GATED), 2) auto-resume E2E retry with corrected injection, 3) server-side run epic (proposal only).
+
+---
+Task ID: user-round (2026-09-28 03:4x +08)
+Agent: main
+Task: Diagnose user-reported failed run ("upstream stalled: no data for 90s", step 2/11, 3 auto-resumes exhausted) + one focused fix
+
+Work Log:
+- DIAGNOSIS from pasted run UI: Deep pipeline "Continuous Research…" died at step 2/11 (Research Scout, "Deep research pass 2 — verify & broaden"). Error string matches agent-engine.ts UpstreamDeadlineError (engine-layer inter-chunk deadline), NOT the runner watchdog (4min) and NOT chat-client's server-stream timer (kept warm by 15s `: ping` SSE comments for the whole request lifetime — verified in /api/chat route). Failure signature: each of the 3 auto-resumes made real tool progress (web searches at 1–4s) then stalled in generation — deterministic buffered-reasoning silence (>90s zero bytes), not a transient provider brownout.
+- FIX SHIPPED (r78): IDLE_CHUNK_TIMEOUT_MS 90_000 → 180_000 in agent-engine.ts + full comment rewrite. Forensics chain now in-code: 15s killed runs twice (r68, RSIinFIELD step 1/7 × 26 tool calls) → 90s still killed a Deep run today (step 2/11 × 21 tool calls, 3/3 resumes re-stalled) → 180s sized for 2–3min reasoning buffers, still < runner's 4-min watchdog so the engine deadline always fires first and the run stays auto-resumable. One-const VALUE-only edit = most HMR-benign (export shape unchanged; in-flight closures keep old refs). eslint clean; compiled ✓ in 139ms; applies to every NEW LLM invocation without reload.
+- GATE RATIONALE: pasted run is TERMINAL (failed + recovery card); edit window seconds-long; worst case for a freak concurrent retry = one manual resume. workflow-runner.ts itself untouched this round.
+- INCIDENT (self-healed): dev server DIED mid-traffic during this round — curl 000, no process, dev.log cut mid tools/execute requests with NO crash line (external kill/OOM signature; user's retry traffic was flowing at the time). Restarted via nohup bun run dev → Ready 1.45s, HTTP 200, GET / 200. Run data intact (all client-side localStorage).
+- ENV NOTE (open, NOT a project bug): after the crash, agent-browser lost direct reachability to :3000 / 127.0.0.1:3000 / bridge-IP:3000 (fresh browser spawn also refused — browser context is a separate netns). :81 serves the platform's Z.ai wrapper (caddy PID 2 runs /app/Caddyfile in another namespace; project Caddyfile is NOT the loaded config — DIFFERENT/empty). Wrapper spins on its `location.href` reload loop. Next round: retry `agent-browser open http://localhost:3000` FIRST; if still refused, QA falls back to curl + dev.log + user-path reasoning until the platform recycles the browser daemon.
+
+Stage Summary:
+- The exact failure class that killed RSIinFIELD (r68, twice) and today's Deep run is now budgeted at the layer that kills it: engine-side silence tolerance 90→180s, full forensics documented in-code.
+- USER GUIDANCE: click "Retry failed step" on the failed run — step 1's 692s report is preserved; the fresh retry invocation runs on the new 180s budget. If the lane is still sick, switch model via the health-badged picker (r75) first.
+- NEXT: 1) pending-status fix (re-evaluate gate — no active run observed this round), 2) auto-resume E2E with corrected providerKeys.custom injection, 3) stall-failover epic: rotate to an alternate healthy hop on repeated engine-layer stalls (touches runner — needs gate), 4) agent-browser netns forensics if still unreachable.

@@ -142,15 +142,25 @@ export const FIRST_TOKEN_TIMEOUT_MS = 12_000;
 /** OrcaRouter internally fails over 1-5 upstreams before the first byte. */
 export const FIRST_TOKEN_TIMEOUT_ORCA_MS = 25_000;
 /**
- * Mid-stream silence budget. MATCHES the interactive chat path
- * (chat-client SERVER_STALL_TIMEOUT_MS = 90s): free-tier relays routinely
- * pause tens of seconds between chunks while a model reasons. The old 15s
- * budget caused false "upstream stalled" failures that killed whole pipeline
- * runs mid-flight (r68 forensics: RSIinFIELD died at step 1/7 with 26 tool
- * calls already succeeded — twice). Truly dead connections still error fast
- * via the read loop's close event; this timer only guards silent hangs.
+ * Mid-stream silence budget. Sized for BUFFERED REASONING, not for the
+ * browser-facing path: the /api/chat route sends `: ping` SSE comments every
+ * 15s for the whole request lifetime, so the client watchdog
+ * (chat-client SERVER_STALL_TIMEOUT_MS = 90s) stays warm no matter how long
+ * the upstream goes quiet — this budget only guards provider silence.
+ * Free-tier relays pause tens of seconds between chunks while a model
+ * reasons, and big-context deep passes can buffer reasoning for 2-3+ minutes
+ * with ZERO bytes (deterministic, not a brownout — every auto-resume of the
+ * same step re-stalls at the same phase). The old 15s budget caused false
+ * "upstream stalled" failures that killed whole pipeline runs mid-flight
+ * (r68 forensics: RSIinFIELD died at step 1/7 with 26 tool calls already
+ * succeeded — twice). 90s still killed a Deep run at step 2/11 with 21 tool
+ * calls succeeded (2026-09-28: 3 auto-resumes all re-stalled after visible
+ * tool progress). 180s sits comfortably under the runner's 4-min stall
+ * watchdog so the engine deadline always fires first and the run stays
+ * auto-resumable. Truly dead connections still error fast via the read
+ * loop's close event; this timer only guards silent hangs.
  */
-export const IDLE_CHUNK_TIMEOUT_MS = 90_000;
+export const IDLE_CHUNK_TIMEOUT_MS = 180_000;
 
 /**
  * Combine the caller's abort signal with an engine-owned deadline controller.
