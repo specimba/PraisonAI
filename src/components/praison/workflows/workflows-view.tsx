@@ -840,6 +840,10 @@ export function WorkflowsView() {
 
   // Evolution archive rows can spotlight the pipeline a proposal spawned
   const highlightId = useUiStore((s) => s.highlightWorkflowId);
+  // Active stall rule for card-level novelty trails (Settings → Evolution).
+  const noveltyThreshold =
+    useSettingsStore((s) => s.settings.noveltySpawnThreshold) ??
+    NOVELTY_SPAWN_THRESHOLD;
   const clearHighlight = useUiStore((s) => s.clearHighlightWorkflow);
   React.useEffect(() => {
     if (!highlightId) return;
@@ -1214,6 +1218,33 @@ export function WorkflowsView() {
                           ? `${wf.runs.length} run${wf.runs.length === 1 ? "" : "s"} · last ${fmtRel(lastRun.startedAt)}`
                           : "Never run"}
                       </span>
+                      {(() => {
+                        const scored = wf.runs
+                          .filter((r) => r.status === "done" && r.novelty != null)
+                          .slice(0, 6)
+                          .reverse();
+                        if (scored.length === 0) return null;
+                        return (
+                          <span
+                            aria-label={`Novelty trail: ${scored.map((r) => r.novelty).join(", ")}`}
+                            title={`Recent novelty scores (oldest to newest): ${scored.map((r) => r.novelty).join("%, ")}% — amber dots scored below the ${noveltyThreshold}% stall rule (Settings → Evolution)`}
+                            className="flex items-center gap-0.5"
+                          >
+                            {scored.map((r) => (
+                              <span
+                                key={r.id}
+                                aria-hidden
+                                className={cn(
+                                  "h-1.5 w-1.5 rounded-full",
+                                  (r.novelty ?? 0) < noveltyThreshold
+                                    ? "bg-amber-500"
+                                    : "bg-emerald-500"
+                                )}
+                              />
+                            ))}
+                          </span>
+                        );
+      })()}
                     </div>
                     <div className="flex items-center gap-2">
                       {wf.schedule?.enabled && wf.steps.length > 0 && (
