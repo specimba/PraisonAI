@@ -1517,3 +1517,24 @@ Stage Summary:
 - The Settings → Evolution feature is now code-verified AND user-journey-verified (keyboard a11y, persistence, reset); the long-standing Studio-nav false alarm is closed with a diagnosis future rounds can trust
 - NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild — reverts all fixes); 2) boot-server longevity check at next real boot; 3) candidates: deep-link from archive rows to spawned workflow (sourceWorkflowId → highlight card); ledger "stall <N%" mini-chip visible even when custom (=35 hidden to avoid noise); 4) optional: seeded demo workflow with scored runs so the ledger is visible out-of-the-box
 - Fleet: heartbeats continuous through 03:07:10Z (27 Sep); no gaps; no failed patrols
+
+---
+Task ID: 414940 (2026-09-27 12:23 +08 window)
+Agent: main (hourly review loop)
+Task: archive deep-link to spawned pipeline (queued candidate)
+
+Work Log:
+- SELF-HEAL: cron CLI ENOENT; fleet 2/2 live-fire (414938 fired 11:37+12:07, heartbeats present; 414940 = this task). HEAD 246c88c→e627add = platform auto-commit (verified worklog.md +17 only). HTTP 200 (dev tenure ~24h) — HMR-only
+- QA GATE: console 0 errors; Workflows view renders (4 workflows)
+- INCREMENT SHIPPED (3 files, commit ae79f76): accepted Evolution proposals now remember what they spawned and archive rows jump to it —
+  · types: SpawnProposal.spawnedWorkflowId?: string (set at accept time)
+  · stores: setProposalStatus(id, status, spawnedWorkflowId?) merges the link; ui store gains highlightWorkflowId + requestHighlightWorkflow/clearHighlightWorkflow (NOT persisted, matches pendingRunWorkflowId pattern)
+  · workflows-view: accept handler generates uid("wf"), passes it to addWf + records it on the proposal; archive rows with a spawn link render as real buttons (hover violet tint, trailing arrow glyph, title tooltip) that requestHighlight; WorkflowsView effect scrollIntoView-centers the card by [data-wf-card] and applies ring-2 ring-violet-500/60 for 2.6s then auto-clears; grid cards carry data-wf-card
+- E2E GREEN (live): injected accepted proposal w/ spawnedWorkflowId=wf-deep-dossier (double-write doctrine) -> sidebar nav ("Multi-agent pipelines" hint anchor) -> strip "History (1)" -> expand -> row click -> ring-2 VISIBLE on "Deep Research Dossier" card -> auto-cleared after timeout -> double-write cleanup -> proposals []. 
+- HARNESS LESSONS: (1) agent-browser eval mangles multibyte (em-dash) payloads — JS eval strings must be ASCII-only; (2) praison-ui was found EMPTY this round (app booted to chat default) — sidebar nav via hint-text anchors is the reliable path; exact-text 'Workflows' clicks can hit launchpad card headings instead
+- VERIFIED: npx eslint exit 0 (3 files); bun scripts/test-spawn-engine.ts ALL CHECKS PASSED; profile clean after cleanup
+
+Stage Summary:
+- The Evolution loop is now fully navigable: stall -> proposal -> spawn -> archive row -> one click back to the pipeline it created; nothing in the cycle is a dead end anymore
+- NEXT ROUND PRIORITY: 1) prod standalone rebuild ONLY when :3000 frees AND a build window is allowed (do NOT restart stale standalone before rebuild — reverts all fixes); 2) boot-server longevity check at next real boot; 3) investigate praison-ui EMPTY persistence (why it wiped; consider re-persisting view after boot); 4) candidates: ledger "stall <N%" mini-chip when custom, kanban card highlight parity (data-wf-card on board cards)
+- Fleet: heartbeats continuous through 04:07:11Z (27 Sep); no gaps; no failed patrols
