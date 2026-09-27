@@ -59,7 +59,8 @@ import {
   useWorkflowsStore,
 } from "@/lib/stores";
 import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
-import { buildVariationProposal } from "@/lib/spawn-proposal-engine";
+import { buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
+import { useSettingsStore } from "@/lib/stores";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, uid } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DepthChip, EmptyState, PageHeader } from "@/components/praison/atoms";
@@ -166,7 +167,10 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
   const avg = allScored.length
     ? Math.round(allScored.reduce((s, r) => s + (r.novelty ?? 0), 0) / allScored.length)
     : null;
-  const stalled = allScored.filter((r) => (r.novelty ?? 0) < 35).length;
+  const threshold =
+    useSettingsStore((s) => s.settings.noveltySpawnThreshold) ??
+    NOVELTY_SPAWN_THRESHOLD;
+  const stalled = allScored.filter((r) => (r.novelty ?? 0) < threshold).length;
 
   if (rows.length === 0) return null;
 
@@ -177,7 +181,7 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
           <span aria-hidden>🧬</span>
           <h3 className="text-sm font-semibold">Evolution ledger</h3>
           <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-            output novelty vs recent done runs · &lt;35% = stall
+            output novelty vs recent done runs · &lt;{threshold}% = stall
           </span>
         </div>
         {allScored.length > 0 && (
@@ -192,7 +196,7 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
               title={`Average novelty across all scored runs${avg != null ? `: ${avg}%` : ""}`}
               className={cn(
                 "rounded-full border px-2 py-0.5",
-                avg != null && avg < 35
+                avg != null && avg < threshold
                   ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
                   : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
               )}
@@ -237,12 +241,12 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
                   return (
                     <span
                       key={r.id}
-                      title={`${fmtRel(r.startedAt)}${v != null ? ` · novelty ${v}%${v < 35 ? " — stall signal" : ""}` : " · not scored (finished before the Evolution Layer landed; re-run to score)"}`}
+                      title={`${fmtRel(r.startedAt)}${v != null ? ` · novelty ${v}%${v < threshold ? " — stall signal" : ""}` : " · not scored (finished before the Evolution Layer landed; re-run to score)"}`}
                       className={cn(
                         "flex h-5 min-w-8 items-center justify-center rounded px-1 text-[10px] font-medium tabular-nums",
                         v == null
                           ? "bg-muted text-muted-foreground/60"
-                          : v < 35
+                          : v < threshold
                             ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                             : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                       )}
@@ -267,21 +271,21 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
                 <span
                   title={
                     n != null
-                      ? `Evolution novelty vs recent runs: ${n}%${n < 35 ? " — stall signal (near-duplicate output)" : ""}`
+                      ? `Evolution novelty vs recent runs: ${n}%${n < threshold ? " — stall signal (near-duplicate output)" : ""}`
                       : "Latest run finished before the Evolution Layer landed — re-run to score"
                   }
                   className={cn(
                     "ml-1 inline-flex h-6 items-center rounded-full border px-2 text-[10px] font-semibold",
                     n == null
                       ? "text-muted-foreground"
-                      : n < 35
+                      : n < threshold
                         ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
                         : "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   )}
                 >
                   {n != null ? `🧬 ${n}%` : "not scored"}
                 </span>
-                {n != null && n < 35 && !proposals.some((p) => p.status === "open" && p.sourceWorkflowId === wf.id) && (
+                {n != null && n < threshold && !proposals.some((p) => p.status === "open" && p.sourceWorkflowId === wf.id) && (
                   <button
                     title={`Propose a variation of "${wf.name}" to the Evolution Inbox — latest run stalled at ${n}%`}
                     onClick={() => {
@@ -525,6 +529,9 @@ function EvolutionInbox() {
   const agents = useAgentsStore((s) => s.agents);
   const addWf = useWorkflowsStore((s) => s.add);
   const clearProposals = useWorkflowsStore((s) => s.clearProposals);
+  const threshold =
+    useSettingsStore((s) => s.settings.noveltySpawnThreshold) ??
+    NOVELTY_SPAWN_THRESHOLD;
   const [showArchive, setShowArchive] = React.useState(false);
   const [archiveFilter, setArchiveFilter] = React.useState<"all" | "accepted" | "dismissed">("all");
   const [confirmClear, setConfirmClear] = React.useState(false);
@@ -560,7 +567,7 @@ function EvolutionInbox() {
             </span>
             {dismissedCount > 0 && <> · {dismissedCount} dismissed</>} — inbox
             clear. New proposals appear here automatically when runs stall
-            (&lt;35% novelty) or via{" "}
+            (&lt;{threshold}% novelty) or via{" "}
             <span className="font-medium text-foreground/80">
               Suggest variation
             </span>{" "}

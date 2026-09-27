@@ -78,6 +78,7 @@ const SETTINGS_SECTIONS = [
   { id: "relay", label: "Model Relay" },
   { id: "referrals", label: "Referrals" },
   { id: "behavior", label: "Behavior" },
+  { id: "evolution", label: "Evolution" },
   { id: "profile", label: "Profile" },
   { id: "appearance", label: "Appearance" },
   { id: "data", label: "Your Data" },
@@ -423,6 +424,57 @@ export function SettingsView() {
             </CardContent>
           </Card>
 
+          </div>
+
+          {/* ── Evolution ─────────────────────────────────────────────── */}
+          <div id="evolution" className="scroll-mt-14">
+          <Card className="gap-4">
+            <CardHeader className="pb-3">
+              <CardTitle>Evolution</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Novelty stall threshold</Label>
+                  <span
+                    title="Finished runs scoring novelty below this value propose a variation to the Evolution Inbox"
+                    className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-violet-600 dark:text-violet-400"
+                  >
+                    {settings.noveltySpawnThreshold ?? 35}%
+                  </span>
+                </div>
+                <Slider
+                  min={10}
+                  max={90}
+                  step={5}
+                  value={[settings.noveltySpawnThreshold ?? 35]}
+                  onValueChange={(vals) =>
+                    update({ noveltySpawnThreshold: vals[0] ?? 35 })
+                  }
+                  aria-label="Novelty stall threshold"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>10% · strict originality</span>
+                  <span>35% · default</span>
+                  <span>90% · lenient</span>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Finished runs scoring novelty below this threshold count as
+                  near-duplicates: the runner proposes a variation to the
+                  Evolution Inbox and ledger novelty chips turn amber. Lower it
+                  to demand more originality; raise it if your pipelines
+                  legitimately produce similar output.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => update({ noveltySpawnThreshold: 35 })}
+                  className="text-[11px] font-medium text-violet-600 underline-offset-2 hover:underline dark:text-violet-400"
+                >
+                  Reset to default (35%)
+                </button>
+              </div>
+            </CardContent>
+          </Card>
           </div>
 
           {/* ── Profile ──────────────────────────────────────────────── */}

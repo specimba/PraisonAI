@@ -4,7 +4,7 @@
 
 import { toast } from "sonner";
 import { runText, scoreNovelty } from "@/lib/evolution";
-import { maybeProposeSpawn } from "@/lib/spawn-proposal-engine";
+import { maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveLlm } from "@/lib/llm-config";
 import { decide, SYSTEMONE_GATE_CONFIDENCE } from "@/lib/systemone";
@@ -367,7 +367,23 @@ export async function executeWorkflowRun(
     // Evolution Layer (r70): a done run with low novelty = the pipeline keeps
     // producing near-duplicates. Best-effort: propose a variation to the
     // spawn inbox (max ONE open proposal per source workflow — anti-spam).
-    if (status === "done" && novelty !== undefined && novelty < 35) {
+    // Threshold is user-configurable (Settings → Evolution); read best-effort
+    // so a settings-store failure can never affect run finalization.
+    const spawnThreshold = (() => {
+      try {
+        return (
+          useSettingsStore.getState().settings.noveltySpawnThreshold ??
+          NOVELTY_SPAWN_THRESHOLD
+        );
+      } catch {
+        return NOVELTY_SPAWN_THRESHOLD;
+      }
+    })();
+    if (
+      status === "done" &&
+      novelty !== undefined &&
+      novelty < spawnThreshold
+    ) {
       try {
         const st = useWorkflowsStore.getState();
         const openSourceIds = st.proposals
@@ -381,6 +397,7 @@ export async function executeWorkflowRun(
         const proposal = maybeProposeSpawn({
           status,
           novelty,
+          threshold: spawnThreshold,
           openSourceIds,
           sourceWorkflowId: wf.id,
           sourceWorkflowName: wf.name,

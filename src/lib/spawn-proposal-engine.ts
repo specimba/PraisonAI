@@ -26,6 +26,8 @@ const hashPick = (text: string): string => {
 export interface MaybeProposeSpawnInput {
   status: "done" | "error" | "stopped";
   novelty?: number;
+  /** Stall threshold override (Settings → Evolution). Missing = NOVELTY_SPAWN_THRESHOLD. */
+  threshold?: number;
   /** workflowIds that already have an open proposal (anti-spam cap). */
   openSourceIds: string[];
   sourceWorkflowId: string;
@@ -43,8 +45,8 @@ export function maybeProposeSpawn(
   input: MaybeProposeSpawnInput
 ): SpawnProposal | null {
   if (input.status !== "done") return null;
-  if (input.novelty == null || input.novelty >= NOVELTY_SPAWN_THRESHOLD)
-    return null;
+  const threshold = input.threshold ?? NOVELTY_SPAWN_THRESHOLD;
+  if (input.novelty == null || input.novelty >= threshold) return null;
   if (input.openSourceIds.includes(input.sourceWorkflowId)) return null;
   return buildVariationProposal({
     sourceWorkflowId: input.sourceWorkflowId,
@@ -62,6 +64,8 @@ export interface BuildVariationProposalInput {
   taskExcerpt: string;
   /** Latest run's novelty %, when known (drives the reason text). */
   novelty?: number;
+  /** Stall threshold override (Settings → Evolution). Missing = NOVELTY_SPAWN_THRESHOLD. */
+  threshold?: number;
   /** True when the USER requested this variation from a ledger row. */
   manual?: boolean;
 }
@@ -76,11 +80,12 @@ export function buildVariationProposal(
   const base =
     input.taskExcerpt.trim().replace(/\s+/g, " ").slice(0, 220) ||
     input.sourceWorkflowName;
+  const threshold = input.threshold ?? NOVELTY_SPAWN_THRESHOLD;
   return {
     goal: `${base} — approach it from ${hashPick(base)}`,
     reason: input.manual
       ? input.novelty != null
-        ? `Manually requested — latest run scored ${Math.round(input.novelty)}% novelty (below the ${NOVELTY_SPAWN_THRESHOLD}% stall threshold)`
+        ? `Manually requested — latest run scored ${Math.round(input.novelty)}% novelty (below the ${threshold}% stall threshold)`
         : "Manually requested variation — the user asked Evolution for a fresh angle"
       : `Novelty stalled at ${Math.round(input.novelty ?? 0)}% — recent runs of this pipeline produce near-duplicate output, so a fresh angle is proposed`,
     sourceWorkflowId: input.sourceWorkflowId,

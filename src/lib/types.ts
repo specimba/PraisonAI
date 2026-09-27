@@ -399,6 +399,12 @@ export interface Settings {
    * the decision ladder falls back to a fast-model JSON judge via the vault.
    */
   typesafeKey?: string;
+  /**
+   * Evolution Layer: novelty % below which a finished run counts as a
+   * near-duplicate and triggers a spawn proposal. 10–90; missing = 35
+   * (NOVELTY_SPAWN_THRESHOLD). Surfaced in Settings → Evolution.
+   */
+  noveltySpawnThreshold?: number;
   seeded: boolean;
 }
 

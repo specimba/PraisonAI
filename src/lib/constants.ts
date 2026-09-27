@@ -215,6 +215,10 @@ export const DEFAULT_SETTINGS: Settings = {
   providerKeys: { ...PRESEED_PROVIDER_KEYS },
   activeProviderId: "vyce",
   relayEnabled: true,
+  // Evolution Layer stall threshold (Settings → Evolution). Kept literal to
+  // avoid a constants→engine import cycle; engine's NOVELTY_SPAWN_THRESHOLD
+  // is the runtime fallback for missing values.
+  noveltySpawnThreshold: 35,
   seeded: false,
 };
 
