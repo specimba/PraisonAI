@@ -458,6 +458,22 @@ export function SettingsView() {
                   <span>35% · default</span>
                   <span>90% · lenient</span>
                 </div>
+                <div
+                  title="Live preview of the current stall rule"
+                  className="flex items-start gap-2 rounded-md border border-violet-500/20 bg-violet-500/5 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground"
+                >
+                  <span aria-hidden className="shrink-0">🧬</span>
+                  <span>
+                    Runs scoring below{" "}
+                    <span className="font-semibold tabular-nums text-violet-600 dark:text-violet-400">
+                      {settings.noveltySpawnThreshold ?? 35}%
+                    </span>{" "}
+                    novelty will propose variations ·{" "}
+                    {(settings.noveltySpawnThreshold ?? 35) === 35
+                      ? "default sensitivity"
+                      : "customized sensitivity"}
+                  </span>
+                </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   Finished runs scoring novelty below this threshold count as
                   near-duplicates: the runner proposes a variation to the

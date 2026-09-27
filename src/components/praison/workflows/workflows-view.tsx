@@ -146,7 +146,7 @@ function sanitizeWorkflow(raw: unknown, validAgentIds: Set<string>): Workflow | 
  * Compact novelty ledger over run history: one row per workflow that has done
  * runs, showing the last 6 done runs' novelty scores as a colored trail strip
  * (oldest → newest), a ▲/▼ delta vs the previous scored run, and the latest
- * score chip. Amber <35% = stall signal, matching the kanban 🧬 chip doctrine.
+ * score chip. Amber below-threshold = stall signal (Settings → Evolution, default 35%), matching the kanban 🧬 chip doctrine.
  * Self-hides when no workflow has finished a run yet.
  */
 function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
