@@ -917,6 +917,51 @@ export function WorkflowRunPanel({
                   onRestart={restartRun}
                 />
               ) : null}
+              {viewedRun.steps.length > 0 ? (() => {
+                // r86: step-list header echo of the r85 history-row tick strip —
+                // the run's own progress at the top of the step cards, same r80
+                // status semantics, one notch larger (primary view). >12-step
+                // runs show the first 12 ticks plus the true k/n count.
+                const d = viewedRun.steps.filter((s) => s.status === "done").length;
+                const truncated = viewedRun.steps.length > 12;
+                return (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Steps
+                    </span>
+                    <span
+                      className="flex items-center gap-[4px]"
+                      role="img"
+                      aria-label={`${d} of ${viewedRun.steps.length} steps done`}
+                    >
+                      {viewedRun.steps.slice(0, 12).map((s, si) => (
+                        <span
+                          key={`${viewedRun.id}-tick-${si}`}
+                          title={`Step ${si + 1} · ${s.status}`}
+                          className={cn(
+                            "h-2 w-1.5 rounded-sm",
+                            s.status === "done" && "bg-emerald-500",
+                            s.status === "error" && "bg-red-500",
+                            s.status === "stopped" && "bg-zinc-400 dark:bg-zinc-600",
+                            s.status === "running" && "animate-pulse bg-violet-400",
+                            s.status === "pending" && "bg-zinc-300 dark:bg-zinc-700"
+                          )}
+                        />
+                      ))}
+                    </span>
+                    {d < viewedRun.steps.length || truncated ? (
+                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                        {d}/{viewedRun.steps.length}
+                      </span>
+                    ) : null}
+                    {truncated ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        (first 12 shown)
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })() : null}
               {viewedRun.steps.map((step, i) => {
                 const agent = agents.find((a) => a.id === step.agentId);
                 return (

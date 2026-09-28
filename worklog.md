@@ -2029,3 +2029,18 @@ Work Log:
 Stage Summary:
 - The lane-pool picture is now three-layered: vault keys -> buildRelayChain hops -> wire; agents may carry pins that bypass the runner's resolution. Recipe v4 turns the next attempt into a DECISIVE experiment (pin inspection + transport discrimination built in).
 - NEXT: 1) E2E recipe v4 (fits one dedicated round: pre-inspect agents, inject, start, discriminate transport, cleanup), 2) stall-failover epic (gate pending), 3) no styling debt.
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 12:23 +08)
+Agent: main (review round)
+Task: r86 — step-list header tick-strip echo (r85 candidate polish #3) + PIN-resolution forensics closing the 10:23 routing question
+
+Work Log:
+- QA: HTTP 200; cron CLI still absent (platform-side, 15th round) — fleet 2/2 behavioral. NOTE: 12:07 patrol produced NO heartbeat line — 3 consecutive tool-call failures that round (Bash x2, Read x1, platform-side); tools recovered by this round. Heartbeat gap 11:37->12:23 is the outage's fingerprint, not a fleet death.
+- PIN FORENSICS CLOSED (llm-config.ts): parsing site = resolveExplicitLlm :99-131 — "custom::<model>" pins use the LEGACY settings.baseUrl directly; unknown/keyless pids fall back to resolveLlm + fallbackNote, so EMPTYING providerKeys necessarily severs ANY pin (v4 assumption #1 CONFIRMED). resolveLlm :41-84: agentModel is a plain model name (never a pin); activeProviderId() :27-31 returns "custom" when provider!=="auto" && activeProviderId empty -> legacy branch. So the 10:23 injection SHOULD have produced the legacy 4319 lane yet dialed Vyce/AIHubMix with relayEnabled=false (wire=[]) — strongest remaining explanation: the runner's rotator lane pool is built independently from providerKeys (not the wire) and took over the dialing; v4's empty-providerKeys step is exactly the discriminating experiment. If it STILL misses 4319, the call path is server-side (/api/chat lane builder next).
+- r86 SHIPPED (workflow-run-panel.tsx, 1 edit, view-only): STEP-LIST HEADER tick strip — sits between the recovery card and the step cards, echoes the r85 history-row language at one notch larger (h-2 w-1.5): "STEPS" label + up-to-12 ticks (emerald done / red error / zinc stopped / pulsing violet running / zinc-300 pending) + k/n tabular count when incomplete OR truncated + "(first 12 shown)" hint on >12-step runs; role=img + aria-label + per-tick title tooltips. Clean runs (all done, <=12) show no count — zero clutter, matches r85 doctrine.
+- VERIFIED SO FAR: eslint clean (exit 0), HMR compiled 298ms, console clean pre-edit, app 200. DOM/E2E check NOT yet run — round budget (12) consumed by forensics+implementation. NEXT ROUND MUST: open a run dialog in the QA profile (stored errored run "Quick probe test", 7 steps done/done/error/stopped x4) and eval-verify the header strip: "2 of 7 steps done", 7 ticks h-2 w-1.5, count "2/7"; then a done run (all emerald, no count). View-only JSX sharing r85's verified pattern — low risk, but the record stays honest until the DOM check lands.
+
+Stage Summary:
+- r85 candidate polish #3 shipped: run truth is now echoed at every depth of the run view (header strip -> per-step cards -> history rows). PIN parsing site + fallback semantics mapped — recipe v4 is now fully de-risked on the client side.
+- NEXT: 1) r86 DOM verification (first action, 1 eval round), 2) E2E recipe v4 dedicated round (client side de-risked; discriminator = empty providerKeys), 3) stall-failover epic (gate pending).
