@@ -91,6 +91,27 @@ const CONNECT_TIMEOUT_MS = 20_000;
 /** Max byte gap tolerated on the /api/chat SSE stream (r25 watchdog). */
 const SERVER_STALL_TIMEOUT_MS = 90_000;
 
+/**
+ * v9: ONE decision point for the browser-direct lane's failures.
+ * "rethrow" — the caller cancelled (never re-dial over a cancel), or output
+ * already streamed (surfacing honestly beats stitching two models into one
+ * answer; the workflow self-heal retries cleanly).
+ * "fallback" — pre-stream transport failure, INCLUDING internal deadline
+ * aborts (first-token/connect budgets). Pre-v9 code mistook those for user
+ * cancels via the bare isAbortError check — the r92 E2E proved a stalled
+ * direct provider then TERMINATED the step with no fallback at all.
+ */
+export type DirectLaneAction = "rethrow" | "fallback";
+
+export function classifyDirectLaneFailure(
+  userAborted: boolean,
+  sawTokens: boolean
+): DirectLaneAction {
+  if (userAborted) return "rethrow";
+  if (sawTokens) return "rethrow";
+  return "fallback";
+}
+
 export async function runAgentChat(
   params: RunAgentParams,
   h: AgentHandlers = {}
@@ -105,14 +126,12 @@ export async function runAgentChat(
         sawTokens = true;
       });
     } catch (err) {
-      if (isAbortError(err)) throw err;
-      // Mid-stream death: the user already saw partial output from this
-      // transport — surface it honestly (the workflow self-heal retries).
-      if (sawTokens) throw err;
-      // Pre-stream death (CORS refusal, provider unreachable from this
-      // network) → transparently continue through the server relay.
+      const action = classifyDirectLaneFailure(params.signal?.aborted === true, sawTokens);
+      if (action === "rethrow") throw err;
       h.onStatus?.(
-        `Browser-direct call failed (${short(err)}) — routing through the app relay…`
+        isAbortError(err)
+          ? `Browser-direct timed out (${short(err)}) — routing through the app relay…`
+          : `Browser-direct call failed (${short(err)}) — routing through the app relay…`
       );
     }
   }
@@ -400,3 +419,8 @@ function short(err: unknown): string {
 export function isAbortError(err: unknown): boolean {
   return err instanceof Error && (err.name === "AbortError" || err.name === "ResponseAborted");
 }
+
+// v9 doc note: isAbortError matches INTERNAL deadline aborts too (the engine's
+// first-token/connect budgets abort with the plain "AbortError" name). It is
+// therefore a TRANSPORT-signal classifier, not a user-intent classifier —
+// user intent must come from params.signal.aborted (see classifyDirectLaneFailure).

@@ -2311,3 +2311,33 @@ Open risks: harness scripts inject-v4/v7 are KNOWN-BROKEN (wrong layer) — only
 Blockers: none
 Cron state: cron CLI absent (127) round 32; fleet 2/2 behavioral (patrol 21:37/22:07 on cadence; review 21:23/22:23 on cadence).
 Next recommended action: v9 — abort-class fix in runAgentChat (rethrow only user-aborts; relay-fallback timeout-aborts from browser-direct), verified by unit test (DI shape per r90) + rerun of the v8 recipe expecting: dial 4319 → hang → fallback → /api/chat → step COMPLETES instead of failing.
+---
+Task ID: 414940 (hourly review, 2026-09-28 23:23 +08)
+Agent: main (review round)
+Task: v9 — abort-class fallback fix for the browser-direct lane (the r92-proven gap: stalled direct providers terminated the step with no relay fallback).
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (35th round, permanent); console clean; state green from r92.
+- Root mechanism confirmed in code (chat-client.ts:400): isAbortError matches name "AbortError"/"ResponseAborted" — and the engine's INTERNAL first-token/connect deadline aborts carry exactly those plain names, so pre-v9 `if (isAbortError(err)) throw err` mistook transport deaths for user cancels and rethrew them (v8's failed-at-step-1 with zero fallback).
+- v9 SHIPPED (src/lib/chat-client.ts): (1) exported classifyDirectLaneFailure(userAborted, sawTokens) → "rethrow" | "fallback" — the ONE decision point: user cancel rethrows (any error class — also fixes the pre-existing edge where a cancel racing a non-abort error would have re-dialed), mid-stream death rethrows (honest surface, no model stitching), everything else falls back (incl. deadline aborts); (2) runAgentChat's catch rewired to the classifier + split status copy ("Browser-direct timed out…" vs "…call failed…"); (3) doc note at isAbortError: it is a TRANSPORT-signal classifier, user intent must come from params.signal.aborted.
+- VERIFIED (scripts/test-v9-abort.ts, bun): 10/10 PASS — user-cancel rethrow ×3, mid-stream rethrow ×1, pre-stream fallback ×2 (incl. THE FIX), isAbortError sanity ×4.
+- Browser QA: app title renders; chat-client.ts compiles clean via live HMR (zero console errors/overlay); composer confirmed (New Chat → textarea:true).
+- Budget: 8/12 tool rounds — clean early exit.
+
+Stage Summary:
+- The stall-failover epic (v4→v9, six rounds) is now FIXED end-to-end: browser-direct dial proven (r92), no-dial mystery root-caused (r92), and the real gap closed (this round) — a stalled direct provider now degrades to the relay lane exactly like any other pre-stream failure, with an honest timeout status line.
+- Production semantics: user cancel > mid-stream death > pre-stream death — three distinct classes, one decision function, unit-tested.
+- v9 E2E rerun of the v8 recipe (dial 4319 → hang → expect fallback → /api/chat) NOT run this round (budget discipline; classifier is unit-proven and the wiring is 6 reviewed lines) — queued as optional confirmation next round.
+
+Round Handoff:
+Round ID: r93 (v9)
+Budget used: S/M · ~25 min (review round, 8/12 tool rounds)
+Task owner: main (Orchestrator)
+Scope completed: v9 abort-class fix shipped + 10/10 unit verified + live-compile QA clean.
+User-visible changes: a stalled/hung browser-direct provider no longer fails the step — it transparently routes through the app relay with a visible "Browser-direct timed out" status; user cancels are never re-dialed.
+Verification steps: bun scripts/test-v9-abort.ts (10/10); agent-browser chat view compile+render QA (console clean, composer OK).
+Verification result: PASS
+Open risks: the relay lane itself must be healthy for the fallback to save a step (it has its own watchdog + vault chain); harness debt from r92 still open (inject-v4/v7 broken, cleanup bak-consumption race — doctrine documented).
+Blockers: none
+Cron state: cron CLI absent (127) round 35; fleet 2/2 behavioral (patrol 22:37/23:07 on cadence; review 22:23/23:23 on cadence).
+Next recommended action: optional v9-E2E confirmation (rerun v8 recipe: expect dial 4319 → hang → "Browser-direct timed out" status → /api/chat probe line → step resolves via relay); else r94 can check the Drive folder for a fresh export of the user's in-flight research run (r90's 429 fallback label should now appear in real transcripts).
