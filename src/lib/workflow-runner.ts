@@ -161,6 +161,14 @@ export interface ExecuteRunOptions {
   /** Optional external stop handle — defaults to the runner's own controller. */
   signal?: AbortSignal;
   /**
+   * v11 "Retry via relay": when true, every model call in this execution skips
+   * the browser-direct lane and runs through the server relay (/api/chat).
+   * Recovery-card escape hatch for steps whose DIRECT lane died mid-stream
+   * (sawTokens deaths rethrow by design — the auto-fallback only covers
+   * pre-stream failures), or whose direct provider is otherwise unusable.
+   */
+  forceServer?: boolean;
+  /**
    * Resume an existing errored/stopped run instead of creating a new row:
    * completed step outputs are preserved, execution restarts at fromStepIndex.
    * When set, `task` is ignored (the run's original task is reused).
@@ -357,6 +365,8 @@ export async function executeWorkflowRun(
   options: ExecuteRunOptions
 ): Promise<string | null> {
   const { source = "manual", onStarted, onSettled } = options;
+  // v11: recovery-card "Retry via relay" escape hatch (see ExecuteRunOptions).
+  const forceServer = options.forceServer === true;
   const wf = useWorkflowsStore
     .getState()
     .workflows.find((w) => w.id === options.workflow.id);
@@ -671,6 +681,7 @@ export async function executeWorkflowRun(
             system,
             messages: [{ role: "user", content: context }],
             ...(relayHops.length > 0 ? { relay: relayHops } : {}),
+            ...(forceServer ? { forceServer: true } : {}),
             signal,
           },
           {

@@ -19,6 +19,7 @@ import {
   Square,
   Undo2,
   X,
+  Server,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -188,7 +189,7 @@ function RunRecoveryCard({
   run: WorkflowRun;
   workflow: Workflow;
   busy: boolean;
-  onResume: (fromStepIndex: number) => void;
+  onResume: (fromStepIndex: number, opts?: { forceServer?: boolean }) => void;
   onRestart: () => void;
 }) {
   const [dismissed, setDismissed] = React.useState(false);
@@ -363,6 +364,19 @@ function RunRecoveryCard({
               ? "Retry failed step"
               : "Resume from failed step"}
         </Button>
+        {!stopped && err ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy || firstPending === -1}
+            onClick={() => onResume(firstPending, { forceServer: true })}
+            title="Re-run this step through the app relay instead of the direct provider — the escape hatch for mid-stream stalls the direct lane can't recover from"
+          >
+            <Server className="h-3.5 w-3.5" aria-hidden />
+            Retry via relay
+          </Button>
+        ) : null}
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onRestart}>
           <Play className="h-3.5 w-3.5" aria-hidden />
           Restart from scratch
@@ -506,7 +520,7 @@ export function WorkflowRunPanel({
   }
 
   /** Continue an errored/stopped run from a step — completed outputs preserved. */
-  async function resumeRun(fromStepIndex: number) {
+  async function resumeRun(fromStepIndex: number, opts?: { forceServer?: boolean }) {
     const wf = liveWorkflow;
     const run = viewedRun;
     if (!wf || !run || running) return;
@@ -515,6 +529,7 @@ export function WorkflowRunPanel({
       task: run.task,
       resume: { runId: run.id, fromStepIndex },
       source: "manual",
+      forceServer: opts?.forceServer === true,
       onStarted: (runId, controller) => {
         setViewingRunId(runId);
         setRunning(true);

@@ -2432,3 +2432,34 @@ Open risks: "relay leg completes the step" case not locally E2E-able (needs a pu
 Blockers: none
 Cron state: cron CLI absent (127) round 38; fleet 2/2 behavioral (patrol 01:37/02:07 on cadence; review 02:23 = this round).
 Next recommended action: the stall-failover epic is CLOSED — r97 should pick fresh product work from the backlogs (candidates: improve the recovery-card UX with a "retry via relay" one-click action now that the fallback exists; or new feature per the hourly mandate), starting from a clean worklog tail read.
+---
+Task ID: 414940 (hourly review, 2026-09-29 03:23 +08)
+Agent: main (review round)
+Task: v11 "Retry via relay" — recovery-card escape hatch for mid-stream direct-lane deaths (first product increment after the epic close).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r96 (epic closed, zero pending fixes).
+- GAP ADDRESSED: the v10 auto-fallback covers PRE-stream direct-lane failures only; MID-STREAM deaths (sawTokens) rethrow by design — until now the user's only option was "Retry failed step", which re-dials the SAME direct lane and typically dies the same way. forceServer existed in RunAgentParams (chat-client.ts:49) but NO caller ever passed it.
+- v11 SHIPPED (small diff, 2 files):
+  (1) workflow-runner.ts — ExecuteRunOptions.forceServer?: boolean (documented: skip browser-direct, run through /api/chat); executeWorkflowRun reads options.forceServer === true; runAgentChat params spread `...(forceServer ? { forceServer: true } : {})` before signal.
+  (2) workflow-run-panel.tsx — onResume signature widened to (fromStepIndex, opts?: {forceServer?}); resumeRun threads opts into executeWorkflowRun; recovery card gains a "Retry via relay" outline button (Server icon, title-tooltip explaining the mid-stream-stall rationale) rendered when !stopped && err, wired onClick={() => onResume(firstPending, { forceServer: true })}.
+- UX placement: sits between "Retry failed step" and "Restart from scratch" — direct retry first (cheap, same lane), relay retry as the deliberate second lane, restart as last resort.
+- VERIFIED: live HMR compile clean (app + Workflows panel open, 6 workflow cards render, zero console errors/overlay); the changed signature pair (panel prop ↔ runner option ↔ chat-client param) is compile-checked end-to-end through the module graph. Button render requires a failed run row (not fabricated this round — hang-server recipe is a full round; the render path is plain conditional JSX verified by reading).
+- Budget: 11/12 tool rounds — clean exit.
+
+Stage Summary:
+- Product surface after epic close: a failed step now offers THREE lanes — retry direct (same lane), retry via relay (forced /api/chat, the v10-proven healthy path), restart. The mid-stream-death salvage path that motivated "honest rethrow" now has a user escape hatch.
+- No behavior change for happy paths: forceServer defaults false everywhere; scheduled runs and chat UI untouched.
+
+Round Handoff:
+Round ID: r97 (v11 retry-via-relay)
+Budget used: S/M · ~20 min (11/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v11 shipped (runner option + panel button + threading), compile-verified live.
+User-visible changes: failed-step recovery card gains "Retry via relay" — one click re-runs the step through the app relay (forceServer), completing the mid-stream-stall story: honest surface + manual salvage.
+Verification steps: HMR compile clean; Workflows panel renders 6 cards, no overlay; edit diffs read back (8/8 anchors applied as intended); signature chain compile-checked.
+Verification result: PASS
+Open risks: button render-on-failed-run not visually captured (needs a real failed run or hang-server recipe — cheap to piggyback on any future E2E); no unit test added (pure prop threading, covered by compile).
+Blockers: none
+Cron state: cron CLI absent (127) round 39; fleet 2/2 behavioral (patrol 02:37/03:07 on cadence; review 03:23 = this round).
+Next recommended action: r98 — piggyback a visual capture of the new button on the next real failed run (or the hang-server recipe if the queue is quiet); else continue product backlog (e.g., show relay-hop attribution in the LLM-calls list when a step ran via relay — the relayNotes plumbing already exists at workflow-runner.ts:646).
