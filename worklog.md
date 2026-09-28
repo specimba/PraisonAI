@@ -2463,3 +2463,33 @@ Open risks: button render-on-failed-run not visually captured (needs a real fail
 Blockers: none
 Cron state: cron CLI absent (127) round 39; fleet 2/2 behavioral (patrol 02:37/03:07 on cadence; review 03:23 = this round).
 Next recommended action: r98 — piggyback a visual capture of the new button on the next real failed run (or the hang-server recipe if the queue is quiet); else continue product backlog (e.g., show relay-hop attribution in the LLM-calls list when a step ran via relay — the relayNotes plumbing already exists at workflow-runner.ts:646).
+---
+Task ID: 414940 (hourly review, 2026-09-29 04:23 +08)
+Agent: main (review round)
+Task: v11b — relay-lane attribution in the LLM-calls list (r97's queued observability increment).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r97.
+- GAP: the runner's call records only attached a note for browser-direct lanes ("key stayed in your browser") or when relay hop-notes existed — a QUIET relay win (v10 auto-fallback completing with no hop rotation, or any v11 forced retry with a healthy first hop) was indistinguishable from a direct win in the UI.
+- v11b SHIPPED (2 files, small diffs):
+  (1) workflow-runner.ts success-path note logic — now lane-aware for ALL transports: browser-direct → "browser-direct — key stayed in your browser" (unchanged); transport==="server" → NEW "server relay — routed through the app's vault chain", or "server relay (forced retry — direct lane skipped)" when v11's forceServer flag is set (hop notes still appended after); unknown/absent transport falls back to the old relayNotes-only behavior.
+  (2) workflow-run-panel.tsx call list rendering — lane-aware styling: notes starting with "server relay" render sky-300 with a "⇄" glyph; all other notes keep the amber-300 "↻" mono style. Same JSX shape, purely additive class/glyph branch.
+- VERIFIED: live HMR compile clean (app + Workflows panel, 6 cards, zero console errors); existing historical notes render unchanged (amber path); the sky/⇄ path is a conditional branch on note prefix — records only on NEW relay-served calls (none fabricated this round; first real forced-retry or v10-fallback success will populate it).
+- Budget: 6/12 tool rounds — clean early exit.
+
+Stage Summary:
+- The v4→v11b arc now has full observability: every LLM call in a run's call list states WHICH lane served it (browser-direct vs server relay vs forced retry) plus hop rotation notes — the user can finally SEE the stall-failover machinery working instead of inferring it from errors.
+- Cumulative product state: 3 recovery lanes on failed steps (retry direct / retry via relay / restart), automatic pre-stream fallback (v10), honest mid-stream surfaces (v9), lane attribution per call (v11b).
+
+Round Handoff:
+Round ID: r98 (v11b lane attribution)
+Budget used: S · ~12 min (6/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v11b shipped + compile-verified; no behavior change to existing notes.
+User-visible changes: new runs show a sky "⇄ server relay — …" note on relay-served calls (forced retries labelled "forced retry — direct lane skipped").
+Verification steps: HMR compile clean; panel render check (6 cards, 0 console errors); historical notes unchanged.
+Verification result: PASS
+Open risks: none new; the sky-chip render path awaits its first real relay-served call (cheap piggyback check on any future E2E/failed run).
+Blockers: none
+Cron state: cron CLI absent (127) round 40; fleet 2/2 behavioral (patrol 03:37/04:07 on cadence; review 04:23 = this round).
+Next recommended action: r99 — pick from the product backlog; candidates: (a) surface res.transport in the CHAT view too (chat messages currently don't state their lane — same attribution idea one screen over); (b) a "lane health" mini-panel summarizing recent calls' direct/relay ratio; (c) visual capture of the v11 button + v11b chip together on the next failed run.

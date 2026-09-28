@@ -727,9 +727,17 @@ export async function executeWorkflowRun(
           ms: Date.now() - stepStart,
           ok: true,
           attempt,
-          ...(relayNotes.length > 0 || res.transport === "browser-direct"
-            ? { note: [...(res.transport === "browser-direct" ? ["browser-direct — key stayed in your browser"] : []), ...relayNotes].join(" → ") }
-            : {}),
+          ...(res.transport === "browser-direct"
+            ? { note: ["browser-direct — key stayed in your browser", ...relayNotes].join(" → ") }
+            : res.transport === "server"
+              ? // v11b: lane attribution for EVERY relay-served call (incl. the
+                // v10 auto-fallback and v11 forced retries) — previously only
+                // browser-direct and hop-note runs were labelled, so a quiet
+                // relay win was indistinguishable from a direct win.
+                { note: [forceServer ? "server relay (forced retry — direct lane skipped)" : "server relay — routed through the app's vault chain", ...relayNotes].join(" → ") }
+              : relayNotes.length > 0
+                ? { note: relayNotes.join(" → ") }
+                : {}),
         });
         patchRunStep(runStep.stepId, {
           output: res.content,

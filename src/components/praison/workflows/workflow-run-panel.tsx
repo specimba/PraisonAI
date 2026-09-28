@@ -337,8 +337,16 @@ function RunRecoveryCard({
                       )}
                       {c.attempt && c.attempt > 1 ? ` (attempt ${c.attempt})` : ""}
                       {c.note ? (
-                        <span className="mt-0.5 block font-mono text-[10px] text-amber-300/90">
-                          ↻ {c.note}
+                        <span
+                          className={
+                            "mt-0.5 block font-mono text-[10px] " +
+                            (c.note.startsWith("server relay")
+                              ? "text-sky-300/90"
+                              : "text-amber-300/90")
+                          }
+                        >
+                          {c.note.startsWith("server relay") ? "⇄ " : "↻ "}
+                          {c.note}
                         </span>
                       ) : null}
                     </li>
