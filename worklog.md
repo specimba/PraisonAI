@@ -2044,3 +2044,20 @@ Work Log:
 Stage Summary:
 - r85 candidate polish #3 shipped: run truth is now echoed at every depth of the run view (header strip -> per-step cards -> history rows). PIN parsing site + fallback semantics mapped — recipe v4 is now fully de-risked on the client side.
 - NEXT: 1) r86 DOM verification (first action, 1 eval round), 2) E2E recipe v4 dedicated round (client side de-risked; discriminator = empty providerKeys), 3) stall-failover epic (gate pending).
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 13:23 +08)
+Agent: main (review round)
+Task: r86 DOM verification round — defensive branch VERIFIED, render branch blocked by empty legacy step data; storage forensics + eval-quirk recipes recorded
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (16th round, platform-side) — fleet 2/2 behavioral. Console clean.
+- r86 DOM CHECK (agent-browser eval, real DOM): opened dossier dialog -> "Run history (0)" (!!), switched to Novelty Lab -> "Run history (4)" -> expanded (e79) -> clicked latest row (e86) -> dialog shows "Task: Same weekly digest task, fourth edition" -> **ZERO .h-2 ticks, zero run-view strips**: viewedRun.steps.length === 0 for ALL stored runs (Novelty's 4 runs are 4d old, pre-date per-step persistence; r86's steps.length>0 guard correctly renders nothing — defensive branch VERIFIED by absence).
+- STORAGE FORENSICS (new fact): dossier's QA-era runs (the 7-step "Quick probe test" error run that r84/r85 verified against) are GONE — "Run history (0)". The 10:23 E2E round's "restore workflows from backup" rolled the QA profile's run history back. r85's verified state existed then; it does not exist now. Lesson: E2E restore-from-backup also reverts run-history evidence — snapshot DOM facts in-round, never defer verification of shipped UI.
+- RENDER-BRANCH RECIPE (next round, ~3 rounds): inject a synthetic run with a populated steps array into the persist envelope (state.workflows[].runs — match WorkflowRun type incl. steps[{stepId,agentName,agentEmoji,kind,status,output}]) with statuses done/done/error/stopped -> reload -> expect r86 header "STEPS" + 4 ticks (2 emerald, 1 red, 1 zinc) + "2/4" count. r85 history-row strip validates alongside (same stored data).
+- EVAL QUIRK RECIPES (agent-browser): backslash regexes (\d, \/) and parenthesized grouping inside eval strings get mangled by CLI arg processing -> SyntaxError; RegExp constructor ALSO failed. Working pattern: simple property/member expressions only, no regexes (use textContent.includes / className.indexOf), split complex checks into several small evals joined by ";".
+- Budget note: DOM verification + two dialog switches consumed the window; the synthetic-run injection is queued as NEXT round's first action.
+
+Stage Summary:
+- r86 defensive behavior confirmed live (no steps -> no strip, no crash); render branch has a precise 3-round verification recipe. New standing fact: QA-profile run history is post-10:23-restore (all legacy runs step-less).
+- NEXT: 1) synthetic-run injection -> r86 render-branch verification (+k/n count + red tick), 2) E2E recipe v4 dedicated round, 3) stall-failover epic (gate pending).
