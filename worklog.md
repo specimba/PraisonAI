@@ -2187,3 +2187,35 @@ Stage Summary:
 - v6 landed: server-side forensic channel exists and works; it immediately falsified a two-round-old assumption. THIS IS THE SYSTEM WORKING.
 - v7 recipe (top priority, ~4 rounds): make the probe agent DIAL — in inject-v4.js set the probe step's agent model to an explicit model id with provider=custom (not "auto"), so workflow-runner passes provider="custom"+baseUrl → canDirect=true → preflight+POST hit 4319 (logged with browser UA) → hang → watchdog 20s → auto-resume chain. Then the stall-failover epic has its real E2E.
 - Alternative if v7 gate still blocks: epic falls to option (c) — unit-level stall tests (no UI).
+---
+Task ID: r89 (direct user round, 2026-09-28 ~19:45 +08)
+Agent: main (Orchestrator/Archivist)
+Task: User delivered the Google Drive curation folder link ("use this from now on") — new canonical file-delivery channel replacing the dead upload/ folder. Access it, absorb its contents, integrate.
+
+Work Log:
+- Drive folder 1I-zhqA006-UQ2wanYd8An0FaSi_Jc0Sp is PUBLIC and readable via agent-browser (12 files listed). Downloaded 5 priority files via uc?export=download into drive/ mirror: run-continuous-research-2809.md (48.7KB, today 06:50), run-continuous-research-main.md (100.5KB, 9/27), OPERATING_DOCTRINE.md (16.6KB), decision-log.md (28.6KB), ROUND_HANDOFF_TEMPLATE.md (6KB). Provider-vault JSONs deliberately NOT downloaded (r54 addendum: accepted-risk honeypot — not re-flagged, not exfiltrated).
+- DOCTRINE ABSORBED (docs/OPERATING_DOCTRINE.md now canonical in repo): round budgeting S/M/L tiers, verification levels + anti-theatre rules, delegation model, harness selection policy, cron boot-ensure from ops/cron.jobs.json, memory/context layers, failure-handling shapes, handoff requirements, roadmap P0-P2, r54 relay/honeypot addendum. All future rounds: worklog section + machine-readable handoff (template adopted as of THIS entry).
+- RUN EXPORTS FORENSICS (user's real production hourly research routine):
+  * 2809 export (today 06:50): run started 09:34, 8/11 steps done at export, steps 9-11 pending — IN-FLIGHT, not failed. web_search returned HTTP 429 on EVERY call all morning; arxiv_search returned 8 live 2026-09-25 papers — multi-source fallback WORKS.
+  * main export (9/27): all 11 steps done (step 11 review in-flight at export), 447s+504s deep passes, 26 tool calls in pass 3 — the routine now SUCCEEDS end-to-end.
+  * RECORD CORRECTION: the 9/22 "failed run step 3/11 network error" evidence never existed as an export — the 9/22 upload paste is AIHubMix LLM Router DOCS (reference material, not a run). The old failure is superseded by two successful 11-step runs.
+- THE LIVE PRODUCTION PAIN (both exports): web_search 429 storms kill Stage-1 gathering every hour; agents self-recover via arxiv_search but burn tool rounds doing it. Ready-made fix from the run's own output: automatic fallback ladder web_search → arxiv_search → wikipedia-style source when 429 detected (tool-layer resilience, mirrors relay r54 lane shapes).
+- GOVERNANCE DOCS SYNCED INTO REPO: docs/OPERATING_DOCTRINE.md + docs/ROUND_HANDOFF_TEMPLATE.md placed (were referenced but missing); docs/decision-log.md updated from 184→190 lines (Drive copy is a strict superset — 6 newer r31 entries).
+
+Stage Summary:
+- Drive channel VERIFIED WORKING end-to-end (list → extract IDs → curl download). upload/ remains dead; /tmp/my-project/download/ still works for chat attachments. From now on: Drive = canonical curation channel, checked first each session.
+- Doctrine formally adopted; this entry carries the first formal handoff (below).
+- Queued r90: web_search 429 auto-fallback ladder in the tool layer (guardedFetch/execute route) — the single highest-value fix visible in real production evidence.
+
+Round Handoff:
+Round ID: r89
+Budget used: S · ~25 min (direct user round)
+Task owner: Orchestrator/Archivist (main)
+Scope completed: (1) Drive folder accessed + 5 files downloaded to drive/; (2) doctrine/template/decision-log absorbed + synced into docs/ (decision-log 184→190); (3) both run exports forensically parsed; (4) honeypot vault files left untouched per r54 addendum.
+User-visible changes: none in the GUI (governance + evidence round); the user now has a working file channel.
+Verification steps: agent-browser open drive folder → snapshot lists 12 rows; curl uc?export=download per ID → byte sizes match Drive listing (48720/100458/16580/28607/6040); diff repo vs drive decision-log = 6-line strict superset; file heads inspected (run report headers match).
+Verification result: PASS
+Open risks: Drive folder contents change upstream (re-sync needed per session); run exports are in-flight snapshots (steps 9-11 pending) — a later export may reveal a real failure worth forensics; web_search 429 root cause is upstream quota, not app code — fallback mitigates but does not remove it.
+Blockers: none
+Cron state: cron CLI absent (127) rounds 20-23 documented; fleet 2/2 alive by behavioral verification (patrol 18:37/19:07 on cadence; review 18:23/19:23 on cadence); no recreation attempted per standing rule.
+Next recommended action: r90 — implement web_search 429 auto-fallback to arxiv_search (tool layer), verified by forcing a 429 via the v6 hang-server pattern (bounded 429 mode) and observing the ladder in a live run.
