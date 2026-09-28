@@ -2170,3 +2170,20 @@ Stage Summary:
 - v5 landed: the hang server now speaks CORS — the browser-direct lane can physically reach it for the first time. E2E timing evidence supports hang→watchdog→relay fallback actually occurring end-to-end.
 - v6 queued (top): server-side call log for DEFINITIVE dial proof + full resume-chain observation (~4 rounds).
 - State fully restored; no production code touched this round (harness-only).
+---
+Task ID: 414940 (hourly review, 2026-09-28 19:23 +08)
+Agent: main (review round)
+Task: v6 — hang-server file-backed call log + definitive browser-direct dial proof E2E.
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (22nd round); 4319 still alive from v5; state clean.
+- v6 SHIPPED (scripts/hang-server.ts, harness-only): file-backed call log at ops/hang-server-calls.log (daemonized stdout is /dev/null — file is the only channel). Logs method/path/UA/note per request; POST branch parses body for model=; preflight+health logged. Restarted, baseline verified (curl health entry appears with curl UA).
+- E2E RAN TWICE: (1) verbatim recipe — NO POST in log, relay finished 12.7s; (2) after fixing a real harness bug: inject-v4.js wrote localStorage WITHOUT reload — the in-memory settings (450ms debounce) win the race (quirk #1 doctrine violation inside the harness itself). Fixed by explicit location.reload() between inject and start; settings VERIFIED active in store (provider=custom, baseUrl=4319, stall=20000). STILL no POST in the call log.
+- ROOT CAUSE (chat-client.ts:94-120 read): canDirect = !forceServer && params.provider==="custom" && !!params.baseUrl. The params come from the CALLER — workflow-runner resolves each agent's model; agents injected as model="auto" resolve to the server auto engine, so params.provider ≠ "custom" → gate false → browser-direct never attempted. The 17:23 call graph was correct about chat-client but the workflow-runner caller context falsifies the 16:23 "browser dialed 4319" reading.
+- RECORD CORRECTION: v5's "+5s Queued → +25s relay streaming" timing fit is WEAKENED — the auto engine's first-token latency under web-search rate-limiting (~20s) explains the v5 observation without any held hung connection. The browser-direct dial for workflow runs is UNPROVEN and now DISPROVEN under agents=auto.
+- CLEANUP: stop + cleanup-v4.js (settings/workflows RESTORED, stall key REMOVED) + same-eval reload. Call log kept at ops/hang-server-calls.log for v7.
+
+Stage Summary:
+- v6 landed: server-side forensic channel exists and works; it immediately falsified a two-round-old assumption. THIS IS THE SYSTEM WORKING.
+- v7 recipe (top priority, ~4 rounds): make the probe agent DIAL — in inject-v4.js set the probe step's agent model to an explicit model id with provider=custom (not "auto"), so workflow-runner passes provider="custom"+baseUrl → canDirect=true → preflight+POST hit 4319 (logged with browser UA) → hang → watchdog 20s → auto-resume chain. Then the stall-failover epic has its real E2E.
+- Alternative if v7 gate still blocks: epic falls to option (c) — unit-level stall tests (no UI).

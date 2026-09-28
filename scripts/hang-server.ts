@@ -29,13 +29,29 @@ Bun.serve({
   port,
   idleTimeout: 255, // bun max (seconds) — keep sockets alive while hanging
   fetch(req) {
-    if (req.method === "OPTIONS")
+    // v6 (19:23 round): file-backed call log — daemonized stdout is /dev/null,
+    // so forensic proof of WHO dialed us must land in a file. Browser-direct
+    // lane fetches carry the browser UA; server relay carries a Node/Bun UA.
+    const CALL_LOG = "/home/z/my-project/ops/hang-server-calls.log";
+    const logCall = (note: string) =>
+      Bun.write(
+        CALL_LOG,
+        `${new Date().toISOString()} ${req.method} ${new URL(req.url).pathname} ` +
+          `ua=${(req.headers.get("user-agent") ?? "?").slice(0, 80)} ${note}\n`,
+        { append: true }
+      );
+    if (req.method === "OPTIONS") {
+      void logCall("preflight");
       return new Response(null, { status: 204, headers: corsHeaders(req) });
+    }
     const url = new URL(req.url);
-    if (url.pathname === "/health")
+    if (url.pathname === "/health") {
+      void logCall("health");
       return new Response("hanging ok", { headers: corsHeaders(req) });
+    }
     const hangMs = Number(url.searchParams.get("hang") ?? 0);
     if (hangMs > 0) {
+      void logCall(`bounded-hang=${hangMs}ms`);
       return new Promise((resolve) =>
         setTimeout(
           () =>
@@ -49,6 +65,16 @@ Bun.serve({
         )
       );
     }
+    void req
+      .text()
+      .catch(() => "")
+      .then((body) => {
+        let model = "?";
+        try {
+          model = String(JSON.parse(body)?.model ?? "?");
+        } catch {}
+        return logCall(`HANG model=${model}`);
+      });
     return new Promise(() => {}); // hang forever — the whole point
   },
 });
