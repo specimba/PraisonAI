@@ -437,14 +437,18 @@ export function runDiagnostics(
   ];
   const e = run.error;
   if (e) {
+    // r84: live recovery math (same fix as the run panel) — the frozen snapshot
+    // carried the resumed loop's LOCAL index, so resumed runs reported 0 done.
+    const failIdx = run.steps.findIndex((s) => s.status === "error");
+    const doneN = run.steps.filter((s) => s.status === "done").length;
     lines.push(
       "",
       "[failure]",
-      `step     : #${e.stepIndex + 1} "${e.stepLabel}" (${e.stepId})`,
+      `step     : #${(failIdx === -1 ? e.stepIndex : failIdx) + 1} "${e.stepLabel}" (${e.stepId})`,
       `agent    : ${e.agentName}`,
       `kind     : ${e.kind}`,
       `engine   : ${e.llmLabel}`,
-      `stepsDone: ${e.stepsDone}/${run.steps.length}`,
+      `stepsDone: ${doneN}/${run.steps.length}`,
       `toolsOk  : ${e.toolCallsOk} (inside the failed step)`,
       `attempts : ${e.attempts}`,
       `autoRetry: ${e.autoRetried ? "1 (the runner retried this step automatically before surfacing)" : "none"}`,

@@ -209,6 +209,13 @@ function RunRecoveryCard({
   const firstPending = run.steps.findIndex((s) => s.status !== "done");
   const hasOutput = run.steps.some((s) => s.output.trim().length > 0);
   const stopped = run.status === "stopped";
+  // r84: live recovery math. The frozen err.stepsDone/err.stepIndex snapshot was
+  // built at failure time with the resumed loop's LOCAL index (the resume tail
+  // restarts at 0), so an auto-resumed run displayed "0/11 steps done" while
+  // steps 1–2 were done. run.steps is the authoritative status-honest array
+  // (r80 persistence) — derive from it live; frozen values stay as fallback.
+  const doneCount = run.steps.filter((s) => s.status === "done").length;
+  const failedIdx = run.steps.findIndex((s) => s.status === "error");
 
   if (dismissed) return null;
 
@@ -246,13 +253,13 @@ function RunRecoveryCard({
           </p>
           {err ? (
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Failed at <span className="font-medium text-foreground">step {err.stepIndex + 1}/{run.steps.length}</span>
+              Failed at <span className="font-medium text-foreground">step {(failedIdx === -1 ? err.stepIndex : failedIdx) + 1}/{run.steps.length}</span>
               {" "}· {err.agentName}
               {" "}
               <Badge variant="outline" className={cn("mx-0.5 px-1.5 py-0 text-[10px]", ERROR_KIND_BADGE[err.kind])}>
                 {runErrorKindLabel(err.kind)}
               </Badge>
-              · {err.stepsDone}/{run.steps.length} steps done
+              · <span className={cn("font-medium", doneCount > 0 && "text-emerald-500")}>{doneCount}/{run.steps.length}</span> steps done
               {err.toolCallsOk > 0 ? ` · ${err.toolCallsOk} tool call${err.toolCallsOk === 1 ? "" : "s"} succeeded first` : ""}
               {err.autoRetried ? (
                 <Badge variant="outline" className="mx-0.5 px-1.5 py-0 text-[10px] border-amber-500/40 bg-amber-500/10 text-amber-500">

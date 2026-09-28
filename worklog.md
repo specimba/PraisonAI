@@ -1966,3 +1966,19 @@ Stage Summary:
 - Deep pipelines now get 3 lane-dials per step instead of 2 during provider outages — the marginal attempt that would have saved both forensiced runs. Recovery-card UX unchanged; toast is now count-accurate.
 - USER guidance: the failed Continuous Research run is fully recoverable — "Retry failed step" keeps steps 1-2 (32.5s + 457.7s outputs preserved), the retry gets 3 fresh-lane dials. If the lane is still sick, switch model via the health-badged picker first.
 - NEXT: 1) stall-failover epic (now includes: engine-level mid-stream retry w/ output-reset signal + lane rotation), 2) auto-resume E2E (providerKeys.custom), 3) sparkline echo in run-dialog history rows (small polish).
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 08:23 +08)
+Agent: main (review round)
+Task: r84 — recovery-card counter fix ("0/11 steps done" while steps 1-2 were done) + styling detail; view-layer only
+
+Work Log:
+- QA: HTTP 200; cron CLI still absent (platform-side, 11th round) — fleet 2/2 behavioral (414938 fired :07, this firing = 414940 :23). Console clean (Fast Refresh echoes only).
+- ROOT CAUSE: the recovery card displayed the FROZEN err.stepsDone/err.stepIndex snapshot built at failure time (workflow-runner.ts failRun ~line 600: steps.slice(0, failedIndex)). On AUTO-RESUMED runs the resume path reports the failed step with a LOCAL index into the resumed tail (restarts at 0) while failRun slices the FULL steps array — slice(0,0) = 0 done, "Failed at step 1/11", exactly what the user saw. Non-resumed failures usually escape via the stepId match (found !== -1), which is why only resumed runs lied.
+- FIX (view-layer per handover 5.1; runner untouched, no gate needed): (1) workflow-run-panel.tsx — doneCount + failedIdx derived LIVE from run.steps (the authoritative r80-honest array); frozen snapshot demoted to fallback (failedIdx === -1 only); done-count gets emerald emphasis when > 0 (preserved work reads as good news — styling detail). (2) helpers.ts runDiagnostics — same live derivation for the failure block (step # + stepsDone) so pasted diagnostics are truthful too. Transient toast at runner line 576 intentionally left as-is.
+- eslint clean on both files; HMR compiled; console clean after edits.
+- E2E DOM CHECK (QA profile, stored errored run "Quick probe test" 1h ago, statuses done/done/error/stopped x4): recovery card text after fix -> $V
+
+Stage Summary:
+- Recovery card + diagnostics now self-heal for ANY run (fresh / auto-resumed / manual-resume): counts always reflect the true step statuses instead of a stale failure-time snapshot. Closes the top queued bug from the 08:0x round.
+- NEXT: 1) stall-failover epic (engine mid-stream retry + lane rotation — needs gate), 2) auto-resume E2E (providerKeys.custom recipe stands), 3) styling queue: sparkline echo in run-dialog history rows, 4) r80 dialog mid-run row visibility question is superseded by the counter fix but recipe v2 remains recorded.
