@@ -2014,3 +2014,18 @@ Work Log:
 Stage Summary:
 - The auto-resume E2E remains OPEN but the last unknown (lane targeting) is solved: v3 removes the lane-pool ambiguity entirely. Attempt 3 cost zero production edits and produced the precise routing map.
 - NEXT: 1) E2E recipe v3 above, 2) stall-failover epic (gate pending), 3) no styling debt — r82/r85 queue closed.
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 11:23 +08)
+Agent: main (review round)
+Task: E2E recipe v3 pre-flight (rotator lane-builder verification) — attempt deferred; forensics deepened, recipe upgraded to v4. Zero production edits.
+
+Work Log:
+- QA: HTTP 200; cron CLI still absent (platform-side, 14th round) — fleet 2/2 behavioral. Budget note: code forensics consumed the window; attempt deferred per the "dedicated round window" doctrine (early clean exit).
+- LANE-BUILDER VERIFIED (relay.ts buildRelayChain :380): hops come ONLY from ARENA_CATALOG x providerKeys[id].key — no key, no hop. buildRelayWire (:476) returns [] when relayEnabled===false. So with providerKeys emptied, BOTH the wire AND the chain are lane-less.
+- THE 10:23 ANOMALY REFINED: runner primary = resolveLlm(settings, agent.model) at workflow-runner :627 — with activeProviderId="" that is the LEGACY branch (baseUrl=4319), yet the run dialed Vyce then AIHubMix. Settings persist key CONFIRMED correct (praison-settings, stores.ts:100) — so the injection DID land. Remaining explanations, in order of likelihood: (1) the cloned step's AGENT carries a provider PIN model ("providerId::model") that some layer (engine or server /api/chat) resolves through the vault lanes, overriding the runner's llm params; (2) the call executed server-side where lane logic differs. agent-engine :374-377 shows only health-stamp pin SYNTAX, not parsing — the parsing site is still unfound.
+- RECIPE v4 (next attempt, replaces v3): (0) BEFORE injecting, inspect the probe clone source agent in praison-agents — record its exact model field (pin or "auto"); (1) backup + EMPTY providerKeys + activeProviderId="" + legacy baseUrl=4319 + stall-timeout 20000 (as v3); (2) start run; (3) inspect run.steps[].note/transport AND callLog — "browser-direct — key stayed in your browser" (runner :719) vs no note discriminates client vs server execution; (4) if pins were the lever, empty providerKeys breaks them -> resolveExplicitLlm falls back to resolveLlm -> legacy 4319 lane dials; if the dial STILL misses 4319, the call path is server-side and the /api/chat route's lane builder becomes the next forensics target.
+
+Stage Summary:
+- The lane-pool picture is now three-layered: vault keys -> buildRelayChain hops -> wire; agents may carry pins that bypass the runner's resolution. Recipe v4 turns the next attempt into a DECISIVE experiment (pin inspection + transport discrimination built in).
+- NEXT: 1) E2E recipe v4 (fits one dedicated round: pre-inspect agents, inject, start, discriminate transport, cleanup), 2) stall-failover epic (gate pending), 3) no styling debt.
