@@ -2552,3 +2552,31 @@ Open risks: none.
 Blockers: none
 Cron state: cron CLI absent (127) round 42; fleet 2/2 behavioral (patrol 05:37/06:07 on cadence; review 06:23 = this round).
 Next recommended action: r101 — the observability arc is closed; pick fresh work: (a) "lane health" mini-panel (direct/relay ratio over recent calls — the data now exists on every message/call); (b) visual capture of v11 button + v11b chip + v12 Lane row together on the next failed/relay run; (c) new product direction per backlog (e.g., export a run transcript as markdown — check if it exists first).
+---
+Task ID: 414940 (hourly review, 2026-09-29 07:23 +08)
+Agent: main (review round)
+Task: v13 — lane-health chip on the run call summary (r100's candidate (a), scoped per-run).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r100.
+- SCOUTING: transcript export already exists — "Partial report" downloads runToMarkdown(workflow, run) as .md (chat has conversationToMarkdown too). Pivoted to the lane-health increment per the handoff queue.
+- v13 SHIPPED (1 file): the "LLM calls · N recorded · X failed" summary line in the run panel gains a lane split — " · ⇄R relay / ⊙D direct" — derived purely from the v11b note prefixes on run.callLog entries; hidden (empty string) when no lane-labelled calls exist. No store/type changes; the chip sits directly above the call list whose rows already show sky ⇄ / amber ↻ notes.
+- VERIFIED: live HMR compile clean (title + composer render, zero console errors). First real labelled run will populate it.
+- Budget: 8/12 tool rounds — clean exit.
+
+Stage Summary:
+- The transport story now has three altitudes: per-call notes (v11b), per-message receipts (v12/v12b), and a per-run lane ratio (v13). A glance answers "how did this run get served?".
+- Scout note for future rounds: runToMarkdown + conversationToMarkdown both exist — markdown export is DONE, do not re-build it.
+
+Round Handoff:
+Round ID: r101 (v13 lane-health chip)
+Budget used: S · ~12 min (8/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v13 chip shipped + compile-verified; export existence confirmed (no rebuild needed).
+User-visible changes: run call summary shows ⇄/⊙ lane ratio when lane-labelled calls exist.
+Verification steps: HMR compile clean; app renders; edit diffs read back (2/2 anchors).
+Verification result: PASS
+Open risks: none; chip awaits first real lane-labelled run (piggyback visual later).
+Blockers: none
+Cron state: cron CLI absent (127) round 43; fleet 2/2 behavioral (patrol 06:37/07:07 on cadence; review 07:23 = this round).
+Next recommended action: r102 — the transport/observability arc is fully closed (v11→v13). Fresh directions: (a) visual capture round combining v11 button + v11b chips + v13 ratio on a real run (hang-server recipe is documented in r96); (b) product backlog per hourly mandate (styling polish on the recovery card, or a new feature); (c) review accumulated harness scripts for archive/writing into a README so future rounds stop re-reading them from the worklog.

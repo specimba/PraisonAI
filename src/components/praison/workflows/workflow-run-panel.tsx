@@ -218,6 +218,15 @@ function RunRecoveryCard({
   const doneCount = run.steps.filter((s) => s.status === "done").length;
   const failedIdx = run.steps.findIndex((s) => s.status === "error");
 
+  // v13 lane-health: direct/relay split over this run's recorded LLM calls,
+  // derived from the v11b note prefixes — pure UI, no store changes needed.
+  const laneRelay = (run.callLog ?? []).filter((c) => (c.note ?? "").startsWith("server relay")).length;
+  const laneDirect = (run.callLog ?? []).filter((c) => (c.note ?? "").startsWith("browser-direct")).length;
+  const laneChip =
+    laneRelay + laneDirect > 0
+      ? ` · ⇄${laneRelay} relay / ⊙${laneDirect} direct`
+      : "";
+
   if (dismissed) return null;
 
   function savePartialReport() {
@@ -319,6 +328,7 @@ function RunRecoveryCard({
                 <span>
                   LLM calls · {run.callLog.length} recorded
                   {run.callLog.some((c) => !c.ok) ? ` · ${run.callLog.filter((c) => !c.ok).length} failed` : " · all ok"}
+                  {laneChip}
                 </span>
                 <span>{callsOpen ? "hide" : "show"}</span>
               </button>
