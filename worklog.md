@@ -2370,3 +2370,35 @@ Open risks: start-v4-run.sh route stale (fix next); inject-v4/v7 still broken (k
 Blockers: E2E confirmation blocked only by route re-mapping (trivial: click Workflows nav at root → locate probe card → rerun trigger recipe).
 Cron state: cron CLI absent (127) round 36; fleet 2/2 behavioral (patrol 23:37/00:07 on cadence; review 23:23 on cadence).
 Next recommended action: r95 — re-map workflows navigation (click Workflows menu → find "Stall Probe v4" → trigger/fill/start + 50s observe + restore), completing v9-E2E; then the stall-failover epic is fully closed with E2E proof.
+---
+Task ID: 414940 (hourly review, 2026-09-29 01:23 +08)
+Agent: main (review round)
+Task: v9-E2E confirmation (re-mapped route) — the E2E FOUND a real bug; v10 shipped to fix it.
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r94.
+- ROUTE RE-MAPPED: Workflows UI = client-side BUTTON at root (no href, path stays "/"), cards render in-panel. inject-v8 (real layer verified) → reload to hydrate → click nav → probe card FOUND → RUN-STARTED.
+- E2E RESULT: hang dial CONFIRMED (hang-server-calls.log: POST /v1/chat/completions, HeadlessChrome UA, model=hang-test, 17:24:24Z) — but the run STILL failed at step 1 ("no model output for over 20 seconds — the stream stalled"). v9's fallback did NOT engage → REAL BUG FOUND by the E2E, exactly what this confirmation was for.
+- ROOT CAUSE (v10): workflow-runner.ts:95 stall watchdog aborts the run controller WITH a reason Error("no model output…stream stalled") → params.signal.aborted=true reaches runAgentChat → v9 classifier read bare signal.aborted as USER intent → classifyDirectLaneFailure returned "rethrow" → no fallback. signal.aborted alone is NOT user intent on the runner path.
+- v10 SHIPPED (src/lib/chat-client.ts): (1) exported isWatchdogAbortReason(reason) — /no model output|stalled|timed?\s?out/i on Error.message or string reason; (2) call site: userAborted = signal.aborted && !isWatchdogAbortReason(signal.reason) — bare cancels stay user-intent, watchdog aborts fall through to fallback; (3) relay leg: if caller signal already aborted (watchdog case), pass {...params, signal: undefined} — a poisoned signal would kill the fallback before it dials.
+- VERIFIED (bun scripts/test-v9-abort.ts): 18/18 PASS — [5] watchdog-reason detection ×5, [6] derived call-site logic ×2 (first run 16/17: the FAIL was an inverted boolean in the TEST's derived expression, not in production logic; test rewritten to derive exactly like the call site and now proves userAborted=false→fallback on watchdog, true→rethrow on bare cancel).
+- CLEANUP: atomic restore+reload → verify PASS {apid=vyce, relay=true, wfCount=5, probeGone=true, agentsAuto=5, bakDeleted=true}. Zero residue.
+- Budget: 12/12 tool rounds — clean exit.
+
+Stage Summary:
+- The v9-E2E earned its keep: the unit-proven v9 fix had an untested integration seam (runner watchdog abort masquerading as user cancel), now closed by v10 (reason-based intent classification + clean-signal relay leg).
+- Semantics now: bare abort = user cancel (rethrow, never re-dial); watchdog-marked abort = transport stall (fallback to relay with clean signal); mid-stream death = honest rethrow.
+- Remaining E2E proof: v10 is unit-proven (18/18) but the FULL browser E2E (dial 4319 → hang → "Browser-direct timed out" status → relay leg dials /api/chat → step resolves) has NOT been re-run post-v10 — queued as r96's first action using the NOW-CORRECT route recipe (root → click Workflows button → probe card).
+
+Round Handoff:
+Round ID: r95 (v9-E2E → v10 fix)
+Budget used: M · ~35 min (12/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: route re-mapped; E2E executed (first full run trigger since v4); real bug found + root-caused; v10 shipped + 18/18 unit verified; state restored zero-residue.
+User-visible changes: a workflow run whose provider stalls now routes through the app relay instead of dying with "stream stalled" — v10 makes the r93 fallback actually reachable on the workflow-runner path.
+Verification steps: hang log fresh dial; run-state capture (failed-at-step-1 pre-v10); bun suite 18/18; post-restore verify JSON ok=true bakDeleted=true; app health 200.
+Verification result: PASS (fix + cleanup) / PENDING (full E2E post-v10)
+Open risks: runner-side stalledRuns finalization may still mark the run "timed out" even when the relay leg succeeds (watchdog state machine — next round's observation point); chat UI cancel contract assumed bare-abort (grep-verified pattern, not exhaustively).
+Blockers: none
+Cron state: cron CLI absent (127) round 37; fleet 2/2 behavioral (patrol 00:37/01:07 on cadence; review 00:23/01:23 = this round).
+Next recommended action: r96 — rerun the full E2E post-v10 (root → Workflows button → probe → run; expect: hang dial → status "Browser-direct timed out… relay" → /api/chat in dev.log → step completes or honest relay failure), and observe whether the runner finalizes the step correctly after a successful relay leg.

@@ -112,6 +112,25 @@ export function classifyDirectLaneFailure(
   return "fallback";
 }
 
+/**
+ * v10: true when an abort reason marks a CALLER-side watchdog (stall/timeout),
+ * not user intent. The workflow runner's stall watchdog aborts with
+ * Error("no model output for over Ns — the stream stalled") (workflow-runner.ts);
+ * user cancels abort bare. Without this, such watchdog aborts flip
+ * signal.aborted and the v9 classifier mistakes them for user cancels —
+ * the r94 E2E proved the fallback never engaged on the runner path.
+ * Exported for unit tests.
+ */
+export function isWatchdogAbortReason(reason: unknown): boolean {
+  const msg =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === "string"
+        ? reason
+        : "";
+  return /no model output|stalled|timed?\s?out/i.test(msg);
+}
+
 export async function runAgentChat(
   params: RunAgentParams,
   h: AgentHandlers = {}
@@ -126,7 +145,12 @@ export async function runAgentChat(
         sawTokens = true;
       });
     } catch (err) {
-      const action = classifyDirectLaneFailure(params.signal?.aborted === true, sawTokens);
+      // v10: signal.aborted alone is NOT user intent — a caller watchdog
+      // (runner stall abort) aborts the same signal with a stall reason.
+      const userAborted =
+        params.signal?.aborted === true &&
+        !isWatchdogAbortReason(params.signal?.reason);
+      const action = classifyDirectLaneFailure(userAborted, sawTokens);
       if (action === "rethrow") throw err;
       h.onStatus?.(
         isAbortError(err)
@@ -134,6 +158,12 @@ export async function runAgentChat(
           : `Browser-direct call failed (${short(err)}) — routing through the app relay…`
       );
     }
+    // v10: if the caller's signal already died from a watchdog abort, hand the
+    // relay leg a clean signal — a poisoned (already-aborted) signal would
+    // kill the fallback before it ever dials.
+    const relayParams =
+      params.signal?.aborted === true ? { ...params, signal: undefined } : params;
+    return runServerAgent(relayParams, h);
   }
   return runServerAgent(params, h);
 }

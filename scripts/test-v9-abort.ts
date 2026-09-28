@@ -11,7 +11,11 @@
  * isAbortError sanity: transport-signal classifier only (AbortError /
  * ResponseAborted true; TimeoutError false).
  */
-import { classifyDirectLaneFailure, isAbortError } from "../src/lib/chat-client";
+import {
+  classifyDirectLaneFailure,
+  isAbortError,
+  isWatchdogAbortReason,
+} from "../src/lib/chat-client";
 
 let pass = 0;
 let fail = 0;
@@ -53,5 +57,33 @@ check("TimeoutError → false (different name)",
 check("plain error → false",
   isAbortError(new Error("CORS preflight failed")) === false);
 
-console.log(`\nv9 classifier verification: ${pass} pass, ${fail} fail`);
+console.log("[5] v10: watchdog abort reasons are NOT user intent (r94 E2E gap)");
+check("runner stall Error → watchdog reason",
+  isWatchdogAbortReason(
+    new Error("no model output for over 20 seconds — the stream stalled")
+  ) === true);
+check("'stalled' short reason → watchdog",
+  isWatchdogAbortReason(new Error("stream stalled")) === true);
+check("'timed out' reason → watchdog",
+  isWatchdogAbortReason(new Error("request timed out")) === true);
+check("bare cancel (no reason) → NOT watchdog (stays user intent)",
+  isWatchdogAbortReason(undefined) === false);
+check("engine deadline DOMException → NOT watchdog (no stall marker)",
+  isWatchdogAbortReason(new DOMException("aborted", "AbortError")) === false);
+
+console.log("[6] v10 derived call-site logic (aborted && !watchdog → userAborted)");
+{
+  // derive EXACTLY like the runAgentChat call site (chat-client.ts):
+  const reason1 = new Error("no model output for over 20 seconds");
+  const userAborted1 = true && !isWatchdogAbortReason(reason1);
+  check("aborted + watchdog reason → userAborted=false → fallback (THE v10 FIX)",
+    userAborted1 === false &&
+    classifyDirectLaneFailure(userAborted1, false) === "fallback");
+  const userAborted2 = true && !isWatchdogAbortReason(undefined);
+  check("aborted + bare (user cancel) → userAborted=true → rethrow",
+    userAborted2 === true &&
+    classifyDirectLaneFailure(userAborted2, false) === "rethrow");
+}
+
+console.log(`\nv9+v10 classifier verification: ${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);
