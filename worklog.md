@@ -2524,3 +2524,31 @@ Open risks: none new; Lane row awaits first real relay-served chat answer (visua
 Blockers: none
 Cron state: cron CLI absent (127) round 41; fleet 2/2 behavioral (patrol 04:37/05:07 on cadence; review 05:23 = this round).
 Next recommended action: r100 — candidates: (a) add transport to heartbeat proactive messages (chat-heartbeat.tsx, one line + patch field — completes lane coverage 100%); (b) "lane health" mini-panel (direct/relay ratio over recent calls); (c) visual capture of v11 button + v11b chip + v12 Lane row together on the next failed/relay run.
+---
+Task ID: 414940 (hourly review, 2026-09-29 06:23 +08)
+Agent: main (review round)
+Task: v12b — transport on heartbeat proactive messages (r99's candidate (a); completes lane coverage 100%).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r99.
+- GAP: heartbeat check-ins (chat-heartbeat.tsx) posted proactive assistant messages WITHOUT the transport field — the one remaining dial path that didn't record its lane after v12.
+- v12b SHIPPED: single line — `transport: result.transport,` added to the heartbeat's success patchMessage (chat-heartbeat.tsx:111). Silent beats (truncated placeholders) need no field; error paths already surface via status/error.
+- VERIFIED: live HMR compile clean (title renders, composer present, zero console errors).
+- Budget: 4/12 tool rounds — clean early exit.
+
+Stage Summary:
+- Lane coverage is now 100% of model-dial surfaces: workflow run call lists (v11b), chat replies (v12), heartbeat proactive messages (v12b). Every ChatMessage carrying an answer states which transport served it.
+- The transport observability arc (v11→v12b, three rounds) is CLOSED.
+
+Round Handoff:
+Round ID: r100 (v12b heartbeat transport)
+Budget used: XS · ~6 min (4/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v12b one-liner shipped + compile-verified.
+User-visible changes: heartbeat check-in receipts now show their lane too.
+Verification steps: HMR compile clean; app renders; edit diff read back.
+Verification result: PASS
+Open risks: none.
+Blockers: none
+Cron state: cron CLI absent (127) round 42; fleet 2/2 behavioral (patrol 05:37/06:07 on cadence; review 06:23 = this round).
+Next recommended action: r101 — the observability arc is closed; pick fresh work: (a) "lane health" mini-panel (direct/relay ratio over recent calls — the data now exists on every message/call); (b) visual capture of v11 button + v11b chip + v12 Lane row together on the next failed/relay run; (c) new product direction per backlog (e.g., export a run transcript as markdown — check if it exists first).

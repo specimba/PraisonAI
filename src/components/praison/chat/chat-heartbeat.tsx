@@ -108,6 +108,7 @@ async function fireBeat(conv: Conversation): Promise<void> {
       status: "done",
       durationMs: undefined,
       model: agent.model,
+      transport: result.transport,
     });
     toast(`⏱ ${agent.name} checked in`, {
       description: `${conv.title} — heartbeat follow-up posted.`,
