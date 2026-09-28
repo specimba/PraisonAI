@@ -29,7 +29,7 @@ export function buildToolDefs(tools: ToolId[]): ToolDef[] {
       function: {
         name: "web_search",
         description:
-          "Search the web for current information. Returns ranked results with title, url, snippet and date. Use for anything time-sensitive, factual or external.",
+          "Search the web for current information. Returns ranked results with title, url, snippet and date. Use for anything time-sensitive, factual or external. On rate limits (HTTP 429) this tool automatically falls back to arxiv_search, then wikipedia_search — the output is then prefixed with a provenance label naming the source that actually answered.",
         parameters: {
           type: "object",
           properties: {

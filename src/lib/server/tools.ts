@@ -86,6 +86,57 @@ export async function executeTool(
 }
 
 // ─── web_search ──────────────────────────────────────────────────────────────
+// r90: rate-limit detection + auto-fallback ladder. Production run exports
+// (r89 forensics) show web_search returning HTTP 429 on EVERY call for hours
+// while arxiv_search kept working — agents self-recovered manually, burning
+// tool rounds per step. The ladder moves that recovery into the tool layer:
+// web_search → arxiv_search → wikipedia_search, firing ONLY on rate-limit
+// errors (429 / rate-limited / too many requests). Timeouts, 5xx, empty
+// results and aborts keep their r25/r29 semantics (no fallback).
+const RATE_LIMIT_RE = /\b429\b|rate[ -]?limited?|too many requests/i;
+
+export function isRateLimitError(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err);
+  return RATE_LIMIT_RE.test(m);
+}
+
+export interface SearchFallback {
+  id: string;
+  run: () => Promise<string>;
+}
+
+/**
+ * r90 429 ladder: run `primary`; on a rate-limit error (and a non-aborted
+ * signal) walk the fallback sources in order. The first fallback that answers
+ * wins, prefixed with a provenance label so transcripts stay honest about
+ * which source actually served the step. Non-rate-limit errors propagate
+ * untouched; if every fallback fails too, the thrown error carries the
+ * original cause plus a per-fallback failure note.
+ */
+export async function runSearchLadder<T>(
+  primary: () => Promise<T>,
+  fallbacks: SearchFallback[],
+  signal?: AbortSignal
+): Promise<T | string> {
+  try {
+    return await primary();
+  } catch (err) {
+    if (signal?.aborted || !isRateLimitError(err)) throw err;
+    const cause = err instanceof Error ? err.message : String(err);
+    const failed: string[] = [];
+    for (const fb of fallbacks) {
+      if (signal?.aborted) break;
+      try {
+        const content = await fb.run();
+        return `[web_search rate-limited (HTTP 429) — auto-fell back to ${fb.id}]\n\n${content}`;
+      } catch (fbErr) {
+        failed.push(`${fb.id}: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`);
+      }
+    }
+    throw new Error(`${cause}; fallback ladder exhausted (${failed.join("; ")})`);
+  }
+}
+
 async function doWebSearch(args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
   const query = String(args.query ?? "").trim();
   if (!query) throw new Error("query is required");
@@ -94,25 +145,31 @@ async function doWebSearch(args: Record<string, unknown>, signal?: AbortSignal):
   // r25: search stalls used to hang the whole step — 15s budget, same
   // envelope shape on timeout as any other tool failure.
   const SEARCH_TIMEOUT_MS = 15_000;
-  const results = (await Promise.race([
-    zai.functions.invoke("web_search", { query, num }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("web_search timed out after 15s")), SEARCH_TIMEOUT_MS)
-    ),
-    ...(signal
-      ? [
-          new Promise<never>((_, reject) =>
-            signal.addEventListener("abort", () => reject(new Error("web_search aborted")), { once: true })
-          ),
-        ]
-      : []),
-  ])) as Array<{
-    url?: string;
-    name?: string;
-    snippet?: string;
-    host_name?: string;
-    date?: string;
-  }>;
+  const raw = await runSearchLadder<
+    Array<{ url?: string; name?: string; snippet?: string; host_name?: string; date?: string }>
+  >(
+    () =>
+      Promise.race([
+        zai.functions.invoke("web_search", { query, num }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("web_search timed out after 15s")), SEARCH_TIMEOUT_MS)
+        ),
+        ...(signal
+          ? [
+              new Promise<never>((_, reject) =>
+                signal.addEventListener("abort", () => reject(new Error("web_search aborted")), { once: true })
+              ),
+            ]
+          : []),
+      ]),
+    [
+      { id: "arxiv_search", run: () => doArxivSearch(args, signal) },
+      { id: "wikipedia_search", run: () => doWikipediaSearch(args, signal) },
+    ],
+    signal
+  );
+  if (typeof raw === "string") return raw; // labeled fallback content (r90)
+  const results = raw;
   if (!Array.isArray(results) || results.length === 0) return "No results found.";
   // r29 relevance hygiene: drop duplicate URLs and cap per-host spam (3) so
   // one loud domain can't crowd out the topic in a briefing digest.

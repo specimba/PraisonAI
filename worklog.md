@@ -2219,3 +2219,32 @@ Open risks: Drive folder contents change upstream (re-sync needed per session); 
 Blockers: none
 Cron state: cron CLI absent (127) rounds 20-23 documented; fleet 2/2 alive by behavioral verification (patrol 18:37/19:07 on cadence; review 18:23/19:23 on cadence); no recreation attempted per standing rule.
 Next recommended action: r90 — implement web_search 429 auto-fallback to arxiv_search (tool layer), verified by forcing a 429 via the v6 hang-server pattern (bounded 429 mode) and observing the ladder in a live run.
+---
+Task ID: 414940 (hourly review, 2026-09-28 20:23 +08)
+Agent: main (review round)
+Task: r90 — web_search 429 auto-fallback ladder in the tool layer (queued by r89 handoff from production run-export forensics).
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (26th round, permanent platform-side) — fleet 2/2 behavioral (patrol 20:07 on cadence). Console clean after edits (HMR noise only). App title renders.
+- r90 SHIPPED (src/lib/server/tools.ts): (1) isRateLimitError(err) — /\\b429\\b|rate[ -]?limited?|too many requests/i, exported; (2) runSearchLadder<T>(primary, fallbacks, signal) — primary throws rate-limit error → walks fallbacks in order, first answer wins with provenance label "[web_search rate-limited (HTTP 429) — auto-fell back to <id>]", non-rate-limit errors (timeout/5xx/empty/abort) propagate UNTOUCHED (r25/r29 semantics kept), exhausted ladder → enriched error carrying original cause + per-fallback notes; (3) doWebSearch rewired: SDK race is now the ladder primary, fallbacks = doArxivSearch → doWikipediaSearch with same args/signal. ONE call site covers everything (grep: only tools.ts invokes web_search) — relay engine, browser-direct tool route, workflow runner all inherit the ladder.
+- tools-defs.ts: web_search description updated — agents now know 429 auto-falls back and how to read the provenance label.
+- VERIFIED (scripts/test-r90-ladder.ts, bun): 22/22 PASS — detection matrix 8, passthrough 2, labeled first-fallback 2, second-fallback-after-first-failure 2, exhausted-ladder enriched error 3, non-rate-limit propagation 2, REAL end-to-end (stubbed 429 primary + REAL arxiv executor via executeTool) 2.
+- LIVE PRODUCTION E2E (unplanned, strongest evidence): the 429 storm is STILL ACTIVE — curl POST /api/tools/execute web_search returned ok:true with "[web_search rate-limited (HTTP 429) — auto-fell back to arxiv_search]" + a real arXiv paper (2203.08975). Before r90 the same call returned "Tool error … 429" and the agent burned rounds self-recovering. wikipedia_search direct path also re-verified ok.
+
+Stage Summary:
+- The single highest-value production pain visible in r89 forensics is now fixed in the tool layer: Stage-1 gathering steps no longer die on 429 storms; they transparently degrade to arXiv with honest provenance labeling.
+- Design note: ladder fires ONLY on rate-limit errors by design — timeouts/5xx keep old semantics (predictable); empty results are NOT errors (no fallback).
+- Possible v2 (not queued): extend ladder to also fire on timeout; add a fourth rung (hacker_news_search) for tech-query shapes.
+
+Round Handoff:
+Round ID: r90
+Budget used: M · ~35 min (review round, 10/12 tool rounds)
+Task owner: main (Orchestrator)
+Scope completed: r90 429 fallback ladder shipped + verified (22/22 unit incl. real-arxiv E2E) + LIVE production proof (ladder fired under the real storm, ok:true).
+User-visible changes: workflow runs / chat agent steps that hit web_search 429s now silently degrade to arXiv (labeled) instead of failing the tool call; tool description updated for agents.
+Verification steps: bun scripts/test-r90-ladder.ts (22/22); curl POST /api/tools/execute name=web_search → ok:true + provenance label + real arXiv content (live 429 storm active); curl wikipedia_search direct → ok; agent-browser open + console → clean.
+Verification result: PASS
+Open risks: upstream 429 quota root cause unchanged (mitigated, not removed); if arXiv AND wikipedia both fail during a storm, step still errors but now with full ladder forensics in the message; ladder adds up to ~2x15s worst case on double-fallback paths.
+Blockers: none
+Cron state: cron CLI absent (127) round 26; fleet 2/2 behavioral (patrol 20:07, review 20:23, both on cadence); no recreation attempted.
+Next recommended action: v7 stall-E2E (probe agent with explicit model id + provider=custom to pass canDirect gate → 4319 dial proof via v6 call log); optionally r91 sanity: re-check Drive folder for a fresh export of today's in-flight run to see r90's label appear in the user's own run transcripts.
