@@ -2113,3 +2113,23 @@ Work Log:
 Stage Summary:
 - MYSTERY CLOSED: workflow runs dial through the server; legacy baseUrl is dead config for runs. The auto-resume E2E is blocked on server-lane control, not on client injection. Next move is reading /api/chat's lane builder (option b) — one focused read decides between a server-controllable lane or falling back to (c).
 - NEXT: 1) read /api/chat lane-builder -> decide E2E path (b) vs (c), 2) stall-failover epic design can now START from the correct call-path map (server-side), 3) user upload still missing (2 misses) — Drive/paste path stands.
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 17:23 +08)
+Agent: main (review round)
+Task: /api/chat lane-builder forensics — CALL GRAPH FULLY MAPPED; v5 recipe written (CORS-enabled hang server). Zero production edits.
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (20th round, platform-side) — fleet 2/2 behavioral.
+- THE COMPLETE CALL GRAPH (chat-client.ts runAgentChat :94-120 + /api/chat/route.ts :108-133):
+  (1) canDirect = !forceServer && provider==="custom" && !!baseUrl — 16:23's run QUALIFIED for browser-direct;
+  (2) runBrowserDirect fetches the baseUrl STRAIGHT FROM THE BROWSER — http://localhost:4319 was dialed by the BROWSER, but Bun.serve sends NO CORS headers -> the browser refuses the response = pre-stream death -> :113-116 transparently falls back to the server relay ("Browser-direct call failed … routing through the app relay…");
+  (3) runServerAgent -> /api/chat: guardPublicUrl SSRF guard (:116-127) rejects loopback/http for body.baseUrl anyway (https-only, public) -> useCustom=false -> runAutoEngine -> built-in auto engine = Vyce AI (AUTO_MODEL.label). 4319's TCP touch was momentary (CORS kill), invisible to the 28s-later /proc check.
+  ALL observations across 03:23/10:23/11:23/16:23 now explained with zero残 remaining. The legacy baseUrl is NOT dead config — it is the browser-direct lane; it only fails because the HANG SERVER lacked CORS.
+- V5 RECIPE (next dedicated round, ~6 rounds, still zero production edits): (1) hang-server.ts += CORS (OPTIONS 204 preflight + Access-Control-Allow-Origin: * + allowed headers) — harness-only change; (2) restart on :4319 via daemonize.py; (3) re-run inject-v4.js + start-v4-run.sh verbatim; (4) browser-direct now SUCCEEDS and the stream hangs -> runner stall watchdog (praison-stall-timeout-ms=20000) -> hiccup/auto-resume chain fires for real — THE E2E lands; (5) expect callLog engine="localhost:4319", browser-direct note in run.steps[].note, stall->watchdog->resume toasts; (6) cleanup via cleanup-v4.js + same-eval-reload doctrine.
+- Budget note: the read-chain (route.ts + chat-client.ts + runner body) consumed the window; no styling increment this round — the worklog's 16:23 entry stands as this round's user-value deliverable (the call-graph map). Early clean exit.
+- Bonus confirmation: r26 SSRF guard is correctly strict (no dev bypass exists — good security posture; the E2E path goes AROUND it via browser-direct, exactly as the guard's own error message suggests: "use browser-direct for local endpoints").
+
+Stage Summary:
+- Four rounds of "why didn't it dial 4319" collapse into one sentence: the browser dialed it, CORS ate it, and the server relay that caught the fallback is lane-less by design. v5 (CORS on the hang server) is the first recipe that can actually reach the stall watchdog end-to-end.
+- NEXT: 1) v5 execution (CORS hang server -> full auto-resume E2E), 2) stall-failover epic design (call map complete), 3) user upload: still missing (2 misses) — Drive/paste path stands.
