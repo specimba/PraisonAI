@@ -2248,3 +2248,33 @@ Open risks: upstream 429 quota root cause unchanged (mitigated, not removed); if
 Blockers: none
 Cron state: cron CLI absent (127) round 26; fleet 2/2 behavioral (patrol 20:07, review 20:23, both on cadence); no recreation attempted.
 Next recommended action: v7 stall-E2E (probe agent with explicit model id + provider=custom to pass canDirect gate → 4319 dial proof via v6 call log); optionally r91 sanity: re-check Drive folder for a fresh export of today's in-flight run to see r90's label appear in the user's own run transcripts.
+---
+Task ID: 414940 (hourly review, 2026-09-28 21:23 +08)
+Agent: main (review round)
+Task: v7 stall-E2E — force the workflow-run browser-direct dial (explicit agent model + verified custom settings) and prove hang→watchdog→relay via the 4319 call log. Result: DEFINITIVE NEGATIVE with a sharply narrowed root cause.
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (29th round, permanent) — fleet 2/2 behavioral. Hang server alive on 4319, call log channel working (curl health baseline entry).
+- Gate chain FULLY READ before the run: chat-client.ts:98 canDirect = !forceServer && params.provider==="custom" && !!params.baseUrl; workflow-runner.ts:627 resolves llm = resolveLlm(settings.settings, agent.model) → llm-config.ts:41-82; activeProviderId("") returns "custom"; providerById("custom") = undefined (registry ids: vyce/aihubmix/... — NO "custom" entry, verified) → LEGACY branch returns provider:"custom", baseUrl=settings.baseUrl, model=pickModel(defaultModel, agentModel). Runner call site 661-675 passes provider/baseUrl/model verbatim and NEVER sets forceServer. Code-wise the gate SHOULD pass with v4 settings.
+- v7 SHIPPED (scripts/inject-v7.js): v4 recipe + v7 diff — ALL agents forced to explicit model "hang-test" (no "auto" anywhere; kills v6's agent-level theory) + agents backup key praison-bak-agents.
+- E2E EXECUTED with full verification at every seam: inject → same-eval location.reload() (quirk #1) → store verified {provider:"custom", baseUrl:"http://localhost:4319/v1", relay:false, agentModels:[hang-test ×5], stall:20000} → call-log baseline 1 line → real UI start (start-v4-run.sh: CLICKED/FILLED/RUN-STARTED) → +30s evidence: CALL LOG GAINED ZERO ENTRIES (browser never dialed 4319) while the step streamed via the auto lane (run self-completed; "Verification Run Report" narration = built-in engine style).
+- FALSIFICATION: with provider="custom", baseUrl=4319, relay=off, agents explicit, runner not setting forceServer, a client-side engine (no /api/run route exists — streamStep→runAgentChat is the only path, runs execute in-browser) STILL routes to the server lane. Every theory that explains the no-dial via localStorage/resolution is now DEAD. The remaining explanations require something inside runAgentChat/runBrowserDirect (or between them) that we have NOT read end-to-end — e.g. an additional guard in runBrowserDirect (engine-body build, tool-bearing-step check, engine-URL rewrite) that bails to runServerAgent BEFORE any fetch is issued (pre-stream failures produce zero server-side log entries AND a swallowed "Browser-direct call failed" status — matches the v5 console-line-rotated-past observation).
+- CLEANUP (mandatory-first, verified): stop (run already self-finished — nothing dangling) → cleanup-v4.js (settings/workflows RESTORED, stall key REMOVED) → agents RESTORED from bak (models back to "auto" — v7 had touched them) → same-eval reload → verified {provider restored, agentModels auto×5, wfCount=5, probeGone:true, stallKey:null}.
+
+Stage Summary:
+- The stall-E2E epic is now a two-line mystery: canDirect is true by every readable input, yet zero fetches leave the browser. The bug (or guard) is INSIDE runBrowserDirect/runAgentChat internals — the ONLY unread code left on this path.
+- v8 recipe (queued, ~2-3 rounds, CHEAP): static read of chat-client.ts:122-200 (runBrowserDirect body: engine-body construction, URL derivation, any early-return guard) + optionally console-trace via a breakpoint-style eval patch. If a tool-bearing-step or engine-URL guard exists, it explains v5+v6+v7 in one stroke; if nothing explains it, the epic falls to option (c) unit-level stall tests of the watchdog primitives (CONNECT_TIMEOUT_MS/SERVER_STALL_TIMEOUT_MS), which are transport-independent and already worth having.
+- Honest budget note: this round used 14 tool calls (2 over the 12 budget) — 1 for the mandatory falsification read (streamStep callers + route inventory), 1 for the mandatory state restoration after v7 touched agents. Both non-skippable; no work was abandoned mid-flight.
+
+Round Handoff:
+Round ID: r91 (v7)
+Budget used: M · ~40 min (review round, 14 tool calls — overrun documented above)
+Task owner: main (Orchestrator)
+Scope completed: v7 E2E executed with verified-at-every-seam injection; DEFINITIVE negative (zero browser dials under fully-custom settings); root cause narrowed to runBrowserDirect internals; state fully restored.
+User-visible changes: none (harness + forensics round; production code untouched).
+Verification steps: store verified pre-run (JSON snapshot); call log diffed before/after (1 line → 1 line); run self-completed via auto lane (dialog text captured); cleanup verified (JSON snapshot: auto×5, wfCount=5, probeGone, stallKey null).
+Verification result: PASS (for a falsification experiment — the negative is the result)
+Open risks: none to user state (fully restored); the stall-failover epic remains open but its search space collapsed to one function.
+Blockers: none
+Cron state: cron CLI absent (127) round 29; fleet 2/2 behavioral (patrol 20:37/21:07 on cadence; review 20:23/21:23 on cadence).
+Next recommended action: v8 — read chat-client.ts runBrowserDirect body (lines ~122-200) hunting the pre-fetch bail-out guard; 2-3 rounds; then either the one-line fix + re-run v7 recipe, or option (c) unit-level watchdog tests if no guard exists.
