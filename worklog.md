@@ -1982,3 +1982,17 @@ Work Log:
 Stage Summary:
 - Recovery card + diagnostics now self-heal for ANY run (fresh / auto-resumed / manual-resume): counts always reflect the true step statuses instead of a stale failure-time snapshot. Closes the top queued bug from the 08:0x round.
 - NEXT: 1) stall-failover epic (engine mid-stream retry + lane rotation — needs gate), 2) auto-resume E2E (providerKeys.custom recipe stands), 3) styling queue: sparkline echo in run-dialog history rows, 4) r80 dialog mid-run row visibility question is superseded by the counter fix but recipe v2 remains recorded.
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 09:23 +08)
+Agent: main (review round)
+Task: r85 — per-step tick strip in run-dialog history rows (styling queue item + feature increment, view-only)
+
+Work Log:
+- QA: HTTP 200; cron CLI still absent (platform-side, 12th round) — fleet 2/2 behavioral (414938 :07, this = 414940 :23). Console clean pre/post edit.
+- r85 SHIPPED (workflow-run-panel.tsx historySection, 1 edit, view-only): each history row now carries a per-step TICK STRIP (up to 12 ticks, h-1.5 w-1 rounded-sm) colored by the r80 status semantics — emerald done / red error / zinc-400 stopped / pulsing violet running / zinc-300 pending — plus a "k/n" tabular count shown ONLY when the run is incomplete (zero clutter on clean runs). role=img + aria-label "d of n steps done"; per-tick title tooltip "Step i · status". This echoes the r82 card-sparkline language at per-STEP granularity: the history list answers "how far did that run get?" without opening it. Correction of record: rows already HAD status icons (check/x/ban/loader) — the a11y snapshot collapses aria-hidden icons; the genuinely missing piece was step-level progress.
+- VERIFIED (agent-browser eval DOM truth, dialog re-opened after HMR collapsed the Collapsible — refs stale after refresh, re-snap first): errored run "Quick probe test" -> "2 of 7 steps done | 7 ticks | emerald,emerald,red,zinc x4 | txt 2/7" (exactly matches stored statuses done/done/error/stopped x4); done run -> "7 of 7 steps done | 7 ticks | all emerald | no count". eslint clean; console clean; HMR compiled.
+
+Stage Summary:
+- Run-dialog history rows now read at two granularities: per-run status icon + per-step tick strip — the last item of the r82 styling queue is closed. Workflow Studio now shows run truth at every timescale AND every depth (header chip / card badge / card sparkline / history ticks / recovery card).
+- NEXT: 1) stall-failover epic (engine mid-stream retry + output-reset signal + lane rotation — needs gate), 2) auto-resume E2E (providerKeys.custom recipe stands), 3) candidate polish: tick strip also inside the run-view step list header (visual consistency), 4) deep runs >12 steps would truncate ticks (current max 11; slice(0,12) cap noted).

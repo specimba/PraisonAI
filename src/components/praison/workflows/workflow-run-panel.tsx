@@ -615,6 +615,38 @@ export function WorkflowRunPanel({
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-400" aria-hidden />
                 )}
                 <span className="min-w-0 flex-1 truncate text-xs">{r.task}</span>
+                {r.steps.length > 0 ? (() => {
+                  // r85: per-step tick strip — the card sparkline's language
+                  // echoed per history row: how far the run got, at a glance.
+                  const d = r.steps.filter((s) => s.status === "done").length;
+                  return (
+                    <span
+                      className="flex shrink-0 items-center gap-[3px]"
+                      role="img"
+                      aria-label={`${d} of ${r.steps.length} steps done`}
+                    >
+                      {r.steps.slice(0, 12).map((s, si) => (
+                        <span
+                          key={si}
+                          title={`Step ${si + 1} · ${s.status}`}
+                          className={cn(
+                            "h-1.5 w-1 rounded-sm",
+                            s.status === "done" && "bg-emerald-500",
+                            s.status === "error" && "bg-red-500",
+                            s.status === "stopped" && "bg-zinc-400 dark:bg-zinc-600",
+                            s.status === "running" && "animate-pulse bg-violet-400",
+                            s.status === "pending" && "bg-zinc-300 dark:bg-zinc-700"
+                          )}
+                        />
+                      ))}
+                      {d < r.steps.length ? (
+                        <span className="ml-0.5 text-[10px] tabular-nums text-muted-foreground">
+                          {d}/{r.steps.length}
+                        </span>
+                      ) : null}
+                    </span>
+                  );
+                })() : null}
                 {r.status === "done" && r.novelty != null && (
                   <span
                     title={`Evolution novelty vs recent runs: ${r.novelty}%${r.novelty < 35 ? " — stall signal (near-duplicate output)" : ""}`}
