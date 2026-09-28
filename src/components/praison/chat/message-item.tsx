@@ -127,6 +127,16 @@ function RouteReceiptChip({ receipt }: { receipt: RouteReceipt }) {
               <dd className="min-w-0 break-all text-right font-mono">{receipt.resolved_label}</dd>
             </div>
             <div className="flex items-start justify-between gap-3">
+              <dt className="shrink-0 text-muted-foreground">Lane</dt>
+              <dd className="min-w-0 break-all text-right font-mono">
+                {message?.transport === "server"
+                  ? "server relay ⇄"
+                  : message?.transport === "browser-direct"
+                    ? "browser-direct (key stayed local)"
+                    : "—"}
+              </dd>
+            </div>
+            <div className="flex items-start justify-between gap-3">
               <dt className="shrink-0 text-muted-foreground">Fallback</dt>
               <dd className="text-right">
                 {fallback ? (

@@ -68,6 +68,9 @@ export interface ChatMessage {
   durationMs?: number;
   /** Model id used for this reply ("auto" for the built-in engine). */
   model?: string;
+  /** Which transport served this reply — v12 chat lane attribution
+   * ("browser-direct" = key stayed in the browser; "server" = app relay). */
+  transport?: "browser-direct" | "server";
   /** Files/images attached by the user (content inlined for context). */
   attachments?: MessageAttachment[];
   /** True when this reply was posted proactively by a conversation heartbeat. */

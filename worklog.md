@@ -2493,3 +2493,34 @@ Open risks: none new; the sky-chip render path awaits its first real relay-serve
 Blockers: none
 Cron state: cron CLI absent (127) round 40; fleet 2/2 behavioral (patrol 03:37/04:07 on cadence; review 04:23 = this round).
 Next recommended action: r99 — pick from the product backlog; candidates: (a) surface res.transport in the CHAT view too (chat messages currently don't state their lane — same attribution idea one screen over); (b) a "lane health" mini-panel summarizing recent calls' direct/relay ratio; (c) visual capture of the v11 button + v11b chip together on the next failed run.
+---
+Task ID: 414940 (hourly review, 2026-09-29 05:23 +08)
+Agent: main (review round)
+Task: v12 — chat-view lane attribution (r98's candidate (a): the v11b idea one screen over).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r98.
+- GAP: chat users could not tell which transport served an answer — the v10 auto-fallback and the relay lane were invisible in the chat UI; the route receipt popover showed Requested/Answered-by/Fallback but no lane.
+- v12 SHIPPED (3 files, small diffs):
+  (1) types.ts — ChatMessage.transport?: "browser-direct" | "server" (documented: browser-direct = key stayed local; server = app relay).
+  (2) chat-view.tsx — final patchMessage now includes `transport: result.transport` (slots into the existing receipt-bearing patch chain).
+  (3) message-item.tsx — route receipt popover gains a "Lane" row between "Answered by" and "Fallback": "server relay ⇄" | "browser-direct (key stayed local)" | "—" for pre-v12 historical messages.
+- VERIFIED: live HMR compile clean (New Chat opens, composer renders, zero console errors — confirms `message` scope in the receipt popover); historical messages show "—" by design.
+- Budget: 9/12 tool rounds — clean exit.
+
+Stage Summary:
+- Lane attribution is now end-to-end across BOTH surfaces: workflow run call lists (v11b, sky ⇄ chips) and chat route receipts (v12 Lane row). The transport story — browser-direct vs relay vs forced retry — is fully legible to the user everywhere the app dials a model.
+- Cumulative product state after v4→v12: automatic pre-stream fallback, honest mid-stream surfaces, 3 recovery lanes on failed steps, and per-call/per-message lane observability.
+
+Round Handoff:
+Round ID: r99 (v12 chat lane attribution)
+Budget used: S/M · ~15 min (9/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v12 shipped + compile-verified across types/chat-view/message-item.
+User-visible changes: chat route receipt now states the serving lane; new messages carry transport; historical ones show "—".
+Verification steps: HMR compile clean; New Chat + composer render; zero console errors; edit diffs read back (3/3 anchors).
+Verification result: PASS
+Open risks: none new; Lane row awaits first real relay-served chat answer (visual piggyback later); heartbeat proactive messages (chat-heartbeat.tsx:85 runAgentChat) do NOT yet record transport — trivial follow-up if wanted.
+Blockers: none
+Cron state: cron CLI absent (127) round 41; fleet 2/2 behavioral (patrol 04:37/05:07 on cadence; review 05:23 = this round).
+Next recommended action: r100 — candidates: (a) add transport to heartbeat proactive messages (chat-heartbeat.tsx, one line + patch field — completes lane coverage 100%); (b) "lane health" mini-panel (direct/relay ratio over recent calls); (c) visual capture of v11 button + v11b chip + v12 Lane row together on the next failed/relay run.

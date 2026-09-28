@@ -343,6 +343,7 @@ export function ChatView() {
           status: "done",
           durationMs: Date.now() - startedAt,
           model: selectedAgent.model,
+          transport: result.transport,
           ...(receipt
             ? {
                 receipt: {
