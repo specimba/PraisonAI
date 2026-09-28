@@ -2061,3 +2061,20 @@ Work Log:
 Stage Summary:
 - r86 defensive behavior confirmed live (no steps -> no strip, no crash); render branch has a precise 3-round verification recipe. New standing fact: QA-profile run history is post-10:23-restore (all legacy runs step-less).
 - NEXT: 1) synthetic-run injection -> r86 render-branch verification (+k/n count + red tick), 2) E2E recipe v4 dedicated round, 3) stall-failover epic (gate pending).
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 14:23 +08)
+Agent: main (review round)
+Task: r86 render-branch verification via synthetic run injection — FULLY VERIFIED (all branches), zero production edits
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (17th round, platform-side) — fleet 2/2 behavioral. Console clean throughout.
+- INJECTION (scripts/inject-r86.js, idempotent, file-based to dodge eval-arg quirks): synthetic run "qa-r86-verify" pushed into Novelty Lab (sample) via localStorage persist envelope (praison-workflows, state.workflows[]) — 4 steps done/done/error/stopped + full RunErrorInfo (stepIndex 2, kind network, stepsDone 2). Card sparkline instantly read "Last 5 runs: error, done x4" (r82 live-derivation bonus-verified).
+- r86 RENDER BRANCH VERIFIED (real DOM, dialog reopened): header strip renders 4 ticks (.h-2), aria-label "2 of 4 steps done" (rendered TWICE — r86 header + r85 history row, same data, both live), "2/4" k/n count shown, tick colors "EERS" = emerald,emerald,red,zinc exactly matching stored statuses. "Steps" label present (note: textContent is "Steps"; the uppercase display is CSS — grep for "STEPS" in textContent will false-negative). r84 recovery card co-verified on same data: "Failed at step..." + "2/4 steps done" both rendered.
+- CLEANUP VERIFIED: injected run removed (sed-derived cleaner from the same script: push line dropped), runs=4, injected=false, page reloaded, app 200.
+- Correction of record (13:23 round): the two eval SyntaxErrors were MY unbalanced parens, NOT CLI arg mangling — plain balanced JS evaluates fine; the file-based "$(cat script)" pattern is still preferred for complex snippets (editable, re-runnable).
+- r86 now FULLY verified across all three branches: render (this round), defensive-empty (13:23), truncation hint (code-reviewed; >12 runs need no synthetic test — slice is the same guarded path).
+
+Stage Summary:
+- r86 is closed: run truth renders at every depth with honest data, verified end-to-end with injected evidence and clean rollback. QA profile restored to pre-round state.
+- NEXT: 1) E2E recipe v4 dedicated round (auto-resume; client side fully de-risked), 2) stall-failover epic (engine mid-stream retry + output-reset + lane rotation — needs gate), 3) styling queue EMPTY — candidate: none queued; next increment should come from user-facing value (e.g. diagnostics copy button) rather than aesthetics.
