@@ -142,6 +142,12 @@ function sanitizeWorkflow(raw: unknown, validAgentIds: Set<string>): Workflow | 
   };
 }
 
+/** Stable identity of a workflow for import dedupe: name + ordered step identities + depth. */
+function workflowFingerprint(name: string, steps: WorkflowStep[], depth?: Workflow["depth"]): string {
+  const body = steps.map((s) => `${s.agentId}::${s.label}::${s.kind}`).join("|");
+  return `${name.trim().toLowerCase()}#${body}#${depth ?? ""}`;
+}
+
 // ─── Evolution ledger · per-workflow novelty trajectory (r68 follow-up) ──────
 
 /**
@@ -974,12 +980,56 @@ export function WorkflowsView() {
         });
         return;
       }
-      for (const w of imported) addWf(w);
-      const skipped = list.length - imported.length;
-      toast.success(
-        `Imported ${imported.length} workflow${imported.length === 1 ? "" : "s"}` +
-          (skipped > 0 ? ` (${skipped} skipped)` : "")
+      // r88: dedupe against the roster and within the file itself. An identical
+      // twin (same name + same ordered steps + same depth) is skipped; a name
+      // collision with different content imports as "<name> (imported)".
+      const existing = useWorkflowsStore.getState().workflows;
+      const seenFingerprints = new Set(
+        existing.map((w) => workflowFingerprint(w.name, w.steps, w.depth))
       );
+      const takenNames = new Set(existing.map((w) => w.name.toLowerCase()));
+      const renameCounters = new Map<string, number>();
+      let dupes = 0;
+      let renamed = 0;
+      const toAdd: Workflow[] = [];
+      for (const w of imported) {
+        const fp = workflowFingerprint(w.name, w.steps, w.depth);
+        if (seenFingerprints.has(fp)) {
+          dupes++;
+          continue;
+        }
+        seenFingerprints.add(fp);
+        if (takenNames.has(w.name.toLowerCase())) {
+          const base = w.name;
+          let n = renameCounters.get(base.toLowerCase()) ?? 0;
+          let candidate = `${base} (imported${n > 0 ? ` ${n + 1}` : ""})`;
+          while (takenNames.has(candidate.toLowerCase())) {
+            n++;
+            candidate = `${base} (imported ${n + 1})`;
+          }
+          renameCounters.set(base.toLowerCase(), n);
+          toAdd.push({ ...w, name: candidate.slice(0, 80) });
+          takenNames.add(candidate.toLowerCase());
+          renamed++;
+        } else {
+          toAdd.push(w);
+          takenNames.add(w.name.toLowerCase());
+        }
+      }
+      for (const w of toAdd) addWf(w);
+      const skipped = list.length - imported.length;
+      if (toAdd.length === 0 && dupes > 0) {
+        toast.info(
+          `All ${dupes} workflow${dupes === 1 ? "" : "s"} already exist — nothing imported.`
+        );
+      } else {
+        toast.success(
+          `Imported ${toAdd.length} workflow${toAdd.length === 1 ? "" : "s"}` +
+            (dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? "" : "s"} skipped` : "") +
+            (renamed > 0 ? ` · ${renamed} renamed to avoid a clash` : "") +
+            (skipped > 0 ? ` (${skipped} skipped)` : "")
+        );
+      }
     } catch {
       toast.error("Could not read that file as JSON.");
     }

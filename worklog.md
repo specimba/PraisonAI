@@ -2133,3 +2133,23 @@ Work Log:
 Stage Summary:
 - Four rounds of "why didn't it dial 4319" collapse into one sentence: the browser dialed it, CORS ate it, and the server relay that caught the fallback is lane-less by design. v5 (CORS on the hang server) is the first recipe that can actually reach the stall watchdog end-to-end.
 - NEXT: 1) v5 execution (CORS hang server -> full auto-resume E2E), 2) stall-failover epic design (call map complete), 3) user upload: still missing (2 misses) — Drive/paste path stands.
+---
+Task ID: r88 (direct user round, 2026-09-28 ~18:05 +08)
+Agent: main
+Task: User delivered 4 file attachments (previously lost uploads finally landed at /tmp/my-project/download/): run report export, chat export, comparison report, praison-workflows.json. Language directive: ENGLISH ONLY going forward (user knows EN/TR, no Chinese). Process the files and extract actionable work.
+
+Work Log:
+- Located all 4 attachments at /tmp/my-project/download/ (IM attachments land there, NOT upload/ — channel now proven working).
+- Read all 4: (a) Run report "Research Brief" 9/14 completed 35.0s 3/3 steps 8 tool calls; (b) chat export with QA r5/r6 probes (R5-OK/R6-OK); (c) comparison report Run A vs B; (d) praison-workflows.json with Build & Verify + Research Brief. NOTE: the 47.6KB Continuous Research failure export is STILL not delivered — attachments now work, user can resend.
+- Gap found: workflows Import exists (handleImportFile) but has NO dedupe — importing user's real file would duplicate "Build & Verify"/"Research Brief" (both are seed workflows).
+- E2E proof-of-bug via real UI: DataTransfer File injection into hidden input on Workflow Studio (must navigate there first — default view is Chat, its attachment input was the first selector match; caused first failed attempt).
+- Reproduced: count 5→7, both names duplicated, no guard.
+- r88 FIX in workflows-view.tsx: workflowFingerprint() (name-ci + ordered agentId::label::kind steps + depth); exact twins skipped; name-collision-with-different-content renamed "<name> (imported[ N])" via per-name counters; batch-internal dedupe via seenFingerprints; toast.info when everything already exists; success toast reports duplicates skipped + renamed + skipped counts.
+- Verification (all via real UI + real user file): T1 re-import user's original file → count stays 5, info toast path; T2 collision variant + fresh "r88 Import Probe" → "Research Brief (imported)" created, probe imported, toast "Imported 2 workflows · 1 renamed to avoid a clash"; T3 cleanup surgery + same-eval reload (quirk #1 respected) → state restored to exactly 5 workflows.
+- lint clean; dev.log clean (only routine prisma queries); screenshot confirms clean render, Evolution ledger intact.
+
+Stage Summary:
+- r88 shipped: workflows import is now idempotent and clash-safe (verified with the user's own export file end-to-end).
+- IM attachment channel WORKS: files land in /tmp/my-project/download/. upload/ remains dead. Future user files should be checked there first.
+- Language policy: ALL user-facing replies in English (user: EN/TR only, no Chinese).
+- Pending: user's 47.6KB Continuous Research failed-run export still undelivered — stall-failover epic evidence still awaited; next review round should proceed with /api/chat lane builder reading regardless.
