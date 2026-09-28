@@ -1996,3 +1996,21 @@ Work Log:
 Stage Summary:
 - Run-dialog history rows now read at two granularities: per-run status icon + per-step tick strip — the last item of the r82 styling queue is closed. Workflow Studio now shows run truth at every timescale AND every depth (header chip / card badge / card sparkline / history ticks / recovery card).
 - NEXT: 1) stall-failover epic (engine mid-stream retry + output-reset signal + lane rotation — needs gate), 2) auto-resume E2E (providerKeys.custom recipe stands), 3) candidate polish: tick strip also inside the run-view step list header (visual consistency), 4) deep runs >12 steps would truncate ticks (current max 11; slice(0,12) cap noted).
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 10:23 +08)
+Agent: main (review round)
+Task: auto-resume E2E attempt 3 (corrected legacy-lane injection) — NO STALL, but the routing root cause is now definitively mapped; recipe v3 written. Zero production code edits.
+
+Work Log:
+- QA: HTTP 200; cron CLI still absent (platform-side, 13th round) — fleet 2/2 behavioral. Console clean.
+- HARNESS: scripts/daemonize.py added (reusable double-fork executor per the r79 doctrine) — hang-server ran on :4319 across ALL tool-call boundaries this round (health "hanging ok"); killed in cleanup.
+- INJECTION (all with pre-injection backups, verified restorable): settings envelope mutated in place (zustand persist shape = state.workflows / state.* — gotcha recorded; a naive flat write silently no-ops on rehydrate); provider=custom, activeProviderId="", legacy baseUrl=http://localhost:4319/v1, defaultModel=hang-test, relayEnabled=false; probe workflow cloned from a Standard wf (1 step). Run started via the real UI (card Run -> dialog -> fill -> Run; fill-alone quirk reconfirmed).
+- RESULT: run COMPLETED (2 steps, rc=0) via callLog: "Vyce AI | deepseek-v4.1 | ok 1586ms" then "AIHubMix claude-opus-5 | fast-model | ok 2369ms". ZERO sockets on 4319 the whole time. The hang lane was never dialed.
+- ROOT CAUSE (corrects the 03:23 mechanism note): the workflow runner routes step calls through the MODEL ROTATOR whose lanes are built from settings.providerKeys registry entries — the legacy settings.baseUrl endpoint is NOT a rotator lane, so the injected hang endpoint is invisible to workflow runs. (Also: there is no id="custom" registry entry at all — providerById("custom") is undefined; the 03:23 wording was wrong, the observable outcome was the same.)
+- CLEANUP DONE + VERIFIED: settings/workflows restored from backups, probe GONE, bak + stall-timeout keys removed, hang-server killed, :4319 closed, app 200 after restore-reload.
+- RECIPE v3 (next attempt): (1) backup then EMPTY settings.providerKeys (delete the key) so the rotator has ZERO registry lanes; (2) keep provider=custom + legacy baseUrl=4319 as the only possible lane; (3) praison-stall-timeout-ms=20000; (4) start run; expect callLog engine "localhost:4319" + ESTABLISHED socket + stall at 20s + resume toasts; (5) restore keys from backup. Verify the rotator falls back to resolveLlm when providerKeys is empty BEFORE the attempt (read the rotator lane-builder in workflow-runner/chat-client first).
+
+Stage Summary:
+- The auto-resume E2E remains OPEN but the last unknown (lane targeting) is solved: v3 removes the lane-pool ambiguity entirely. Attempt 3 cost zero production edits and produced the precise routing map.
+- NEXT: 1) E2E recipe v3 above, 2) stall-failover epic (gate pending), 3) no styling debt — r82/r85 queue closed.
