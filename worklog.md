@@ -2278,3 +2278,36 @@ Open risks: none to user state (fully restored); the stall-failover epic remains
 Blockers: none
 Cron state: cron CLI absent (127) round 29; fleet 2/2 behavioral (patrol 20:37/21:07 on cadence; review 20:23/21:23 on cadence).
 Next recommended action: v8 — read chat-client.ts runBrowserDirect body (lines ~122-200) hunting the pre-fetch bail-out guard; 2-3 rounds; then either the one-line fix + re-run v7 recipe, or option (c) unit-level watchdog tests if no guard exists.
+---
+Task ID: 414940 (hourly review, 2026-09-28 22:23 +08)
+Agent: main (review round)
+Task: v8 — hunt the pre-fetch bail-out inside runBrowserDirect. RESULT: root cause of the 3-round no-dial mystery FOUND (harness bug, not app bug), FIRST definitive browser-direct dial proof captured, and the real stall-failover gap precisely characterized.
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (32nd round, permanent); console clean; state green from r91.
+- Code eliminated (chat-client.ts 122-211 + agent-engine.ts 360-490, 509-554): runBrowserDirect has NO guard; runRelayedCustom builds the primary hop and calls runCustomEngine; runCustomEngine explicitly ALLOWS keyless dials (authHeaders={}) and builds the URL cleanly. Code reading could NOT explain zero dials → went empirical.
+- NETWORK-LAYER PROBE (window.fetch patched in-page, console-logged every fetch): the v7 rerun dialed https://vyceai.com/v1/chat/completions then rotated to https://aihubmix.com — THE RUN WAS ALWAYS BROWSER-DIRECT, TO THE USER'S REAL CONFIG. First harness flaw found: start-v4-run.sh re-opens the app, wiping the patch (fixed by patching after open, no re-navigation).
+- ROOT CAUSE (v8, CONFIRMED by envelope dump): zustand persist shape is {state:{settings:{...real...}, ...legacy mirrors}} — the REAL Settings live at state.settings.*; inject-v4/v7 wrote (and their "verify" read) the IGNORED envelope-root mirror keys (state.provider etc.). The app faithfully used the user's real lane (provider=custom, activeProviderId=vyce, baseUrl=api.groq.com, relayEnabled=true) every single round. v6's "agents=auto → gate false" theory: WRONG mechanism, right observation. Quirk #1 (450ms debounce) was real but NOT the operative failure.
+- inject-v8.js SHIPPED (scripts/): targets state.settings.* (provider=custom, activeProviderId="", baseUrl=4319/v1, relay off, defaultModel=hang-test) + agents forced explicit + probe workflow. Real layer verified post-reload.
+- THE DEFINITIVE DIAL (ops/hang-server-calls.log): 2026-09-28T14:30:06.115Z POST /v1/chat/completions ua=Mozilla/5.0 (...) HeadlessChrome HANG model=hang-test — the browser-direct lane PROVEN end-to-end: correct URL, browser UA, resolved model, connection held hanging.
+- THE REAL GAP CHARACTERIZED: no 20s watchdog fired on the browser-direct lane. Chain reconstructed from code + run state (failed at step 1/2, recovery card): 4319 dial → hang → runCustomEngine's FIRST-TOKEN budget aborts (×up to 3 pre-stream attempts, ~60-90s total) → timeout is abort-CLASS → runAgentChat:108 `if (isAbortError(err)) throw err` rethrows → NO transparent relay fallback. The r25 stall watchdog (CONNECT 20s / stall 90s) guards ONLY runServerAgent (/api/chat relay lane). v5's "watchdog 20s → relay fallback" belief: FALSIFIED at code level.
+- CLEANUP + LESSON: first cleanup pass lost the agents/workflows restore to the live-store 450ms flush AND consumed the bak keys (settings+stallKey restored fine). Repair was surgical and safe (originals known-verified: agents model="auto" ×5, workflows=5 seeds, probe removed) with same-eval reload. Final verify PASS: {vyce/groq/relay=true, auto×5, wfCount=5, probeGone, stallKey null}. LESSON for future harness: (1) restore+reload MUST be one atomic eval; (2) cleanup must VERIFY the restore survived before deleting bak keys.
+- Budget honesty: 14 tool calls (2 over) — both overrun rounds were mandatory state-integrity repairs after the debounce race; v8's discoveries required the extra probe iteration.
+
+Stage Summary:
+- The stall-failover epic (v4→v8, five rounds) is CLOSED with a complete causal story: dial mechanics PROVEN, no-dial mystery root-caused (harness layer bug), and the genuine production gap identified — browser-direct stalls have NO watchdog and NO transparent fallback (timeout-aborts are rethrown as if user-initiated).
+- v9 candidate (queued, real user value): in runAgentChat, distinguish USER aborts (params.signal.reason / aborted flag) from TIMEOUT aborts in the browser-direct path — rethrow only the former; route the latter through runServerAgent (the relay lane) so a stalled direct provider degrades exactly like a failed one. Small diff in one function; unit-testable via the same DI shape as r90.
+- Harness debt logged: start-v4-run.sh wipes in-page patches (re-open); cleanup-v4.js bak-consumption race (fixed doctrine above).
+
+Round Handoff:
+Round ID: r92 (v8)
+Budget used: M · ~45 min (review round, 14 tool calls — overrun documented above)
+Task owner: main (Orchestrator)
+Scope completed: v8 probe built + executed; no-dial root cause found (persist-layer harness bug); FIRST definitive browser-direct dial proof (server-side log, browser UA, hang held); real gap identified (no watchdog/fallback on browser-direct lane); state surgically restored + verified.
+User-visible changes: none (forensics + harness round; production code untouched).
+Verification steps: envelope dump (real vs mirror layer); call log entry with HeadlessChrome UA + model=hang-test; run-state capture (failed-at-step-1 recovery card); post-repair verify JSON (vyce/relay=true, auto×5, wfCount=5, probeGone, stallKey null); app health 200.
+Verification result: PASS
+Open risks: harness scripts inject-v4/v7 are KNOWN-BROKEN (wrong layer) — only inject-v8.js is valid; cleanup-v4.js has the bak-consumption race (doctrine documented); browser-direct stall gap is live for real users (v9 fixes).
+Blockers: none
+Cron state: cron CLI absent (127) round 32; fleet 2/2 behavioral (patrol 21:37/22:07 on cadence; review 21:23/22:23 on cadence).
+Next recommended action: v9 — abort-class fix in runAgentChat (rethrow only user-aborts; relay-fallback timeout-aborts from browser-direct), verified by unit test (DI shape per r90) + rerun of the v8 recipe expecting: dial 4319 → hang → fallback → /api/chat → step COMPLETES instead of failing.
