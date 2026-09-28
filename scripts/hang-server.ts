@@ -13,12 +13,27 @@
 // stall → watchdog abort → auto-resume 1/3 → stall → … → manual-resume card.
 const port = Number(process.argv[2] ?? 4319);
 
+// v5 (18:23 round): CORS everywhere — the browser-direct lane fetches this
+// origin straight from the page (localhost:3000 ≠ localhost:4319), so without
+// ACAO the browser refuses the preflight/response and the lane dies before
+// the stream can hang. Echo requested headers for credentialed safety.
+const corsHeaders = (req: Request): Record<string, string> => ({
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Allow-Headers":
+    req.headers.get("access-control-request-headers") ?? "*",
+  "Access-Control-Max-Age": "86400",
+});
+
 Bun.serve({
   port,
   idleTimeout: 255, // bun max (seconds) — keep sockets alive while hanging
   fetch(req) {
+    if (req.method === "OPTIONS")
+      return new Response(null, { status: 204, headers: corsHeaders(req) });
     const url = new URL(req.url);
-    if (url.pathname === "/health") return new Response("hanging ok");
+    if (url.pathname === "/health")
+      return new Response("hanging ok", { headers: corsHeaders(req) });
     const hangMs = Number(url.searchParams.get("hang") ?? 0);
     if (hangMs > 0) {
       return new Promise((resolve) =>
@@ -27,7 +42,7 @@ Bun.serve({
             resolve(
               new Response(
                 JSON.stringify({ error: { message: "upstream timeout (hang-server)" } }),
-                { status: 504, headers: { "Content-Type": "application/json" } }
+                { status: 504, headers: { "Content-Type": "application/json", ...corsHeaders(req) } }
               )
             ),
           hangMs

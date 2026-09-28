@@ -2153,3 +2153,20 @@ Stage Summary:
 - IM attachment channel WORKS: files land in /tmp/my-project/download/. upload/ remains dead. Future user files should be checked there first.
 - Language policy: ALL user-facing replies in English (user: EN/TR only, no Chinese).
 - Pending: user's 47.6KB Continuous Research failed-run export still undelivered — stall-failover epic evidence still awaited; next review round should proceed with /api/chat lane builder reading regardless.
+---
+Task ID: 414940 (hourly review, 2026-09-28 18:23 +08)
+Agent: main (review round)
+Task: Execute v5 recipe — CORS-enabled hang server + full stall/auto-resume E2E attempt. QA first, then one focused increment.
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (21st round, platform-side) — fleet 2/2 behavioral. Console clean (only HMR noise). r88 state intact (5 workflows).
+- v5 SHIPPED (scripts/hang-server.ts, harness-only): corsHeaders(req) on EVERY response — OPTIONS→204 preflight, /health→200+ACAO, 504 path +ACAO; ACAH echoes access-control-request-headers (credentialed-safe); Max-Age 86400. Restarted via daemonize.py on :4319 — verified preflight 204 + ACAO:* live.
+- E2E EXECUTED verbatim per recipe: inject-v4.js (provider=custom/baseUrl=4319/keys empty/stall 20s/probe wf) → start-v4-run.sh (real UI: Run→fill→start). Run went live.
+- OBSERVATION (the v5 evidence): +5s early-state showed step "Queued" with ZERO output (direct lane holding the hung connection — old CORS death fell back in ~1s and would have streamed by then); +25s: ss shows no ESTABLISHED to :4319 (aborted socket closed) and the relay engine mid-stream ("rate limited on web search" auto-engine text). TIMING FITS: browser-direct dialed 4319 → preflight OK → POST hung → watchdog aborted at 20s → transparent relay fallback produced output. Circumstantial but consistent; console buffer (12-line cap) rotated past the "Browser-direct call failed" log line.
+- CLEANUP: Stop clicked in-run; cleanup-v4.js → settings RESTORED / workflows RESTORED / stall key REMOVED; same-eval reload doctrine honored; post-cleanup state verified (5 seed workflows, agents intact).
+- NOT DONE (budget): definitive server-side proof — v6 = add request logging to hang-server.ts (print each POST /v1/chat/completions + timestamp), re-run harness (2 rounds), match log timestamp against watchdog abort. Also deferred: full auto-resume retry chain observation (stop after first stall-resume cycle).
+
+Stage Summary:
+- v5 landed: the hang server now speaks CORS — the browser-direct lane can physically reach it for the first time. E2E timing evidence supports hang→watchdog→relay fallback actually occurring end-to-end.
+- v6 queued (top): server-side call log for DEFINITIVE dial proof + full resume-chain observation (~4 rounds).
+- State fully restored; no production code touched this round (harness-only).
