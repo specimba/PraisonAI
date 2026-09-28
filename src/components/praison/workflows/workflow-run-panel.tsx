@@ -1032,6 +1032,30 @@ export function WorkflowRunPanel({
                         </span>
                       ) : null}
                       <StatusIndicator status={step.status} ms={step.ms} />
+                      {step.output ? (
+                        <button
+                          type="button"
+                          title="Copy this step's output"
+                          aria-label={`Copy output of step ${i + 1} — ${step.agentName}`}
+                          onClick={() => {
+                            navigator.clipboard
+                              .writeText(step.output)
+                              .then(() =>
+                                toast.success("Step output copied", {
+                                  description: `${step.agentName} · ${step.output.length} chars`,
+                                })
+                              )
+                              .catch(() => {
+                                toast.error("Clipboard blocked", {
+                                  description: "Select the output text and copy manually.",
+                                });
+                              });
+                          }}
+                          className="shrink-0 rounded p-1 text-muted-foreground/60 transition hover:bg-muted/50 hover:text-foreground"
+                        >
+                          <Copy className="h-3 w-3" aria-hidden />
+                        </button>
+                      ) : null}
                     </div>
 
                     <div className="min-h-6 text-sm">

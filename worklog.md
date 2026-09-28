@@ -2078,3 +2078,20 @@ Work Log:
 Stage Summary:
 - r86 is closed: run truth renders at every depth with honest data, verified end-to-end with injected evidence and clean rollback. QA profile restored to pre-round state.
 - NEXT: 1) E2E recipe v4 dedicated round (auto-resume; client side fully de-risked), 2) stall-failover epic (engine mid-stream retry + output-reset + lane rotation — needs gate), 3) styling queue EMPTY — candidate: none queued; next increment should come from user-facing value (e.g. diagnostics copy button) rather than aesthetics.
+
+---
+Task ID: 414940 (hourly review, 2026-09-28 15:23 +08)
+Agent: main (review round)
+Task: r87 — per-step output copy button on run-view step cards (user-value increment) + correction of record
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (18th round, platform-side) — fleet 2/2 behavioral. Console clean.
+- CORRECTION: worklog's "candidate: diagnostics copy button" was STALE — "Copy diagnostics" already ships on the recovery card (workflow-run-panel :376, clipboard + toast + console fallback). Removed from queue; replaced with the genuinely missing user-value increment.
+- r87 SHIPPED (workflow-run-panel.tsx step cards, 1 edit, view-only): per-step COPY OUTPUT button beside the StatusIndicator — renders ONLY when step.output is non-empty (empty/stopped steps stay clean), ghost styling (h-3 Copy icon, muted-foreground/60 -> hover foreground+muted bg), title "Copy this step's output", precise aria-label "Copy output of step N — <agent>", clipboard write with the SAME toast/fallback contract as copyDiagnostics (success toast carries agent + char count; clipboard-blocked toast advises manual copy).
+- VERIFIED (eval-chain QA, scripts/verify-r87.sh — no snapshot refs, pure aria-label targeting): injected r86 synthetic run (reuse inject-r86.js) -> dialog -> history toggle -> run row -> DOM truth: copyButtons=3 (4-step run, 3 steps have output, stopped step correctly button-less — conditional rendering exact), first label "Copy output of step 1 — Alpha". eslint clean, HMR 193ms, app 200.
+- CLEANUP: injected run REMOVED=1 via scripts/cleanup-r86.js (dedicated file — the earlier sed-piped cleanup attempt wedged a 120s command timeout; lesson: never pipe-generate eval JS inline, always run a persisted script file). runs back to 4, page reloaded, 200.
+- TOOLING (new standing assets): scripts/inject-r86.js (idempotent synthetic-run injector), scripts/cleanup-r86.js (paired remover), scripts/verify-r87.sh (eval-chain dialog QA pattern: heading->card Run->toggle->row->assert, zero a11y-ref dependence — reusable for any future run-view verification).
+
+Stage Summary:
+- Every step's output is now one click from the clipboard — the run view's last manual-transcription friction point removed. Verification chain pattern is now scripted and ref-independent.
+- NEXT: 1) E2E recipe v4 dedicated round (auto-resume; scripts/daemonize.py + recipe in 11:23 entry), 2) stall-failover epic (engine mid-stream retry + output-reset + lane rotation — needs gate), 3) user uploads still failing (2nd miss) — Drive-link or paste path agreed with user, watch for the md.
