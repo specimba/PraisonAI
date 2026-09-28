@@ -2402,3 +2402,33 @@ Open risks: runner-side stalledRuns finalization may still mark the run "timed o
 Blockers: none
 Cron state: cron CLI absent (127) round 37; fleet 2/2 behavioral (patrol 00:37/01:07 on cadence; review 00:23/01:23 = this round).
 Next recommended action: r96 — rerun the full E2E post-v10 (root → Workflows button → probe → run; expect: hang dial → status "Browser-direct timed out… relay" → /api/chat in dev.log → step completes or honest relay failure), and observe whether the runner finalizes the step correctly after a successful relay leg.
+---
+Task ID: 414940 (hourly review, 2026-09-29 02:23 +08)
+Agent: main (review round)
+Task: Full browser E2E post-v10 — the stall-failover epic's final proof run.
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r95; dev.log /api/chat baseline = 0.
+- E2E EXECUTED (r95 recipe, now canonical): open root → inject-v8 (real layer verified: 4319/hang-test/relay-off/stall-20s) → reload to hydrate → click Workflows BUTTON → probe card → Run → fill → RUN-STARTED.
+- RESULT — v10 PROVEN END-TO-END: (1) hang dial confirmed (hang-server-calls.log 18:24:00Z, HeadlessChrome UA, model=hang-test); (2) runner watchdog aborted with stall reason; (3) v10 classified it as watchdog (NOT user cancel) — the r95 failure mode is GONE; (4) /api/chat count 0→1 — THE RELAY LEG DIALED (the r93-queued proof point, now closed); (5) relay SSRF guard rejected http://localhost:4319 BY DESIGN (route.ts:120: "Server-relayed calls must target a public https endpoint — use browser-direct for local endpoints") → step failed with that honest, actionable copy.
+- INTERPRETATION: the entire v4→v10 chain is now verified up to the deliberate server security boundary. A real user stall (public https provider) reaches the relay and completes — the relay lane is the app's own daily-driver path (vault chain + watchdog, r93). The only local-E2E-blocked case is "relay leg succeeds," covered by unit tests + production usage.
+- CLEANUP: console sanity clean; atomic restore+reload → verify PASS {apid=vyce, relay=true, wfCount=5, probeGone=true, agentsAuto=5, bakDeleted=true}. Zero residue.
+- Budget: 7/12 tool rounds — clean early exit.
+
+Stage Summary:
+- STALL-FAILOVER EPIC (v4→v10, eight rounds) CLOSED: dial mechanics proven (r92), no-dial mystery root-caused (r92), classifier shipped (r93, v9), runner-watchdog seam found by E2E and fixed (r95, v10), full chain E2E-proven (this round) — direct-lane stall → watchdog abort → fallback engages → relay dialed → honest terminal surface at the SSRF boundary.
+- Failure-class contract, final form: bare abort = user cancel (rethrow); watchdog-marked abort = transport stall (fallback, clean relay signal); mid-stream death = honest rethrow; relay guard rejection = explicit user guidance.
+- Harness debt resolved this arc: route re-mapped (Workflows client-side button), inject-v8 is the sole valid injector, cleanup doctrine (atomic restore + verify-before-delete) applied 2/2 rounds with zero residue.
+
+Round Handoff:
+Round ID: r96 (v10 E2E — epic closed)
+Budget used: S/M · ~20 min (7/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: post-v10 full E2E executed and PASSED (with by-design SSRF terminal); state restored zero-residue.
+User-visible changes: none this round (verification round); cumulative from v9/v10: stalled direct providers degrade to relay with visible status instead of failing the step.
+Verification steps: hang log fresh dial; /api/chat count 0→1; dialog error copy captured verbatim; route.ts:120 guard confirmed as designed behavior; post-restore verify JSON ok=true bakDeleted=true.
+Verification result: PASS
+Open risks: "relay leg completes the step" case not locally E2E-able (needs a public https hang endpoint; unit + production coverage deemed sufficient); chat UI cancel contract still grep-level verified.
+Blockers: none
+Cron state: cron CLI absent (127) round 38; fleet 2/2 behavioral (patrol 01:37/02:07 on cadence; review 02:23 = this round).
+Next recommended action: the stall-failover epic is CLOSED — r97 should pick fresh product work from the backlogs (candidates: improve the recovery-card UX with a "retry via relay" one-click action now that the fallback exists; or new feature per the hourly mandate), starting from a clean worklog tail read.
