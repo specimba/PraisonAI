@@ -2341,3 +2341,32 @@ Open risks: the relay lane itself must be healthy for the fallback to save a ste
 Blockers: none
 Cron state: cron CLI absent (127) round 35; fleet 2/2 behavioral (patrol 22:37/23:07 on cadence; review 22:23/23:23 on cadence).
 Next recommended action: optional v9-E2E confirmation (rerun v8 recipe: expect dial 4319 → hang → "Browser-direct timed out" status → /api/chat probe line → step resolves via relay); else r94 can check the Drive folder for a fresh export of the user's in-flight research run (r90's 429 fallback label should now appear in real transcripts).
+---
+Task ID: 414940 (hourly review, 2026-09-29 00:23 +08)
+Agent: main (review round)
+Task: v9-E2E confirmation — rerun the v8 stall recipe expecting dial 4319 → hang → "Browser-direct timed out" status → relay fallback → step completes.
+
+Work Log:
+- QA: HTTP 200; cron CLI absent (127, 36th round, permanent); console clean (HMR noise only); state green from r93.
+- Harness preflight: hang server UP on 4319 (health 200); inject-v8.js executed AFTER open — real layer verified {provider=custom, apid="", baseUrl=4319/v1, relay=false, model=hang-test, stall=20000ms}; 5 agents touched; probe workflow written; persistence SURVIVED the 450ms debounce window (probeInLS=true pre-reload).
+- BLOCKER FOUND: probe card unreachable. h3 "Stall Probe v4" NOT rendered at root NOR /workflows (root is now a dashboard menu: New Chat/Chat/Agents/Workflows/Radar/Settings; /workflows literal route = 404). No run triggered — the start-v4-run.sh h3-at-root recipe is STALE.
+- CLEANUP (doctrine-compliant): ONE atomic eval restored settings+agents+workflows from bak keys + removed stall key + reload; post-reload verify PASS {provider=custom, apid=vyce, url=groq, relay=true, wfCount=5, probeGone=true, agentsAuto=5, bakDeleted=true}. Zero residue.
+- Budget: 13 tool rounds — 1 over; overrun is the mandated handoff append + state-integrity cleanup (r92 precedent), documented here. E2E did not complete; NO production code touched.
+
+Stage Summary:
+- v9 remains SHIPPED + unit-proven (10/10, r93); this round attempted its E2E confirmation only.
+- NEW HARNESS DEBT: probe-card navigation path must be re-mapped — root is a dashboard menu; Workflows UI lives behind a nav item (client-side panel or non-literal route). start-v4-run.sh is stale.
+- User state integrity maintained end-to-end (inject → verify → restore → verify → bak delete).
+
+Round Handoff:
+Round ID: r94 (v9-E2E attempt)
+Budget used: M · ~30 min (13 tool rounds — 1 documented overrun: handoff append + integrity cleanup)
+Task owner: main (Orchestrator)
+Scope completed: harness preflight + inject + persistence verification; E2E NOT triggered (navigation blocker); full state restore + verified.
+User-visible changes: none (QA/forensics round; production code untouched; zero-residue restore).
+Verification steps: real-layer readback post-inject; pre-reload persistence check; post-restore verify JSON (ok=true, bakDeleted=true); app health 200; hang log shows only the preflight /health curl (no stray dials).
+Verification result: PASS (cleanup) / BLOCKED (E2E)
+Open risks: start-v4-run.sh route stale (fix next); inject-v4/v7 still broken (known); cleanup bak-consumption race doctrine applied successfully this round.
+Blockers: E2E confirmation blocked only by route re-mapping (trivial: click Workflows nav at root → locate probe card → rerun trigger recipe).
+Cron state: cron CLI absent (127) round 36; fleet 2/2 behavioral (patrol 23:37/00:07 on cadence; review 23:23 on cadence).
+Next recommended action: r95 — re-map workflows navigation (click Workflows menu → find "Stall Probe v4" → trigger/fill/start + 50s observe + restore), completing v9-E2E; then the stall-failover epic is fully closed with E2E proof.
