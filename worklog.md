@@ -3164,3 +3164,31 @@ Open risks: first scored runs vs empty seeded priors show inflated 100% — expe
 Blockers: none
 Cron state: fleet 2/2.
 Next recommended action: r120 — (a) Runs board ⇉ server AutomationRun history + ⇉ lane badge (open since r110 — the last big observability gap); (b) LOCAL AUTOMATION VAULT epic; (c) workflow-card provider health; (d) watch first server-lane fire under v24 stagger.
+---
+Task ID: 414940 — r120
+Agent: main (hourly review)
+Task: Runs board ⇉ server-run integration (open since r110 — the last big observability gap; 4 schedules armed means server runs accumulate invisible to the kanban).
+
+Work Log:
+- Baseline: health 200, fleet 2/2, lint clean.
+- IMPLEMENTED (src/components/praison/workflows/run-kanban.tsx, 1 file):
+  1. NEW useServerRuns(enabled) hook — polls /api/automation/sync GET every 60s while the board is open (server AutomationRun rows, take 25).
+  2. BoardCard extended with `server?: ServerRunRow` + uniform `sortAt` epoch sort key; groupRuns(workflows, serverRuns) merges server rows into running/attention/done columns (srv- prefixed keys — no collision with client UUIDs).
+  3. NEW server-lane card variant: cyan accent border/shadow, ⇉ "server" badge (tooltip: fired headlessly by the local server while the tab was closed — built-in engine, results in the local DB), DB-side step progress (step x/y), trigger tag, mono error text on expand column.
+- VERIFIED LIVE: lint exit 0; Runs board open → "Needs you" column now shows all 3 historical 11:25Z server runs with ⇉ server badges + step counts + error text (RSIinFIELD 4 steps 429, Novelty Lab 1 step socket-close, Continuous Research 9 steps 429). Client-lane cards unchanged.
+- Pushed via git-snapshot.sh.
+
+Stage Summary:
+- The two execution lanes are now equally observable: tab-driven BYOK runs and headless server runs share one board, visually distinguished by the ⇉ server badge. This was the r110-era gap that mattered most once schedules armed.
+
+Round Handoff:
+Round ID: r120 (Runs board ⇉ server lane)
+Task owner: main (Orchestrator)
+Scope completed: server-run polling hook, board merge, cyan server card variant, live verification, push.
+User-visible changes: Runs board shows headless server runs alongside tab runs, cyan ⇉ badge, live 60s refresh while open.
+Verification steps: lint; agent-browser board snapshot (3 ⇉ cards with correct errors/steps).
+Verification result: PASS
+Open risks: server cards' onSelect navigates to the workflow but cannot open the server run detail (no client-side run row) — a future detail drawer could read stepsJson from the DB; board poll is gated on boardOpen so closed boards cost nothing.
+Blockers: none
+Cron state: fleet 2/2.
+Next recommended action: r121 — (a) LOCAL AUTOMATION VAULT epic (user-chosen key stored in local DB — dedicated direct-build round); (b) server-run detail drawer (stepsJson viewer); (c) workflow-card provider health; (d) watch first server-lane fire under v24 stagger.
