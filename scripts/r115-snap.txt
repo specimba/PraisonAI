@@ -1,0 +1,125 @@
+- generic
+  - complementary
+    - generic
+      - StaticText "PraisonAI"
+    - StaticText "MULTI-AGENT PLATFORM"
+    - button "New Chat" [ref=e462]
+    - navigation "Primary" [ref=e463]
+      - button "Chat" [ref=e473]
+        - StaticText "Chat"
+      - button "Agents Create & manage AI agents" [ref=e474]
+        - StaticText "Agents"
+        - StaticText "Create & manage AI agents"
+      - button "Workflows Multi-agent pipelines" [ref=e475]
+        - StaticText "Workflows"
+        - StaticText "Multi-agent pipelines"
+      - button "Radar GitHub stars, HF trending & arXiv papers" [ref=e476]
+        - StaticText "Radar"
+        - StaticText "GitHub stars, HF trending & arXiv papers"
+      - button "Settings Provider, profile & data" [ref=e477]
+        - StaticText "Settings"
+        - StaticText "Provider, profile & data"
+    - link "PraisonAI repo" [ref=e464]
+    - button "Toggle theme" [ref=e465]
+    - button "Cron fleet 2 of 2 alive" [ref=e466]
+      - StaticText "cron "
+      - StaticText "2/2"
+      - StaticText "next "
+      - StaticText "8"
+      - StaticText "m"
+    - generic
+      - StaticText "v1.0.0 · local-first · BYOK"
+  - banner
+    - heading "Chat" [level=2, ref=e467]
+    - paragraph
+      - StaticText "Converse with your agents"
+    - button "Open command palette" [ref=e468]
+      - StaticText "Search…"
+      - StaticText "⌘K"
+    - generic [ref=e469] clickable [cursor:pointer]
+      - StaticText "Vyce AI"
+    - button "Toggle theme" [ref=e470]
+  - region "Model tracker ticker" [ref=e460]
+    - button "Open model tracker panel — 7 new, 71 free models" [expanded=false, ref=e471]
+      - StaticText "MODEL TRACKER"
+      - StaticText "7"
+    - StaticText "synced "
+    - StaticText "1h ago"
+  - main
+    - generic
+      - complementary "Conversations"
+        - heading "Chats" [level=2, ref=e478]
+        - StaticText "1"
+        - button "New chat" [ref=e479]
+        - button "Hide chat list" [ref=e480]
+        - textbox "Search conversations" [ref=e481]
+        - generic
+          - heading "TODAY" [level=3, ref=e482]
+          - button "New chat 1m ago 0 msgs" [ref=e483]
+            - StaticText "New chat"
+            - StaticText "1m ago"
+            - StaticText "0"
+            - StaticText "msgs"
+          - button "Options for New chat" [expanded=false, ref=e484]
+      - generic
+        - sectionheader
+          - combobox "Switch agent" [expanded=false, ref=e485]: Praison Assistant
+            - generic [ref=e499] clickable [onclick]
+              - StaticText "Praison Assistant"
+          - paragraph
+            - StaticText "General-purpose AI agent"
+          - StaticText "auto"
+          - StaticText "0"
+          - StaticText "messages"
+          - button "Conversation memory" [expanded=false, ref=e486]
+          - button "Conversation heartbeat" [expanded=false, ref=e487]
+          - button "Find in conversation" [disabled, ref=e488]
+          - button "Export chat as Markdown" [disabled, ref=e489]
+          - button "Clear this chat" [expanded=false, disabled, ref=e490]
+        - heading "Praison Assistant" [level=2, ref=e491]
+        - paragraph
+          - StaticText "General-purpose AI agent"
+        - paragraph
+          - StaticText "Versatile assistant that can search the web, read pages, run code and tell time."
+        - paragraph
+          - StaticText "TRY"
+        - button "Introduce yourself and what you can do" [ref=e492]
+        - button "What's the latest news about AI agents?" [ref=e493]
+        - button "Write and run JS that computes the 30th Fibonacci number" [ref=e494]
+        - button "Read https://github.com/specimba/PraisonAI and summarize it" [ref=e495]
+        - button "What time is it right now?" [ref=e496]
+        - generic
+          - form
+            - button "Attach files" [ref=e500]
+            - button "Open Image Studio" [ref=e501]
+            - button "Record voice input" [ref=e502]
+            - textbox "Message Praison Assistant" [ref=e503]
+            - button "Send message" [disabled, ref=e504]
+          - combobox "Model for this chat" [expanded=false, ref=e497]: Follow global default
+            - StaticText "Follow global default"
+          - StaticText "Web Search"
+          - StaticText "URL Reader"
+          - StaticText "Code Runner"
+          - StaticText "Clock"
+          - StaticText "arXiv Papers"
+          - StaticText "Wikipedia"
+          - StaticText "Hacker News"
+          - StaticText "GitHub Repo"
+          - StaticText "Package Info"
+          - StaticText "Market Rates"
+          - StaticText "UUID & Hash"
+          - StaticText "tools available"
+          - generic
+            - meter "Context usage": 0
+            - StaticText "~"
+            - StaticText "96"
+            - StaticText " tok"
+          - StaticText "📎 files · ⠿ drag chips to reorder · 🎤 voice · / commands"
+  - generic
+    - heading "Command palette" [level=2, ref=e472]
+    - paragraph
+      - StaticText "Search commands, agents, chats and workflows"
+  - region "Notifications alt+T" [ref=e461]
+  - button "Open Next.js Dev Tools" [expanded=false, ref=e498]
+    - image
+  - alert

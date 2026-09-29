@@ -2996,3 +2996,32 @@ Open risks: outer-catch + cool-down paths are code-verified, not live-fired (nat
 Blockers: none
 Cron state: cron CLI absent (127) round 56; fleet 2/2 behavioral (patrol 18:37 appended 10:37:22Z http=200 fleet=2/2; this round = direct user order between patrols).
 Next recommended action: r115 — (a) watch for the first natural "[workflow-runner] escaped run error" line — it names the gap the outer catch was built for; (b) watch the next natural 429 for the ⏳ cool-down toast (also validates v22's "primary demoted" if the provider dies mid-stream); (c) Runs board: server AutomationRun history + ⇉ lane badge — still open since r110, NOW URGENT because 4 schedules are enabled and server runs will accumulate invisible to the kanban; (d) LOCAL AUTOMATION VAULT epic (dedicated direct-build round); (e) workflow-card provider health (recent dial failure rate) — the user's 429 dialog shows why pre-launch visibility matters.
+---
+Task ID: DIRECT BUILD (user message, 2026-09-29 ~19:1x +08) — r115
+Agent: main
+Task: User reported "Runtime ChunkLoadError (stale)" — preview not available — AND demanded version control + GitHub push + backups ("you totally forgot").
+
+Work Log:
+- GIT AUDIT (better than the user feared): repo existed, working tree CLEAN, 110 local commits — version control WAS happening; only PUSH/backups were missing. Two token-bearing remotes: origin=specimba/NEXUS_WebGUI_HARNESS (rejected: diverged — remote has 33 old "backup snapshot"-style commits), fork=specimba/PraisonAI (also stale content).
+- BACKUPS FIRST: fetched fork refs, added backups/ to .gitignore (committed), created backups/praisonai-full-20260929-1115.bundle (107.8MB, --all refs incl. remote lineages — bundle verified sha1) + backups/db-snapshot-20260929-1115.db (757KB; SQLite stays git-untracked by design — heartbeats churn it every minute, snapshots are the right backup shape).
+- PUSH: git push fork main --force-with-lease → 5c7d76d72 → 6a5ca88ac FORCED UPDATE, VERIFIED local SHA == remote SHA (6a5ca88ac51927adc69137ea9997ce08797b0f7f); tags already up-to-date. origin/NEXUS_WebGUI_HARNESS left untouched DELIBERATELY (merging 33 stale snapshot commits would endanger 110 newer live commits; user can decide later).
+- CHUNK FIX — the hard part. Fresh .next + restarts kept DYING: dmesg showed GLOBAL OOM killing next-server (anon-rss 2.3GB) — wiping .next forced full-price recompiles of the giant studio route; cold compile storm + resident chrome QA browser ≈ 4GB container ceiling. bun --smol + NODE_OPTIONS heap cap do NOT cap Turbopack's native (Rust) memory — insufficient.
+- CRITICAL OPS LESSON: a `bash -c "next dev -p 3000 | tee dev.log"` PLATFORM AUTO-SUPERVISOR respawned the server itself once the port freed. My manual spawns were RACING it (port contention + shared-.next corruption = the ENOENT/SST errors). The platform-parented server (next-server pid 4132) survives tool-call boundaries exactly like the old Sep-28 one — DO NOT manually spawn dev servers in future rounds; kill + let the platform supervisor respawn, or at most clear .next then wait for it.
+- FINAL STATE: platform server LISTENING (ss-verified pid 4132); browser: page fully renders, console has ZERO ChunkLoadError (only HMR connected), root=200, /api/automation/sync=200; memory holding (~1.7GB free with chrome back up). backups/ dir: 104MB on disk (bundle + db snapshot), gitignored.
+- Budget: ~17 tool rounds (direct user order — diagnosis-heavy).
+
+Stage Summary:
+- Preview restored (fresh chunks, platform-supervised server, zero chunk errors, full render verified).
+- GitHub has the live truth: PraisonAI repo main == local main (110 commits incl. r114 v23); full-history bundle + db snapshot sit in backups/ for disaster recovery.
+
+Round Handoff:
+Round ID: r115 (ChunkLoadError fix + GitHub push + backups)
+Task owner: main (Orchestrator)
+Scope completed: git audit, backups (bundle+db), force-with-lease push verified, OOM forensics, preview restore.
+User-visible changes: preview works again; code is on GitHub (specimba/PraisonAI @ 6a5ca88a); backup artifacts in backups/.
+Verification steps: bundle verify; ls-remote SHA match; ss listener; agent-browser snapshot + console; curl root/sync/forensics 200s; free-m monitoring.
+Verification result: PASS
+Open risks: cold-compile OOM can recur after any .next wipe while chrome QA runs — prefer NOT wiping .next; if a wipe is unavoidable, stop chrome first and let the platform supervisor do the respawn. origin/NEXUS_WebGUI_HARNESS still holds a diverged 33-commit snapshot lineage (documented, untouched). Bundle is 107MB — future bundles may need --branches selection to stay lean.
+Blockers: none
+Cron state: cron CLI absent (127) round 57; fleet 2/2 behavioral (patrol 19:07 appended 11:07:10Z http=200 fleet=2/2; this round = direct user order).
+Next recommended action: r116 — (a) Runs board ⇉ server-run integration (urgent — 4 schedules enabled, server runs accumulating invisible to the kanban); (b) LOCAL AUTOMATION VAULT epic; (c) workflow-card provider health; (d) decide origin/NEXUS_WebGUI_HARNESS fate (force-align it to local too, or retire the remote); (e) consider a tiny ops script ops/backup.sh (bundle + db snapshot + prune>2) so backups stay routine without the 107MB one-off growth.
