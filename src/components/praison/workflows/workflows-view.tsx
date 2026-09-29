@@ -9,6 +9,7 @@ import {
   Columns3,
   Copy,
   Download,
+  KeyRound,
   Lightbulb,
   LayoutList,
   MoreVertical,
@@ -63,6 +64,7 @@ import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
 import { buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { useSettingsStore } from "@/lib/stores";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, uid } from "@/lib/helpers";
+import { resolveLlm } from "@/lib/llm-config";
 import { isWorkflowRunning } from "@/lib/workflow-runner";
 import { readScheduleSkips } from "@/lib/schedule-skips";
 import { cn } from "@/lib/utils";
@@ -858,6 +860,44 @@ export function WorkflowsView() {
     [agents]
   );
 
+  // r125: provider health — resolve the active brain ONCE per view (every card
+  // runs through the same engine). The resolver is the single source of truth,
+  // so the chip can never drift from what a run will actually do: a selected
+  // provider without a key shows the amber fallback the resolver will take,
+  // custom-with-key shows freshness from validatedAt, auto shows Built-in.
+  const settings = useSettingsStore((s) => s.settings);
+  const llm = React.useMemo(() => resolveLlm(settings), [settings]);
+  const openProviders = React.useCallback(() => {
+    useUiStore.getState().setView("settings");
+    useUiStore.getState().setSettingsAnchor("providers");
+  }, []);
+  const openVault = React.useCallback(() => {
+    useUiStore.getState().setView("settings");
+    useUiStore.getState().setSettingsAnchor("vault");
+  }, []);
+
+  // Headless-lane readiness: only relevant while schedules exist (closed-tab
+  // runs dial the server lane). One masked GET — no keys cross the wire.
+  const [builtinVaultReady, setBuiltinVaultReady] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (activeSchedules === 0) return;
+    let alive = true;
+    fetch("/api/vault")
+      .then((r) => r.json())
+      .then((j: { vault?: { provider: string }[] }) => {
+        if (alive)
+          setBuiltinVaultReady(
+            Array.isArray(j.vault) && j.vault.some((s) => s.provider === "builtin")
+          );
+      })
+      .catch(() => {
+        if (alive) setBuiltinVaultReady(null); // server briefly down — show nothing
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeSchedules]);
+
   // Evolution archive rows can spotlight the pipeline a proposal spawned
   const highlightId = useUiStore((s) => s.highlightWorkflowId);
   // Active stall rule for card-level novelty trails (Settings → Evolution).
@@ -1338,6 +1378,67 @@ export function WorkflowsView() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <DepthChip depth={wf.depth} />
+                      {(() => {
+                        // r125 provider health chip — mirrors resolveLlm 1:1.
+                        if (llm.fallbackNote) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={openProviders}
+                              title={`${llm.fallbackNote} Click to open Settings → Providers.`}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              No key — Auto fallback
+                            </button>
+                          );
+                        }
+                        if (llm.providerId === "auto") {
+                          return (
+                            <span
+                              title="Runs on the built-in gateway — zero config. Add your own provider key in Settings → Providers to dial your own quota."
+                              className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-violet-500/70" />
+                              Built-in
+                            </span>
+                          );
+                        }
+                        const vAt = settings.providerKeys?.[llm.providerId]?.validatedAt;
+                        return (
+                          <button
+                            type="button"
+                            onClick={openProviders}
+                            title={`${llm.label}${llm.model ? ` · ${llm.model}` : ""} — key stored locally${vAt ? `, validated ${fmtRel(vAt)}` : ""}. Click to manage.`}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 transition-colors hover:bg-emerald-500/20 dark:text-emerald-400"
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            {llm.label}
+                          </button>
+                        );
+                      })()}
+                      {wf.steps.some((st) => !agentById.has(st.agentId)) ? (
+                        <button
+                          type="button"
+                          onClick={() => openEdit(wf)}
+                          title={`${wf.steps.filter((st) => !agentById.has(st.agentId)).length} step(s) reference a missing agent — the run will fail at that step ("Agent not found"). Click to fix the pipeline.`}
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                        >
+                          <ShieldAlert className="h-3 w-3" aria-hidden />
+                          {wf.steps.filter((st) => !agentById.has(st.agentId)).length} unassigned
+                        </button>
+                      ) : null}
+                      {wf.schedule?.enabled && wf.steps.length > 0 && builtinVaultReady === false ? (
+                        <button
+                          type="button"
+                          onClick={openVault}
+                          title="Closed-tab schedules dial the shared built-in gateway — prone to 429 throttling. Store your own key in Settings → Vault (local-only) to give the headless lane a dedicated quota."
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                        >
+                          <KeyRound className="h-3 w-3" aria-hidden />
+                          headless: shared key
+                        </button>
+                      ) : null}
                       <span
                         className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
                         title={lastRun ? `Last run: ${lastRun.status}` : undefined}
