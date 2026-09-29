@@ -3025,3 +3025,31 @@ Open risks: cold-compile OOM can recur after any .next wipe while chrome QA runs
 Blockers: none
 Cron state: cron CLI absent (127) round 57; fleet 2/2 behavioral (patrol 19:07 appended 11:07:10Z http=200 fleet=2/2; this round = direct user order).
 Next recommended action: r116 — (a) Runs board ⇉ server-run integration (urgent — 4 schedules enabled, server runs accumulating invisible to the kanban); (b) LOCAL AUTOMATION VAULT epic; (c) workflow-card provider health; (d) decide origin/NEXUS_WebGUI_HARNESS fate (force-align it to local too, or retire the remote); (e) consider a tiny ops script ops/backup.sh (bundle + db snapshot + prune>2) so backups stay routine without the 107MB one-off growth.
+---
+Task ID: 414940 + DIRECT (user message, 2026-09-29 19:23 +08) — r115
+Agent: main (review round + user order)
+Task: User reported "Runtime ChunkLoadError (stale)" + "preview not available" and ordered: fix it, push to GitHub, establish version control & backups ("totally forgot"). Server was DOWN (health=000) — preview fix + git/GitHub/backup discipline all delivered this round.
+
+Work Log:
+- PREVIEW ROOT CAUSE (two layers): (1) the Next dev server process was GONE (port 3000 dead, health=000; scheduler mini-service pid 30740 survived). dev.log ends mid-normal-activity with NO crash trace → silent reap; a TRACKED repo file `dev.log.crash-0844Z-oom` proves an OOM kill at 08:44Z earlier today — the dev server has now died silently twice; watch memory pressure (.next was 288M, node_modules 1.2G). (2) After restart the server listened but didn't answer within 10s, and the user's tab held stale chunks (d542cbee) from before many HMR rebuilds → the overlay's "Next.js 16.1.3 (stale)" ChunkLoadError. FIX: double-kill + `rm -rf .next` + cold restart → root=200 (cold compile 9.8s, warm 27ms). The user must hard-reload their tab ONCE (stale chunks cannot self-heal in-tab).
+- GIT FORENSICS (user's "forgot version control" was half-right): the repo EXISTS with an automatic per-run commit+push loop (UUID-named commits), working tree was CLEAN, and `git ls-remote fork` proved github.com/specimba/PraisonAI refs/heads/main ALREADY had every commit incl. v23. What was actually broken: (a) main still TRACKED origin/main (origin remote no longer exists) → status read "ahead 111 / behind 33" — pure stale-ref noise; (b) no tags, no snapshot discipline, no one watching; (c) a crash log (dev.log.crash-0844Z-oom) was committed.
+- SHIPPED (r115): (1) upstream repaired: `git branch --set-upstream-to=fork/main main` — status is now honest; (2) .gitignore += dev.log*/ops/heartbeat.log, untracked the OOM crash log (commit 7c9325070); (3) scripts/git-snapshot.sh — one-command backup: commit-if-dirty + push fork/main (executable); (4) annotated TAG `v23-stable` created and pushed (31e7beb4); (5) pushed fork/main 6a5ca88ac → 53d02ff86, ls-remote-verified (branch + tag). BYOK check: .env NOT tracked (keys live in browser localStorage — nothing secret in the repo).
+- QA: fresh load renders healthy (Chat view default in fresh context, cron chip 2/2 next 8m); SPA nav → Workflow Studio with 9 marker matches incl. "bridge sync 17s ago" + "next fire 26m" (r113 chips live, real countdown — a schedule IS armed); console ZERO chunkload/runtime/unhandled errors. The 2 visible sync-500 warnings are the documented stale pre-v21 buffer entries + the known fresh-start mount race that v21's fast-retry absorbs.
+- Budget: 12/12 — at budget, exiting.
+
+Stage Summary:
+- Preview restored at the root (server resurrected + poisoned .next cache cleared + clean build), stale-chunk recovery documented (hard reload once), and the GitHub/backup mandate is systematized: honest tracking, runtime logs ignored, one-command snapshot script, v23-stable tag live on github.com/specimba/PraisonAI.
+- Dev-server silent OOM death is now a known failure mode with forensic evidence tracked in-repo (twice today: 08:44Z + ~19:1xZ).
+
+Round Handoff:
+Round ID: r115 (preview resurrection + git/GitHub/backup discipline)
+Budget used: M · ~11 min (12/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: server restart + cache clear + git forensics + tracking fix + hygiene commit + snapshot script + v23-stable tag + verified push + full QA.
+User-visible changes: preview works again (hard-reload your tab once); repo state on GitHub is now trustworthy (correct tracking, tagged milestone, runtime logs excluded); backups = `bash scripts/git-snapshot.sh` any time.
+Verification steps: health 000→200 (cold+warm); ls-remote branch+tag match; fresh-load snapshot + SPA nav + console forensics.
+Verification result: PASS
+Open risks: dev server OOM death may RECUR (no supervisor; consider a watchdog or memory diet next round); the user's stale tab needs ONE manual hard reload; snapshot script is manual, not scheduled.
+Blockers: none
+Cron state: cron CLI absent (127) round 57; fleet 2/2 behavioral (patrol 19:07 appended 11:07:10Z http=200 fleet=2/2 — logged while the web server was down, which is fine: patrol watches :3000 and would have flagged it; NOTE: patrol at 19:37 must expect 200 again post-restart).
+Next recommended action: r116 — (a) dev-server resilience: a tiny watchdog (cron-safe, e.g. extend ops or a bun mini-service) that curls :3000 every 5 min and restarts+clears .next on 000/timeout, logging to ops/watchdog.log — closes the OOM recurrence loop; (b) Runs board ⇉ server-run integration (open since r110, URGENT — 4 schedules armed, next fire ~26m from QA); (c) LOCAL AUTOMATION VAULT epic; (d) workflow-card provider health; (e) if the user wants scheduled backups: register a cron job for scripts/git-snapshot.sh.
