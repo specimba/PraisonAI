@@ -3053,3 +3053,32 @@ Open risks: dev server OOM death may RECUR (no supervisor; consider a watchdog o
 Blockers: none
 Cron state: cron CLI absent (127) round 57; fleet 2/2 behavioral (patrol 19:07 appended 11:07:10Z http=200 fleet=2/2 — logged while the web server was down, which is fine: patrol watches :3000 and would have flagged it; NOTE: patrol at 19:37 must expect 200 again post-restart).
 Next recommended action: r116 — (a) dev-server resilience: a tiny watchdog (cron-safe, e.g. extend ops or a bun mini-service) that curls :3000 every 5 min and restarts+clears .next on 000/timeout, logging to ops/watchdog.log — closes the OOM recurrence loop; (b) Runs board ⇉ server-run integration (open since r110, URGENT — 4 schedules armed, next fire ~26m from QA); (c) LOCAL AUTOMATION VAULT epic; (d) workflow-card provider health; (e) if the user wants scheduled backups: register a cron job for scripts/git-snapshot.sh.
+---
+Task ID: 414940 — r116
+Agent: main (hourly review)
+Task: QA via agent-browser → found real bug in the ServerAutopilot chips (all 3 armed schedules showed ✗ error) → diagnose + fix + verify + push.
+
+Work Log:
+- QA (snapshot+console): preview healthy (HMR clean, zero ChunkLoadError — r115 fix holding), BUT the r113 chips exposed 3× "✗ error · 59m ago" for RSIinFIELD / Novelty Lab / Continuous Research.
+- ROOT CAUSE (DB + scheduler code): runs fired at 11:25:46Z — exactly the app-restart window. nextRunAt had passed during downtime → scheduler found all due at once, v21's 2s stagger too tight → 3 concurrent gateway dials → 429 + socket-close errors. Worse: the catch block ran `enabled: streak < 3` for EVERY error, so environmental blips marched schedules toward the 3-strike breaker pause.
+- FIX (2 files, +41/−11, commit 3572a856e):
+  1. scheduler: TRANSIENT_RE (socket/econnreset/fetch failed/timeout/…) — transient errors keep `enabled: true` unconditionally + get the pushed-out backoff (capped 10min); only hard failures count toward the breaker. 429s fold into the same path.
+  2. scheduler: claim stagger 2s → 5s (backlog thundering-herd guard, proven needed live).
+  3. server-autopilot.tsx: mirror TRANSIENT_RE in the panel — environmental errors render amber "↻ retried" (schedule survived, backoff armed) with an explainer line on expand; red "✗ error" is now reserved for terminal/hard failures only.
+- VERIFIED LIVE: all 3 chips flipped to amber "↻ retried" in the running app; fresh console clean (HMR connected, no errors — one transient "unrecoverable error" Fast Refresh line was the broken intermediate between my own edits, self-healed); scheduler pid 30740 alive 5h+ (bun --hot absorbed edits); root + /api/automation/sync 200; git-snapshot.sh pushed fork/main 53d02ff86→3572a856e.
+
+Stage Summary:
+- Schedules are now restart-proof and congestion-proof: an app restart or gateway blip costs a run slot + backoff, never the schedule itself. UI now tells the truth about which errors are environmental.
+
+Round Handoff:
+Round ID: r116 (transient-error doctrine + amber retried chips)
+Budget used: 11/12 rounds
+Task owner: main (Orchestrator)
+Scope completed: diagnosis (DB+code), scheduler transient classification + stagger widening, chip UI amber state, live verification, GitHub push.
+User-visible changes: ServerAutopilot chips — amber "↻ retried" for infra blips (was alarming red ✗ error); schedules no longer self-pause after restarts/congestion.
+Verification steps: agent-browser snapshot (3 amber chips) + fresh console; ps scheduler; curl root/sync; git push log.
+Verification result: PASS
+Open risks: failStreak now inflates from transient errors (cosmetic — drives backoff cap only); Morning Briefing (360m) hasn't fired since arming — first fire unwatched; dev-server OOM watchdog still unbuilt.
+Blockers: none
+Cron state: cron CLI absent (127); fleet 2/2 behavioral (forensics-verified 12:23Z, both jobs enabled kind=agentTurn).
+Next recommended action: r117 — (a) Runs board ⇉ server-run integration (open since r110, still urgent — history accumulates only in the small panel list, take 25); (b) dev-server watchdog (curl :3000 every 5min, log ops/watchdog.log, let platform supervisor respawn); (c) LOCAL AUTOMATION VAULT epic; (d) watch first natural 429 for the new amber chip path end-to-end; (e) decide origin/NEXUS_WebGUI_HARNESS fate.
