@@ -551,13 +551,25 @@ export function WorkflowRunPanel({
     return () => clearInterval(t);
   }, [open, scheduleEnabled, scheduleTick]);
 
+  // v23: the runner is resolve-only by design, but a throw before its main
+  // try (store drift, HMR edge) would escape as an unhandled rejection — the
+  // exact "Runtime Error: undefined" the user reported. Guard the boundary.
+  const safeRun = (opts: Parameters<typeof executeWorkflowRun>[0]) =>
+    executeWorkflowRun(opts).catch((err) => {
+      console.error("[run-panel] run invocation failed", err);
+      toast.error("Run could not start", {
+        description: err instanceof Error ? err.message : "unknown error",
+      });
+      return null;
+    });
+
   async function runWorkflow() {
     const wf = workflow;
     if (!wf || running) return;
     const trimmed = task.trim();
     if (!trimmed) return;
 
-    await executeWorkflowRun({
+    await safeRun({
       workflow: { id: wf.id },
       task: trimmed,
       source: "manual",
@@ -578,7 +590,7 @@ export function WorkflowRunPanel({
     const wf = liveWorkflow;
     const run = viewedRun;
     if (!wf || !run || running) return;
-    await executeWorkflowRun({
+    await safeRun({
       workflow: { id: wf.id },
       task: run.task,
       resume: { runId: run.id, fromStepIndex },
@@ -601,7 +613,7 @@ export function WorkflowRunPanel({
     const wf = liveWorkflow;
     const run = viewedRun;
     if (!wf || !run || running || !run.task.trim()) return;
-    await executeWorkflowRun({
+    await safeRun({
       workflow: { id: wf.id },
       task: run.task,
       source: "manual",

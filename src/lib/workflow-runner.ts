@@ -158,10 +158,15 @@ function scheduleAutoResume(
       icon: "⏱️",
       description: `"${run.steps[fromStepIndex]?.label ?? "Failed step"}" went silent for 4+ minutes — resuming "${wf.name}" from there (auto-resume ${previousResumes + 1}/${MAX_AUTO_RESUMES}, completed steps preserved).`,
     });
-    void executeWorkflowRun({
+    executeWorkflowRun({
       workflow: wf,
       resume: { runId, fromStepIndex },
       source: "scheduled",
+    }).catch((err) => {
+      // v23: a rejected auto-resume used to surface as an unhandled rejection
+      // ("Runtime Error: undefined"). The runner is resolve-only now; this
+      // guard is the belt to those suspenders.
+      console.error("[workflow-runner] auto-resume failed", err);
     });
   };
   // v20: worker-clock delay — a backgrounded tab clamps main-thread timers,
@@ -489,11 +494,16 @@ export async function executeWorkflowRun(
     }
   };
 
+  // v23: idempotency flag — the escaped-error outer catch may finalize after a
+  // partial finish(); never double-patch or double-toast.
+  let finalized = false;
   const finish = (
     status: WorkflowRun["status"],
     toastMsg: string,
     errorInfo?: RunErrorInfo
   ) => {
+    if (finalized) return;
+    finalized = true;
     // Evolution Layer (r68): novelty % vs this workflow's recent done runs —
     // best-effort; a scoring failure must never affect run finalization.
     let novelty: number | undefined;
@@ -614,18 +624,21 @@ export async function executeWorkflowRun(
 
   /** Build the full RunErrorInfo for a failed step and finish the run. */
   const failRun = (fallbackIndex: number, err: Error) => {
+    // v23: a rejection reason that is not an Error (undefined, a string) used
+    // to leak a literal `undefined` into the error row and the dev overlay.
+    const safeMessage = err instanceof Error ? err.message : String(err ?? "unknown error");
     const meta = err as Error & { stepId?: string; toolCallsOk?: number; autoRetried?: boolean };
     const found = steps.findIndex((s) => s.stepId === meta.stepId);
     const failedIndex = found === -1 ? fallbackIndex : found;
     const step = steps[failedIndex] ?? steps[fallbackIndex];
-    const { kind, hint } = classifyRunError(err.message);
+    const { kind, hint } = classifyRunError(safeMessage);
     const llm = resolveLlm(settings.settings);
     const info: RunErrorInfo = {
       stepIndex: failedIndex,
       stepId: step.stepId,
       stepLabel: step.label,
       agentName: step.agentName,
-      message: err.message,
+      message: safeMessage,
       kind,
       hint,
       toolCallsOk: meta.toolCallsOk ?? 0,
@@ -859,6 +872,21 @@ export async function executeWorkflowRun(
           demotePrimary = true;
         }
         if (attempt < MAX_STEP_ATTEMPTS && SELF_HEAL_KINDS.includes(kind) && !signal.aborted) {
+          // v23: a 429 is congestion, not flakiness — re-dialing within seconds
+          // burns the whole ladder inside the same quota window (the user's
+          // Continuous Research run recorded 3 failed 429 dials back-to-back;
+          // v21b's server-side lesson now mirrored client-side).
+          if (kind === "rate-limit") {
+            const cooldown = attempt === 1 ? 20_000 : 45_000;
+            toast.info(`"${runStep.label}" is rate-limited — cooling down ${Math.round(cooldown / 1000)}s before retry ${attempt + 1}/${MAX_STEP_ATTEMPTS}…`, {
+              icon: "⏳",
+              description: "Free-tier quota windows refill — hammering them just burns attempts.",
+            });
+            await new Promise((r) => setTimeout(r, cooldown));
+            if (signal.aborted) {
+              throw new DOMException("Aborted during rate-limit cool-down", "AbortError");
+            }
+          }
           toast.info(`"${runStep.label}" hit a ${kind} hiccup — auto-retry ${attempt + 1}/${MAX_STEP_ATTEMPTS} on a fresh lane…`, {
             icon: "🛟",
             description: demotePrimary
@@ -1134,6 +1162,19 @@ export async function executeWorkflowRun(
     }
 
     finish("done", startIndex > 0 ? "Pipeline resumed & finished" : "Pipeline finished");
+    return runId;
+  } catch (err) {
+    // v23: the loop's inner catches own step errors; anything landing here
+    // escaped through a gap (context builders, finalizer internals, callbacks)
+    // and used to reject the run promise — the user-visible result was the
+    // Next.js overlay's "Runtime Error: undefined". Finalize honestly instead:
+    // mark the run error, keep partial output, log the escaped cause.
+    console.error("[workflow-runner] escaped run error", err);
+    try {
+      failRun(startIndex, err instanceof Error ? err : new Error(String(err ?? "unknown run error")));
+    } catch (finalizerErr) {
+      console.error("[workflow-runner] finalizer itself failed", finalizerErr);
+    }
     return runId;
   } finally {
     activeRuns.delete(wf.id);

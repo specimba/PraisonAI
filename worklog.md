@@ -2961,3 +2961,38 @@ Open risks: next-fire chip active-path not live-fired (no enabled schedules exis
 Blockers: none
 Cron state: cron CLI absent (127) round 55; fleet 2/2 behavioral (patrol 18:07 on cadence; review 18:23 = this round).
 Next recommended action: r114 — (a) Runs board: server AutomationRun history beside browser runs with a ⇉ lane badge (open since r110 — the last big UI integration item); (b) LOCAL AUTOMATION VAULT epic (opt-in provider keys in the local DB only → headless runs at full parity) — deserves a dedicated direct-build round; (c) workflow-card provider health (recent dial failure rate from call logs) so a sick provider is visible BEFORE launch; (d) the moment the user enables any schedule, next-fire chip and v22 demotion note become live-testable — check then.
+---
+Task ID: DIRECT BUILD (user message, 2026-09-29 ~19:0x +08) — r114
+Agent: main
+Task: User pasted a Next.js dev-overlay report ("Error Type: Runtime Error / Error Message: undefined") plus their live studio state (4 schedules now ENABLED + a run failed at step 1/11 with 3 recorded 429 LLM dials). Root-caused the undefined-rejection class and shipped v23.
+
+Work Log:
+- DIAGNOSIS: dev.log = zero server errors (all 200s + normal prisma polling); a fresh browser load shows a CLEAN console (only Fast Refresh + [HMR] connected) → the overlay error was an interaction-time UNHANDLED REJECTION, not a render crash. Structural audit of executeWorkflowRun: step errors are owned by inner per-step catches (→ failRun → resolve), but the function had ONLY a finally — no outer catch. Any throw escaping the gaps (context builders outside the inner trys, finish() internals: store patch/toast/onSettled, review-gate prelude) rejected the whole run promise. The panel's onClick floated those promises → dev overlay. failRun read err.message RAW, so a non-Error rejection reason leaked a literal `undefined` — matching the overlay's "Error Message: undefined".
+- THE USER'S SECOND PAIN (their pasted run): 3 LLM calls recorded, 3 failed, all 429 "Too many requests" — rate-limit IS in SELF_HEAL_KINDS, so the client ladder re-dialed back-to-back with ZERO cool-down (same lesson v21b fixed server-side).
+- v23 SHIPPED (2 files, 9 edits):
+  1. workflow-runner.ts — outer catch on the main run try: escaped errors now console.error("[workflow-runner] escaped run error", …) + finalize HONESTLY via failRun (error row + partial output preserved) + return — the runner is now RESOLVE-ONLY; a run promise can no longer reject.
+  2. finish() idempotency (finalized flag) — an escaped error after a partial finish() can never double-patch or double-toast.
+  3. failRun defensive message: non-Error reasons become String(err ?? "unknown error") — no more undefined messages in rows/toasts.
+  4. fireAutoResume floating call .catch (the scheduler float already had one).
+  5. workflow-run-panel.tsx — safeRun() boundary guard wrapping all 3 await sites (run/resume/restart): any pre-try runner throw becomes an honest "Run could not start" toast, never an overlay.
+  6. 429-aware client ladder: rate-limited attempts cool down 20s (before retry 2) / 45s (before retry 3) with an ⏳ toast; abort during a cool-down throws a proper AbortError (stays on the stopped path). Non-rate-limit self-heal retries remain immediate.
+- CONTEXT CONFIRMED FROM USER PASTE: r113 chips are LIVE in their session ("bridge sync 10s ago", "next fire due"); all 4 workflows now have ENABLED schedules (Continuous Research 60m, Morning Briefing 360m, Novelty Lab 30m, RSIinFIELD 60m) → the server lane will start firing these on tab idle (v21b congestion handling covers the engine side).
+- VERIFIED: bun run lint exit 0; 9/9 edit anchors read back; live page renders (Server autopilot region + bridge-sync chip present); console post-HMR clean — the only console warnings are the two STALE pre-v21 "sync failed: 500" buffer entries (v21+ failures log the response body; these don't → pre-v21 format, documented r111).
+- HONEST LIMITS: the outer catch fires only on throw-sites I could not force deterministically (that's WHY they escaped) — verified by code-read + lint, not live-fired; the next natural trigger will print "[workflow-runner] escaped run error" and NAME the real gap. The 429 cool-down waits for the next natural rate-limited attempt (expect ⏳ toast + ladder spread over ~65s instead of ~0s).
+- Budget: ~12 tool rounds (direct user order).
+
+Stage Summary:
+- "Runtime Error: undefined" is structurally dead: the runner can no longer reject, non-Error reasons can no longer leak undefined into messages, and every floating call site is guarded. The failure class is fixed even though its exact trigger site was never reproducible.
+- The user's next rate-limited run degrades gracefully (20s/45s cool-downs) instead of burning its ladder in seconds against the same quota window.
+
+Round Handoff:
+Round ID: r114 (v23 resolve-only runner + 429 client cool-down)
+Task owner: main (Orchestrator)
+Scope completed: diagnosis + v23 (9 edits, 2 files) + lint + live render verification.
+User-visible changes: no more dev-overlay crashes from run invocations; rate-limited retries now wait out quota windows with honest ⏳ toasts; a stuck/escaped run still lands an error row with partial output instead of a silent overlay.
+Verification steps: lint exit 0; anchors 9/9; fresh-load console forensics; stale-buffer format check on the old sync-500 warnings; panel render check.
+Verification result: PASS
+Open risks: outer-catch + cool-down paths are code-verified, not live-fired (natural triggers required); the two stale pre-v21 console warnings will age out of the buffer eventually.
+Blockers: none
+Cron state: cron CLI absent (127) round 56; fleet 2/2 behavioral (patrol 18:37 appended 10:37:22Z http=200 fleet=2/2; this round = direct user order between patrols).
+Next recommended action: r115 — (a) watch for the first natural "[workflow-runner] escaped run error" line — it names the gap the outer catch was built for; (b) watch the next natural 429 for the ⏳ cool-down toast (also validates v22's "primary demoted" if the provider dies mid-stream); (c) Runs board: server AutomationRun history + ⇉ lane badge — still open since r110, NOW URGENT because 4 schedules are enabled and server runs will accumulate invisible to the kanban; (d) LOCAL AUTOMATION VAULT epic (dedicated direct-build round); (e) workflow-card provider health (recent dial failure rate) — the user's 429 dialog shows why pre-launch visibility matters.
