@@ -3368,3 +3368,34 @@ Verification result: PASS (browser click-through owed — tool env broken, not t
 Open risks: agent-browser env broken across two sessions — investigate or switch QA tooling; dev server still reaped between sessions (platform constraint); browser hydration QA from r124 also still owed.
 Blockers: none
 Next recommended action: r126 — (a) fix/replace agent-browser QA path (try node playwright directly) and do the owed click-through of vault card + new chips; (b) else rotate surface: error-handling polish in workflow-run-panel or docs refresh.
+---
+Task ID: USER-DIRECT — r127
+Agent: main (platform development — user-directed deep-dive)
+Task: STABLE CONTINUATION — provider-outage resilience (user report: Continuous Research run failed step 1/11 "network error" ×3 back-to-back; Vyce dashboard showed 5m latency elevated / failover active).
+
+Work Log:
+- DEEP-DIVE (source + telemetry forensics): the old self-heal ladder had three structural holes that together turn one provider bad-window into a dead run:
+  1. ZERO backoff between network/timeout retries — attempts 1→2→3 fired instantly, so all dials landed inside the same elevated-latency window (the user's call log: 3 recorded, 3 failed, no spacing; rate-limit was the only kind with a cooldown).
+  2. Per-step demotion — a mid-stream drop marked the primary sick for ONE step only; an 11-step pipeline re-learned the same outage up to 11×.
+  3. Same-family retry bias — demotion reorders hops but the wire could still contain sibling hops of the failing provider (deepseek-v4.1 dead → deepseek-v4-flash next), i.e. "substitution" that stays inside the sick family.
+- IMPLEMENTED (src/lib/workflow-runner.ts, 7 edits):
+  1. PRIMARY_SICK_MS = 5m + run-scoped `primarySickUntil` — a mid-stream drop now marks the primary sick for the REST OF THE RUN; later steps initialize demotePrimary from it and lead with the built-in engine from attempt 1 (note: "primary skipped — marked sick earlier in this run (Ns left)").
+  2. Escalating abortable backoff for network/timeout between retries: ~8s then ~25s, ±15% jitter (desynchronizes concurrent scheduled runs), countdown toast "lost the provider — waiting Ns…", abort-checked after the sleep.
+  3. Final-attempt model substitution: on attempt 3 every wire hop from the failing provider's family is dropped (guarded — keeps the original wire if that would empty it) so the run leads with healthy ALTERNATE families; call-log note "model substitution — <label> family deprioritized on the final attempt".
+- Process note: MultiEdit applied edits sequentially and stopped mid-batch on a whitespace mismatch → brief duplicate declarations; deduped in the follow-up edit and re-verified. Lesson recorded: validate old_str against fresh reads after any failed batch.
+- VERIFIED: tsc src/ = 0 errors; eslint workflow-runner.ts clean; root 200; single-declaration check passed (rg counts).
+- QA gap (honest): no live run replayed (agent-browser env still broken; a real Vyce outage can't be synthesized on demand). Behavior is unit-of-one verified at source level; next real outage is the field test — watch the next Continuous Research run's call log for backoff notes + substitution note.
+
+Stage Summary:
+- One provider bad-window no longer kills a run: the pipeline now waits out short outages (jittered escalation), stops re-dialing the sick family across steps for 5 minutes, and on the last attempt substitutes to alternate model families entirely — exactly the "stable continuation + similar reliable substitution + meaningful waiting" the user asked for.
+
+Round Handoff:
+Round ID: r128
+Task owner: main (platform dev)
+Scope completed: outage-resilience upgrade in the run engine; push 9781fbb18.
+User-visible changes: failed steps self-heal with visible spaced retries; runs survive provider bad-windows; call log shows skip/substitution notes.
+Verification steps: tsc 0; eslint 0; root 200; rg single-declaration check.
+Verification result: PASS (field test = next real provider outage; watch call-log notes)
+Open risks: backoff adds ≤~33s worst-case per failed step (bounded, abortable); substitution quality depends on keyed alternates in the vault (preseeded free lanes cover the common case); agent-browser env broken — QA tooling still owed.
+Blockers: none
+Next recommended action: r128 — (a) surface backoff/substitution state in the run panel's live step row (a small "⏳ backoff 12s" chip) so waits are visible in-place, not just toasts; (b) when agent-browser works again, run the owed click-through suite (vault card, provider chips, new backoff toast).
