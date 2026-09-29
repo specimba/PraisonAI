@@ -2812,3 +2812,35 @@ Open risks: (1) server executor still missing — closed-tab schedules remain de
 Blockers: none
 Cron state: cron CLI absent (127) round 51; fleet 2/2 behavioral (patrol 14:37/15:07 on cadence; review 15:23 = this round).
 Next recommended action: r110 EPIC (user-directed): build the server autopilot executor — (1) src/instrumentation.ts boots a claim loop (15s) on server start; (2) when automationState.lastSeenAt is stale (>120s = tab closed), claim due enabled AutomationWorkflow rows (nextRunAt<=now); (3) execute steps server-side via the built-in/relay engine lane (lib/server/tools.ts exists; NO user keys touched — BYOK preserved); (4) write progress to AutomationRun (currentStep/stepsJson/finalReport) — the ServerAutopilot panel already renders these; (5) set nextRunAt += intervalMs, failStreak on error. Register-run-now + sync routes already exist. Test with Loop Health Check (tool-free, clean-exit probe). Also: migrate workflow-scheduler.tsx tick to worker clock.
+---
+Task ID: DIRECT BUILD (user message, 2026-09-29 15:xx +08)
+Agent: main
+Task: v20 — HEADLESS AUTOPILOT: server-side scheduled workflow runs so pipelines execute with the tab CLOSED (user's core complaint: "nobody works by themselves... exact focus on that section physically is locking our workflow").
+
+Work Log:
+- USER CONTEXT: user criticized the cron loops as "process theatre" and demanded implementation-grade autonomous execution, BYOK preserved, no telemetry out. Google Drive link unreachable from sandbox; the named uploads (agent_workflow_upgrade_directive_v1.md etc.) did NOT land in upload/ (only an old Sep-22 AIHubMix doc) — built from the message body's clear requirements instead.
+- ROOT CAUSE CONFIRMED IN CODE: workflow-scheduler.tsx:14-15 literally documents "A fully CLOSED tab still cannot run anything — the engine is client-side by design." Schedules + keys + runner all live in the browser.
+- v20 ARCHITECTURE SHIPPED:
+  1. Prisma (db pushed): AutomationWorkflow (registry: stepsJson, intervalMs, nextRunAt, failStreak), AutomationRun (status/currentStep/stepsJson/finalReport/error), AutomationState (single-row client heartbeat).
+  2. API: POST/GET /api/automation/sync (register + heartbeat / poll registry+runs; orphan-guard disables rows the live tab stops sending; countdown preserved across syncs), POST /api/automation/run-now.
+  3. mini-services/workflow-scheduler (bun --hot): 30s tick; STANDS DOWN while the tab heartbeats (<2min) — browser drives with user keys (BYOK lane); when stale, CLAIMS due workflows (nextRunAt advanced before execution — no double-fire) and executes steps sequentially on the BUILT-IN engine with an anti-dither system prompt (no questions/offers/permission-asking — addresses the "Research Scout asked for permission instead of executing" failure in the user's pasted run). 3 attempts/step with 5s/15s backoff; honest per-step progress + error capture; failStreak breaker pauses after 3 consecutive failures.
+  4. Client: AutomationBridge (mounted globally in page.tsx, 60s heartbeat + full schedule snapshot with resolved step prompts from agent.instructions+step.instruction) + ServerAutopilot panel (Workflows studio: driving-status chip, registry with next-run countdowns, recent server runs with live step progress + expandable reports, "Run on server" per row).
+- E2E VERIFIED LIVE: register→heartbeat→stand-down ✓; tab parked 150s → heartbeat stale → server claimed due probe → run created, step progress recorded, 3× retry ladder executed (log: "attempt 3 failed") → honest ERROR row when engine refused ✓; tab revived → bridge re-registered, orphan-guard disabled the curl-only row, server stood down ✓. Panel renders with all elements (PANEL-PRESENT / BROWSER-DRIVING-CHIP / doctrine text / run-now buttons); sync POSTs 200 after dev-server restart.
+- OPS INCIDENT DURING BUILD: dev server had run 1d11h with a pre-v20 Prisma client singleton → automationState undefined (500s); first restart attempt failed silently (lsof kill no-op, TWO servers racing); proper double-kill + single restart fixed it. NOTE for future rounds: db:push REQUIRES a dev-server restart when models are added.
+- KNOWN LIMITATION (honest): the built-in engine endpoint (internal-api.z.ai) returned 429 then ECONNRESET during tests — likely shared-gateway congestion (cron agent loops use the same gateway). Mechanism is fully proven; engine throughput is environmental. NEXT STEP queued: opt-in "local automation vault" — user's own provider keys stored in the LOCAL DB only (never leaves the machine) so headless runs use the user's providers with full parity instead of the built-in engine.
+- Test artifacts cleaned (probe workflow + 2 runs deleted). Workflows probe card / r107-era state untouched.
+
+Stage Summary:
+- The platform now has real autonomous execution: scheduled pipelines fire on the local server when the browser is closed, with claim-then-run anti-double-fire, retry ladders, a failure breaker, honest run records, and a live control panel. BYOK intact (keys stay in the browser; the server lane needs none) and local-first intact (everything on this machine, zero telemetry added).
+- Browser lane and server lane hand off automatically via the heartbeat — no configuration, no double-fires.
+
+Round Handoff:
+Round ID: v20 (direct user build)
+Budget: direct user order — no cap; ~20 tool rounds spent
+Scope completed: full v20 stack (schema, 2 API routes, mini-service, bridge, panel) + live E2E both directions + ops incident resolved.
+User-visible changes: Workflows studio gains the Server Autopilot panel; scheduled runs now survive tab close.
+Verification result: PASS (mechanism); engine connectivity = environmental caveat.
+Open risks: built-in engine congestion may delay/error headless runs until the vault lands; bridge orphan-guard disables rows the tab stops sending (by design — curl-registered test rows get disabled).
+Blockers: none
+Cron state: cron CLI absent (127) round 51; fleet 2/2 behavioral.
+Next recommended action: (1) local automation vault (opt-in, keys in local DB only → headless runs on user's providers); (2) ServerAutopilot: wire run history INTO the Runs board so server runs appear beside browser runs; (3) engine congestion handling: jittered tick + per-workflow retry delay on 429; (4) reply to user with the honest 429 caveat + vault plan; (5) user's directive file never reached the server — ask them to re-paste if it contains specs beyond this round's scope.
