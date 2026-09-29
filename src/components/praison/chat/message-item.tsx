@@ -60,7 +60,13 @@ function TypingDots({ className, dotClassName }: { className?: string; dotClassN
 // "no fallback" stays hover-quiet) + a tiny amber dot when safety intervened.
 // Opening it reveals the developer-tier record: requested vs resolved model,
 // fallback path, tool ledger, safety interventions, context facts, redactions.
-function RouteReceiptChip({ receipt }: { receipt: RouteReceipt }) {
+function RouteReceiptChip({
+  receipt,
+  transport,
+}: {
+  receipt: RouteReceipt;
+  transport?: "browser-direct" | "server";
+}) {
   const fallback = receipt.fallback.status === "occurred";
   const safety = receipt.safety;
   const safetyIntervened = safety?.status === "intervened";
@@ -129,9 +135,9 @@ function RouteReceiptChip({ receipt }: { receipt: RouteReceipt }) {
             <div className="flex items-start justify-between gap-3">
               <dt className="shrink-0 text-muted-foreground">Lane</dt>
               <dd className="min-w-0 break-all text-right font-mono">
-                {message?.transport === "server"
+                {transport === "server"
                   ? "server relay ⇄"
-                  : message?.transport === "browser-direct"
+                  : transport === "browser-direct"
                     ? "browser-direct (key stayed local)"
                     : "—"}
               </dd>
@@ -716,7 +722,7 @@ export const MessageItem = React.memo(function MessageItem({
             </span>
           )}
           {isStreamingNow && <TypingDots dotClassName="h-1 w-1" />}
-          {message.receipt && !isStreamingNow && <RouteReceiptChip receipt={message.receipt} />}
+          {message.receipt && !isStreamingNow && <RouteReceiptChip receipt={message.receipt} transport={message.transport} />}
           {message.status === "stopped" && (
             <span className="text-xs font-medium text-amber-400">(stopped)</span>
           )}

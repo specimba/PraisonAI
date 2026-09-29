@@ -82,6 +82,9 @@ export function buildVariationProposal(
     input.sourceWorkflowName;
   const threshold = input.threshold ?? NOVELTY_SPAWN_THRESHOLD;
   return {
+    id: crypto.randomUUID(),
+    createdAt: Date.now(),
+    status: "open",
     goal: `${base} — approach it from ${hashPick(base)}`,
     reason: input.manual
       ? input.novelty != null

@@ -161,6 +161,7 @@ function scheduleAutoResume(
     });
     executeWorkflowRun({
       workflow: wf,
+      task: run.task,
       resume: { runId, fromStepIndex },
       source: "scheduled",
     }).catch((err) => {

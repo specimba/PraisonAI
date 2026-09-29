@@ -544,6 +544,9 @@ interface UiState {
   openSetupWizard: (providerId?: string) => void;
   setSetupWizardOpen: (v: boolean) => void;
   setSettingsAnchor: (a: "providers" | "local-models" | null) => void;
+  /** Evolution archive row asked to spotlight a pipeline card (WorkflowsView consumes + auto-clears). */
+  requestHighlightWorkflow: (workflowId: string) => void;
+  clearHighlightWorkflow: () => void;
 }
 
 export const useUiStore = create<UiState>()(
