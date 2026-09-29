@@ -3277,3 +3277,35 @@ Open risks: scheduler was restarted (fresh pid — heartbeat loop re-armed, clai
 Blockers: none
 Cron state: fleet 2/2.
 Next recommended action: r124 — (a) vault UI slice: Settings "Automation vault" card (set/remove builtin key, masked display, local-first explainer); (b) workflow-card provider health; (c) optional: tsconfig exclude for examples/scripts/skills.
+---
+Task ID: user-direct — r124
+Agent: main (user conversation)
+Task: (1) Preview broken AGAIN — root-cause it for good; (2) user called out the cron "check theatre" — restructure the fleet to do real work.
+
+Work Log:
+- ROOT CAUSE OF EVERY "PREVIEW BROKEN" INCIDENT (2 independent mechanisms):
+  1. OOM: dmesg proof — kernel killed next-server at anon-rss 2.3GB (memory grows over hours of HMR edits). This was r115's "OOM watchdog" backlog item, now confirmed.
+  2. Sandbox reaping: EVERY process spawned from an agent/cron Bash session (setsid/nohup notwithstanding) is killed when that session ends — proven live 18:28/18:38/18:51/18:53/18:56 restarts all died within minutes with clean logs. Only the platform's own bootstrap and the long-lived scheduler (30740) persist.
+- MITIGATIONS SHIPPED:
+  1. ops/dev-watchdog.sh v2 (runs from the LIVE user session): 20s health loop, restarts dev with NODE_OPTIONS="--max-old-space-size=1536" (GC hard before the kernel does), reaps stale QA chrome before restarts, RSS forensics per restart, 5-strike cooldown. Converts OOM death into a ≤30s blip while the session lives.
+  2. Direct-node invocation (node node_modules/next/dist/bin/next dev) — the `bun run dev` wrapper died silently under the watchdog once.
+- CRON FLEET RESTRUCTURED (user order — end the theatre):
+  1. DELETED 414938 (30-min heartbeat patrol): it wrote "http=200 fleet=2/2" lines while the app was actually dying; zero recovery power; circular self-verification.
+  2. DELETED 414940 (hourly review with ritual preamble) → CREATED 424432 "dev agent — hourly build round" (agentTurn, hourly :23 Europe/Istanbul): one real committed improvement per round, ≤12 rounds, banned-ritual list (no heartbeats, no fleet checks, no cron recreation, ≤2 rounds process babysitting), worklog handoff + git snapshot every round.
+  3. ops/cron.jobs.json → v3 canonical (single job 424432; bannedRitual[] documented; reconstruction note explains why the patrol is gone).
+- STATE: dev server UP (200) under watchdog pid 13412 / next-server 13445; preview renders for the user.
+
+Stage Summary:
+- The automation now spends its time shipping product, not writing heartbeat poetry. The two real failure modes (OOM + session reaping) are root-caused, documented, and mitigated as far as agent sessions allow.
+
+Round Handoff:
+Round ID: r124 (watchdog + cron restructure)
+Task owner: main (user conversation)
+Scope completed: root-cause analysis, watchdog v2, cron 2→1 job swap, registry v3, worklog.
+User-visible changes: preview restored; hourly automation now does development only.
+Verification steps: dmesg OOM trace; restart-survival matrix across 5 attempts; curl 200 x2; cron list shows 424432 only.
+Verification result: PASS
+Open risks: if THIS conversation ends, the watchdog may be reaped too (platform constraint — only the platform's own supervisor survives); Turbopack Rust-side memory is not governed by the V8 cap (deep fix = periodic planned restarts or a production build); dev.log rotation unbounded.
+Blockers: none
+Cron state: single job 424432 (hourly dev round).
+Next recommended action: r125 — vault UI slice (Settings "Automation vault" card: set/remove builtin key, masked display, local-first explainer) — first pure dev-agent round.

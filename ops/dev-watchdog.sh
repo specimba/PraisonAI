@@ -1,42 +1,31 @@
-#!/usr/bin/env bash
-# ─── dev-watchdog (post-OOM hardening, 2026-09-26) ──────────────────────────
-# Root cause of the 08:44Z outage: kernel OOM-killed next-server at 3.1 GB RSS
-# on the 4 GB sandbox. Recovery previously depended on the next cron round
-# (40+ min downtime). This watchdog bounds it to ~1-2 min.
-#
-# Behavior: probe :3000 every 60s; if not HTTP 200, restart the dev server
-# using the ORIGINAL launch command. NOTE: do NOT add NODE_OPTIONS heap caps —
-# tested 2026-09-26 09:26Z: --max-old-space-size=2560 made next-server crash
-# silently during the first big Turbopack compile (twice). Uncapped, it runs
-# ~35 min before kernel OOM at ~3.1GB — the watchdog's job is to cover that
-# window with a bounded ~1-2 min restart. Future fix: production build.
-
-APP_DIR=/home/z/my-project
-LOG=$APP_DIR/ops/watchdog.log
-PIDFILE=$APP_DIR/ops/watchdog.pid
-URL=http://127.0.0.1:3000
-
-# single-instance guard
-if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
-  echo "watchdog already running (pid $(cat "$PIDFILE"))" >&2
-  exit 0
-fi
-echo $$ > "$PIDFILE"
-
-LAST_RESTART=0
+#!/bin/bash
+# Dev-server watchdog v2 (r124) — root cause of every "preview broken" incident:
+# next-server RSS grows through HMR edits until the kernel OOM-kills it
+# (dmesg 2026-09-29: killed at anon-rss 2.3GB). The sandbox also reaps
+# processes started from cron sessions, so ONLY this main-session watchdog
+# can keep the app alive.
+# Loop (20s): if :3000 != 200 → reap stale QA chrome (frees RAM) → restart
+# `bun run dev` with a 1.5GB V8 heap cap (GC hard before the kernel does).
+# Runaway guard: 5 consecutive failed restarts → 5min cooldown.
+cd /home/z/my-project
+fails=0
 while true; do
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$URL" 2>/dev/null)
-  NOW=$(date +%s)
-  if [ "$CODE" != "200" ]; then
-    if [ $((NOW - LAST_RESTART)) -ge 300 ]; then
-      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) http=$CODE -> restarting dev (original cmd)" >> "$LOG"
-      cd "$APP_DIR" || exit 1
-      setsid nohup bun run dev > /dev/null 2>&1 &
-      LAST_RESTART=$NOW
-      sleep 20
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000)
+  if [ "$code" != "200" ]; then
+    fails=$((fails+1))
+    rss=$(ps -eo args,rss | grep "next-server" | grep -v grep | awk '{s+=$2} END {print int(s/1024)"MB"}')
+    if [ $fails -le 5 ]; then
+      echo "$(date -u +%FT%TZ) down (http=$code, next-server rss=${rss:-0MB}) — restart #$fails" >> ops/watchdog.log
+      pkill -f "agent-browser.*chrome" 2>/dev/null; sleep 1   # stale QA browsers eat RAM
+      pkill -f "next dev" 2>/dev/null; pkill -f "next-server" 2>/dev/null; sleep 2
+      NODE_OPTIONS="--max-old-space-size=1536" setsid nohup node node_modules/next/dist/bin/next dev -p 3000 >> dev.log 2>&1 < /dev/null &
+      sleep 12
     else
-      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) http=$CODE (cooldown, no restart)" >> "$LOG"
+      if [ $fails -eq 6 ]; then echo "$(date -u +%FT%TZ) 5 restarts failed — cooling down 5min" >> ops/watchdog.log; fi
+      sleep 300
     fi
+  else
+    fails=0
   fi
-  sleep 60
+  sleep 20
 done

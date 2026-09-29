@@ -1,35 +1,28 @@
 {
-  "version": 2,
-  "reconstructed": "2026-09-26T08:25:00+00:00",
-  "reconstruction_note": "Sandbox was recycled and restored from the GitHub backup at r30 (commit 121f9e7); the pre-restore ops/ assets were lost. This file was reconstructed from the platform-side jobs' own task texts (both observed firing live on 2026-09-26: 414938 at 06:37Z/07:07Z/08:07Z, 414940 at 08:23Z — double-fire doctrine confirms fleet alive post-restore). Platform jobs live OUTSIDE the sandbox and survived the recycle; this file is the canonical source for recreating MISSING jobs only. NEVER recreate a job that is still firing — dedupe by platformJobId first.",
+  "version": 3,
+  "reconstructed": "2026-09-30T19:00:00+03:00",
+  "reconstruction_note": "v3 (r124, USER DIRECT ORDER): the 30-min heartbeat patrol (414938) was DELETED as ritual theatre — it appended heartbeat lines while the app was actually dying (OOM + sandbox reaping) and its restarts never survived session teardown. The hourly job was REPLACED: 414940 (review+ritual) is gone; the single live job is 424432 'dev agent — hourly build round' (kind=agentTurn, hourly at :23 Europe/Istanbul) whose ONLY business is shipping one real, committed improvement per round. This file is the canonical source for recreating a MISSING job; dedupe by platformJobId first — never duplicate a job that is still firing.",
   "bannedKinds": ["webDevReview"],
   "bannedReason": "forensics r56: kind=webDevReview died 10/10 via max_rounds_exceeded — NEVER create it under any circumstances",
+  "bannedRitual": [
+    "heartbeat lines to ops/heartbeat.log",
+    "forensics/cron-fleet checks and 'fleet X/2' reporting",
+    "recreating cron jobs proactively",
+    "process babysitting beyond ONE restart attempt (sandbox reaps agent-spawned processes; the main-session watchdog ops/dev-watchdog.sh owns recovery)"
+  ],
   "jobs": [
     {
-      "platformJobId": "414938",
-      "name": "heartbeat-30m",
+      "platformJobId": "424432",
+      "name": "dev-agent-hourly",
       "kind": "agentTurn",
       "enabled": true,
       "schedule": {
         "kind": "cron",
-        "expr": "7,37 * * * *",
-        "tz": "UTC",
-        "observed": "30-min cadence, fires at :07/:37 UTC (confirmed live 2026-09-26 06:37Z, 07:07Z, 08:07Z)"
+        "expr": "0 23 * * * ?",
+        "tz": "Europe/Istanbul",
+        "observed": "hourly at :23 Europe/Istanbul (created 2026-09-30, replaces 414940)"
       },
-      "prompt": "[System] One-shot lightweight fleet patrol (HARD BUDGET: finish in ≤8 tool rounds, then stop — exceeding the execution round budget kills the whole recurring job via max_rounds_exceeded).\n\n1) Run: curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000 — expect 200. If not 200, read the last 40 lines of /home/z/my-project/dev.log, then stop.\n2) Run `cron list` — expect exactly 2 enabled jobs: this 30-min heartbeat + the hourly review loop. If fewer than 2 are listed, recreate the missing ones EXACTLY from ops/cron.jobs.json jobs[] entries with kind=agentTurn ONLY. NEVER create kind=webDevReview — it is banned by forensics (10/10 deaths via max_rounds_exceeded). Confirm with `cron list` again.\n3) Append ONE line to /home/z/my-project/ops/heartbeat.log in the form: \"<ISO-8601 timestamp> http=<code> fleet=<n>/2\". Create the file if missing.\n4) STOP. No code changes, no browser QA, no builds, no worklog edits, no commits.\nJob ID: 414938"
-    },
-    {
-      "platformJobId": "414940",
-      "name": "hourly-review",
-      "kind": "agentTurn",
-      "enabled": true,
-      "schedule": {
-        "kind": "cron",
-        "expr": "23 * * * *",
-        "tz": "UTC",
-        "observed": "hourly, fires at :23 UTC (confirmed live 2026-09-26 08:23Z)"
-      },
-      "prompt": "[System] First, assess the current project status, perform necessary testing and QA using agent-browser, then independently select the most appropriate work focus for this round (fix bugs or propose new requirements) and continue development.\n\nRequirements:\n1. At the start of the task, review /home/z/my-project/worklog.md to understand the actual project progress, and break down detailed current todos.\n2. First assess the current project status and perform necessary testing and QA via agent-browser (use `agent-browser --help` to view all available commands). Prioritize fixes if there are bugs, errors, test failures, build failures, runtime errors, or clear QA issues.\n3. If the current phase is relatively stable, independently propose additional feasible new requirements based on the task description, and continue advancing reasonable next-step development tasks.\n4. [Mandatory] Improve styling with more details!!!\n5. [Mandatory] Add more features and functionality!!!\n6. After completing a phase of work, update or create the handover document /home/z/my-project/worklog.md (updates are also recommended during work to avoid progress loss) for seamless continuation of development in the next phase.\n7. After project completion, be sure to record work details in /home/z/my-project/worklog.md.\n\nIt is recommended that the handover document /home/z/my-project/worklog.md includes three sections:\n- Current project status description/assessment\n- Current goals/completed modifications/verification results\n- Unresolved issues or risks, and priority recommendations for the next phase\n\nSELF-HEAL FIRST (before step 1): run `cron list` — if fewer than 2 enabled jobs exist, recreate the missing ones EXACTLY from ops/cron.jobs.json jobs[] with kind=agentTurn ONLY (kind=webDevReview is banned by forensics: 10/10 deaths via max_rounds_exceeded).\n\nHARD ROUND BUDGET (platform forensics r56: exceeding the execution round budget STOPS the whole recurring job — 10 jobs lost): complete this round in ≤12 tool rounds. Sequence: worklog tail → health curl → one agent-browser snapshot + console check → ONE focused improvement (small verified fix OR small feature increment) → verify → worklog append → STOP. Never run builds or heavy suites. An early clean exit is a SUCCESS.\nJob ID: 414940"
+      "prompt": "You are the PraisonAI platform development agent. This hour's round = ship ONE real improvement to the product (feature, fix, refactor, perf, or research spike that ends in committed code). No theatre.\n\nROUND SHAPE (HARD BUDGET ≤12 tool rounds; an early clean exit is a success):\n1. Read the tail of /home/z/my-project/worklog.md — the last section's \"Next recommended action\" is your default task (only deviate if the app is visibly broken).\n2. Health, once, honestly: curl the root. If the app is DOWN, log that in the worklog, attempt at most ONE restart, then continue with work that doesn't need the live server. NEVER spend more than 2 rounds on process babysitting — the sandbox reaps agent-spawned processes between rounds; only code + git commits persist. Never loop on restarts.\n3. Implement the improvement. Prefer small, verifiable increments. Follow the project's stack rules (Next.js 16 App Router, shadcn/ui, Prisma/SQLite, no server actions — API routes).\n4. Verify: bun run lint (or tsc) + browser QA via agent-browser when the server is up. No builds.\n5. Commit via scripts/git-snapshot.sh.\n6. Append a worklog section: Task ID (r<next>), what shipped, verification result, open risks, next recommended action.\n7. STOP.\n\nBANNED RITUAL (these waste rounds and hide real state): heartbeat lines to ops/heartbeat.log, forensics/cron-fleet checks, recreating cron jobs, \"fleet X/2\" reporting, re-verifying cron. Health = does the app boot, render and did this round ship something real.\n\nIf the worklog has no queue (fresh start), pick from: UI polish and detail, new user-facing features, the Local Automation Vault epic (see worklog r123+), performance, error handling, docs. Rotate surfaces between rounds — don't grind the same file every hour."
     }
   ]
 }
