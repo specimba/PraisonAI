@@ -241,6 +241,16 @@ export function conversationToMarkdown(conv: Conversation): string {
       }
       lines.push("", "</details>");
     }
+    if (m.role === "assistant" && m.transport) {
+      lines.push(
+        "",
+        `> ⇚ lane: ${
+          m.transport === "server"
+            ? "server relay ⇄ — routed through the app's vault chain"
+            : "browser-direct ⊙ — key stayed local"
+        }`
+      );
+    }
     if (m.error) lines.push("", `> ⚠️ Error: ${m.error}`);
   }
   lines.push("", "---", "", "_Generated locally by PraisonAI Web — multi-agent platform._");
@@ -411,6 +421,16 @@ export function runToMarkdown(workflow: Pick<Workflow, "name">, run: WorkflowRun
       lines.push("", "</details>");
     }
   });
+  if (run.callLog && run.callLog.length > 0) {
+    lines.push("", "## LLM calls", "");
+    run.callLog.forEach((c, i) => {
+      lines.push(
+        `- #${i + 1} ${c.ok ? "✓" : "✗"} ${c.engine}${c.model ? ` · ${c.model}` : ""} · ${fmtMs(c.ms)}${
+          c.attempt && c.attempt > 1 ? ` · attempt ${c.attempt}` : ""
+        }${c.note ? ` · _${c.note}_` : ""}`
+      );
+    });
+  }
   lines.push("", "---", "", "_Generated locally by PraisonAI Web — multi-agent platform._");
   return lines.join("\n");
 }

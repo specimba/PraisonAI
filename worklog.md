@@ -2636,3 +2636,32 @@ Open risks: none; visual capture round still pending for the full v11+v11b+v13+v
 Blockers: none
 Cron state: cron CLI absent (127) round 45; fleet 2/2 behavioral (patrol 08:37/09:07 on cadence; review 09:23 = this round).
 Next recommended action: r104 — (a) visual capture round combining v11 button + v11b chips + v13 ratio + v14 chip + v15 card on a real failed/relay run (hang-server recipe in r96; inject-v8 is the only valid injector); (b) harness-scripts README so future rounds stop re-deriving recipes from worklog; (c) check chat conversationToMarkdown export button parity with the workflow "Partial report" (does chat export include lane receipts? — small feature if not).
+---
+Task ID: 414940 (hourly review, 2026-09-29 10:23 +08)
+Agent: main (review round)
+Task: v16 — markdown-export lane-receipt parity (r103's queue item (c)): chat and run exports now carry the transport story.
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r103 (v15 card intact).
+- SCOUTING confirmed the gap: conversationToMarkdown had no lane info; runToMarkdown had no LLM-call section at all — the ⇄/⊙ story stopped at the UI edge.
+- v16 SHIPPED (1 file, helpers.ts, 2 edits): (1) conversationToMarkdown — assistant messages with `transport` gain a blockquote receipt: "⇚ lane: server relay ⇄ — routed through the app's vault chain" or "⇚ lane: browser-direct ⊙ — key stayed local"; historical messages without the field stay silent (honest-empty). (2) runToMarkdown — new "## LLM calls" section when run.callLog exists: per-call #index, ✓/✗, engine · model, fmtMs duration, attempt N (when >1), and the v11b note in italics — so relay/direct retries survive the export.
+- Zero behavior changes: pure export-content additions; same download paths.
+- VERIFIED: live HMR compile clean; console scan zero errors/warnings; HTTP 200 after edit.
+- Budget: 8/12 tool rounds — clean exit.
+
+Stage Summary:
+- The transport story is now durable beyond the session: exports (chat + run) join receipts (v12/v12b), per-run chip (v13), chat chip (v14), and the polished card (v15). A shared markdown file answers "how was every answer served?" without the app open.
+- Note: runToMarkdown's callLog section intentionally omits stepLabel/at-at timestamps to keep lines compact; step attribution stays visible via step sections above.
+
+Round Handoff:
+Round ID: r104 (v16 export lane parity)
+Budget used: S · ~10 min (8/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v16 shipped (2 edits) + compile-verified; QA clean.
+User-visible changes: exported chats show per-reply lane receipts; exported run reports list every LLM call with lane note.
+Verification steps: HMR compile clean; console scan (0 errors); HTTP 200; MultiEdit diffs read back (2/2 anchors).
+Verification result: PASS
+Open risks: none; first real export with lane-stamped replies will populate receipts (piggyback visual later).
+Blockers: none
+Cron state: cron CLI absent (127) round 46; fleet 2/2 behavioral (patrol 09:37/10:07 on cadence; review 10:23 = this round).
+Next recommended action: r105 — (a) visual capture round: v11 button + v11b chips + v13 ratio + v14 chip + v15 card + v16 receipts on a real failed/relay run (hang-server recipe r96, inject-v8 only); (b) harness-scripts README (recipes still re-derived from worklog each capture attempt); (c) fresh product direction if transport arc feels saturated — e.g. settings "lane preference" toggle (default direct with per-conversation relay override), or callLog retention pruning.
