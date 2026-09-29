@@ -12,6 +12,7 @@ import {
   GitCompareArrows,
   KeyRound,
   LifeBuoy,
+  Lightbulb,
   Loader2,
   Play,
   RotateCcw,
@@ -252,10 +253,21 @@ function RunRecoveryCard({
   }
 
   return (
-    <Card className="gap-3 border-l-4 border-l-red-500 border-red-500/30 bg-red-500/[0.03] p-4">
+    <Card
+      className={cn(
+        "gap-3 border-l-4 border-l-red-500 border-red-500/30 bg-red-500/[0.03] p-4",
+        !stopped && "shadow-[0_0_28px_-10px_rgb(239_68_68/0.45)]"
+      )}
+    >
       <div className="flex items-start gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10" aria-hidden>
+        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10" aria-hidden>
           <LifeBuoy className="h-4 w-4 text-red-400" />
+          {!stopped ? (
+            <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-red-400" />
+            </span>
+          ) : null}
         </span>
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-sm font-semibold leading-tight">
@@ -301,6 +313,24 @@ function RunRecoveryCard({
       {err ? (
         <>
           <div className="rounded-lg border bg-background/60 p-2.5">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-red-400/80">error</span>
+              <button
+                type="button"
+                aria-label="Copy raw error message"
+                title="Copy raw error message"
+                onClick={() => {
+                  navigator.clipboard
+                    .writeText(err.message)
+                    .then(() => toast.success("Error copied", { description: "Raw message on the clipboard — no keys included." }))
+                    .catch(() => toast.error("Clipboard blocked", { description: "Select the text and copy manually instead." }));
+                }}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Copy className="h-3 w-3" aria-hidden />
+                copy
+              </button>
+            </div>
             <p className={cn("break-words font-mono text-xs text-muted-foreground", !msgOpen && "line-clamp-2")}>
               {err.message}
             </p>
@@ -314,8 +344,9 @@ function RunRecoveryCard({
               </button>
             ) : null}
           </div>
-          <p className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-2.5 text-xs leading-relaxed">
-            {err.hint}
+          <p className="flex items-start gap-2 rounded-lg border border-violet-500/25 bg-violet-500/5 p-2.5 text-xs leading-relaxed">
+            <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-400" aria-hidden />
+            <span>{err.hint}</span>
           </p>
           {run.callLog && run.callLog.length > 0 ? (
             <div className="rounded-lg border bg-background/60 p-2.5">
@@ -390,6 +421,7 @@ function RunRecoveryCard({
             disabled={busy || firstPending === -1}
             onClick={() => onResume(firstPending, { forceServer: true })}
             title="Re-run this step through the app relay instead of the direct provider — the escape hatch for mid-stream stalls the direct lane can't recover from"
+            className="border-sky-500/40 bg-sky-500/10 text-sky-300 transition-colors hover:bg-sky-500/20 hover:text-sky-200"
           >
             <Server className="h-3.5 w-3.5" aria-hidden />
             Retry via relay

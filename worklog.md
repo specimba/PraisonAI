@@ -2608,3 +2608,31 @@ Open risks: none; chip awaits first transport-stamped reply in a live conversati
 Blockers: none
 Cron state: cron CLI absent (127) round 44; fleet 2/2 behavioral (patrol 07:37/08:07 on cadence; review 08:23 = this round).
 Next recommended action: r103 — (a) visual capture round combining v11 button + v11b chips + v13 ratio + v14 chip on a real failed/relay run (hang-server recipe in r96); (b) harness-scripts README so future rounds stop re-deriving recipes from worklog; (c) styling polish on the workflow recovery card (sky/amber note rows already exist — could add gradient border + icon badge).
+---
+Task ID: 414940 (hourly review, 2026-09-29 09:23 +08)
+Agent: main (review round)
+Task: v15 — recovery-card styling polish (r102's queue item (c)): failed-state urgency cues, error-box affordances, relay-button lane accent.
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r102 (v14 chip intact).
+- v15 SHIPPED (1 file, workflow-run-panel.tsx, 5 edits): (1) failed runs get a soft red glow shadow (shadow-[0_0_28px_-10px]); stopped runs stay calm; (2) LifeBuoy badge gains an animate-ping red dot when failed — instant "needs attention" cue; (3) error box gets a mono "error" mini-label + copy micro-button (clipboard err.message, toast confirm, no keys); (4) hint row upgraded to flex with Lightbulb icon in violet; (5) "Retry via relay" button now wears the sky lane accent (border/bg/text sky-500/40/10/300 + hover) matching the ⇄ relay note color language.
+- Zero behavior changes: same handlers, same resume logic, same disabled states; pure presentation + one clipboard affordance.
+- VERIFIED: live HMR compile clean; console scan zero errors/warnings; HTTP 200 after edit.
+- Budget: 10/12 tool rounds — clean exit.
+
+Stage Summary:
+- The recovery card now reads at three urgency levels: stopped (calm), failed (glow + ping), and lane-recovery (sky escape hatch). Styling language is consistent with v11b/v13/v14 lane colors (sky = relay, amber = retry, red = failure).
+- TS narrowing note for future rounds: `err`/`stopped` are module-level consts derived from `run` — closures in JSX conditionals narrow safely, no defensive null-checks needed.
+
+Round Handoff:
+Round ID: r103 (v15 recovery-card polish)
+Budget used: M · ~14 min (10/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v15 shipped (5 edits) + compile-verified; QA clean.
+User-visible changes: failed-run card glows and pings; error box has label + copy button; hint has icon; relay button is sky-accented.
+Verification steps: HMR compile clean; console scan (0 errors); HTTP 200; MultiEdit diffs read back (5/5 anchors).
+Verification result: PASS
+Open risks: none; visual capture round still pending for the full v11+v11b+v13+v14+v15 ensemble on a real failed run.
+Blockers: none
+Cron state: cron CLI absent (127) round 45; fleet 2/2 behavioral (patrol 08:37/09:07 on cadence; review 09:23 = this round).
+Next recommended action: r104 — (a) visual capture round combining v11 button + v11b chips + v13 ratio + v14 chip + v15 card on a real failed/relay run (hang-server recipe in r96; inject-v8 is the only valid injector); (b) harness-scripts README so future rounds stop re-deriving recipes from worklog; (c) check chat conversationToMarkdown export button parity with the workflow "Partial report" (does chat export include lane receipts? — small feature if not).
