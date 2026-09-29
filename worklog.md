@@ -3192,3 +3192,31 @@ Open risks: server cards' onSelect navigates to the workflow but cannot open the
 Blockers: none
 Cron state: fleet 2/2.
 Next recommended action: r121 — (a) LOCAL AUTOMATION VAULT epic (user-chosen key stored in local DB — dedicated direct-build round); (b) server-run detail drawer (stepsJson viewer); (c) workflow-card provider health; (d) watch first server-lane fire under v24 stagger.
+---
+Task ID: 414940 — r121
+Agent: main (hourly review)
+Task: Server-run detail drawer (r120 handoff item b — stepsJson/finalReport viewer for ⇉ server cards).
+
+Work Log:
+- Baseline: health 200, fleet 2/2, console clean, Runs board layout active.
+- IMPLEMENTED (src/components/praison/workflows/run-kanban.tsx, 1 file):
+  1. ServerRunRow extended with stepsJson/finalReport (already ride along in the sync GET Prisma rows — no API change needed).
+  2. NEW ServerRunDrawer: modal dialog (role=dialog, Escape/backdrop close) showing status icon, ⇉ server·trigger badge, started-rel + duration + step count, red mono error block, parsed steps list ([{label,output,ms,ok}] via new parseRunSteps, per-step ok/em icon + fmtMs + scrollable mono output), cyan finalReport block, footer with local-first note + "Open pipeline →" (closes drawer + navigates).
+  3. Server card click now opens the drawer (was: plain navigate); badge tooltip updated to "click to inspect steps & report".
+- VERIFIED LIVE (agent-browser): clicked ⇉ RSIinFIELD card → dialog "Server run detail: RSIinFIELD" rendered with footer/actions; eslint exit 0; tsc shows NO errors in the edited file (5 PRE-EXISTING errors elsewhere: message-item.tsx, workflows-view.tsx x2, spawn-proposal-engine.ts, workflow-runner.ts — Turbopack doesn't block; queued for r122); stale "sync failed: 500" console warnings were HMR-edit-window artifacts — fresh console clean, sync GET 200, registry heartbeat fresh.
+- Pushed fork/main 3fa941055→50c2ccc1c via git-snapshot.sh.
+
+Stage Summary:
+- The server lane is now fully inspectable: headless runs are no longer opaque cards — per-step outputs, timings, ok flags, errors and the final report are all readable in-app. Closes the r120 "cannot open the server run detail" gap.
+
+Round Handoff:
+Round ID: r121 (server-run detail drawer)
+Task owner: main (Orchestrator)
+Scope completed: drawer component, card click rewiring, live verification, push.
+User-visible changes: clicking any ⇉ server card opens a full detail drawer (steps + report); Escape/backdrop/X close; "Open pipeline →" navigates.
+Verification steps: eslint; agent-browser click → dialog snapshot; sync GET 200; console clean.
+Verification result: PASS
+Open risks: 5 pre-existing tsc errors in other files (typed as debt, runtime unaffected — fix next round); drawer shows a point-in-time row (no auto-refresh while open).
+Blockers: none
+Cron state: fleet 2/2.
+Next recommended action: r122 — (a) fix the 5 pre-existing tsc errors (small, mechanical, typed); (b) LOCAL AUTOMATION VAULT epic (dedicated round); (c) workflow-card provider health; (d) watch first server-lane fire under v24 stagger.
