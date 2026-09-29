@@ -3399,3 +3399,30 @@ Verification result: PASS (field test = next real provider outage; watch call-lo
 Open risks: backoff adds ≤~33s worst-case per failed step (bounded, abortable); substitution quality depends on keyed alternates in the vault (preseeded free lanes cover the common case); agent-browser env broken — QA tooling still owed.
 Blockers: none
 Next recommended action: r128 — (a) surface backoff/substitution state in the run panel's live step row (a small "⏳ backoff 12s" chip) so waits are visible in-place, not just toasts; (b) when agent-browser works again, run the owed click-through suite (vault card, provider chips, new backoff toast).
+---
+Task ID: 424432 — r128
+Agent: main (platform development — hourly dev round)
+Task: r127 handoff item (a) — surface backoff/substitution waits in the run panel. Plus incident response: detected and resolved a concurrent-edit hazard.
+
+Work Log:
+- ROUND OPEN COLLISION: a parallel agent session (user's deep-dive directive, trace 1a0eed2a) had ALREADY shipped the engine-side stable-continuation work while this round was reading (commit 9781fbb18 @ 20:26:46Z: escalating 8s/25s+jitter backoff, run-scoped 5m primary sick memory, final-attempt cross-family hop substitution). My pre-planned edits were built against the pre-r126 file; a MultiEdit partially applied (2 of 5 hunks) leaving 24 orphan lines. Detected via stale old_str failure + git forensics; REVERTED the orphans to the committed state before proceeding. No content was lost — the parallel session's work is complete and verified.
+- SHIPPED (r127 handoff item a, 3 files):
+  1. types.ts — WorkflowRunStep.backoffUntil/backoffKind fields.
+  2. workflow-runner.ts — the ladder's two deliberate waits (network/timeout backoff 8s/25s+jitter, rate-limit cooldown 20s/45s) now patchRunStep the wait window before sleeping; the retry-dial patch clears both fields.
+  3. workflow-run-panel.tsx — StatusIndicator renders a live amber "⏳ Backoff Ns" / "Cooldown Ns" chip (role=timer, explanatory title, Hourglass icon) while a running step waits; 1s interval runs ONLY while a wait is active (self-clearing, zero idle cost). A 25s provider wait is no longer indistinguishable from a hang.
+- VERIFIED: tsc src/ = 0; eslint (3 files) clean; root 200; git tree contains exactly the 3 intended files.
+- QA gap (honest): no live backoff observed (agent-browser env still broken; can't synthesize a Vyce outage). Chip logic verified at source level; field test = next real provider drop in a visible run.
+
+Stage Summary:
+- Full visibility chain for provider-resilience now closed: engine waits → toast + in-step-row live countdown chip. The user watching the failed Continuous Research run sees "Backoff 25s" counting down instead of a silent spinner, and the call log records every substitution/skip note.
+
+Round Handoff:
+Round ID: r129
+Task owner: main (platform dev)
+Scope completed: backoff visibility chip (runner emission + types + panel rendering), concurrent-edit hazard resolved, push.
+User-visible changes: run panel step rows show live backoff/cooldown countdowns during provider self-heal.
+Verification steps: tsc 0; eslint 0; root 200; selective git add (3 files only).
+Verification result: PASS (field test = next real outage)
+Open risks: multi-agent sessions on one worktree can interleave reads/writes — future rounds should re-read files immediately before editing (this round's stale-read cost 2 rounds); agent-browser QA still owed across 3 sessions of features.
+Blockers: none
+Next recommended action: r129 — (a) agent-browser repair OR node-side playwright one-off for the owed click-through suite (vault card, provider chips, backoff chip); (b) alternative: rotate to a non-contested surface (workflow-run-panel call-log grouping of substitution notes).
