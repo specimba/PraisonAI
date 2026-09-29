@@ -514,7 +514,16 @@ export async function executeWorkflowRun(
         const prevOutputs = (liveWf?.runs ?? [])
           .filter((r) => r.id !== runId && r.status === "done")
           .map((r) => runText(r.steps));
-        const score = scoreNovelty(runText(steps), prevOutputs);
+        // r119: read THIS run's steps from the STORE row — step outputs land
+        // only in the store (patchRunStep); the local `steps` closure still
+        // holds empty strings at finish, so scoreNovelty saw empty text and
+        // returned null for EVERY real run (the ledger showed "not scored"
+        // for all of them). Store row is the authoritative source.
+        const storeRow = (liveWf?.runs ?? []).find((r) => r.id === runId);
+        const score = scoreNovelty(
+          runText(storeRow?.steps?.some((s) => (s.output ?? "").length > 0) ? storeRow.steps : steps),
+          prevOutputs
+        );
         if (score != null) novelty = score;
       } catch {
         /* novelty is best-effort */
