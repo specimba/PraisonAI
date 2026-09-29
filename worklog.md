@@ -3114,3 +3114,28 @@ Open risks: Evolution ledger still "not scored" for all workflows (scoring pipel
 Blockers: none
 Cron state: fleet 2/2 behavioral (12:37Z patrol clean).
 Next recommended action: r118 — (a) Evolution ledger novelty scoring actually running (all workflows show "not scored"); (b) Runs board ⇉ server AutomationRun history + ⇉ lane badge (open since r110); (c) watch the first server-lane fire under stagger; (d) LOCAL AUTOMATION VAULT epic; (e) workflow-card provider health.
+---
+Task ID: 414940 — r118
+Agent: main (hourly review)
+Task: QA + pick focus. Chose: Evolution ledger "not scored" for ALL real runs (user-visible, r117 handoff item (a)).
+
+Work Log:
+- QA: health 200, fleet 2/2, console clean. Ledger shows "4 scored · avg 41%" — but those 4 are the SEEDED sample runs (nov 62/48/31/22, steps=0). ZERO runner-produced runs ever score.
+- LIVE REPRO (QA browser): ran Novelty Lab (1 step + review layer, 2 steps total) via the run dialog (task required — Run stays disabled until a task is typed). Run finished done with outputs in the store row (outLens 3838/239) — but `nov=null`, ledger stayed "4 scored".
+- ROOT CAUSE (pinned, not yet fixed): runner finish() computes `scoreNovelty(runText(steps), prevOutputs)` from the LOCAL `steps` closure — but step outputs land ONLY in the STORE row (via patchRunStep at ~L780/822); the local array holds empty outputs → runText("") → shingles empty → scoreNovelty returns null → patch omits novelty. Aggravator: seeded runs have NO steps (steps=0) so prevOutputs runText is "" too — even a correct local-steps read would score 100 vs empty priors (inflated but functional; real runs self-heal the prior pool as they accumulate).
+- FIX DESIGN (r119, one small edit): in finish(), read the CURRENT run row from the store instead of the local closure: `const row = useWorkflowsStore.getState().workflows.find(w=>w.id===wf.id)?.runs.find(r=>r.id===runId)`; `scoreNovelty(runText(row?.steps ?? steps), prevOutputs)`. Verify with one more manual run → ledger count should hit 5 scored. Then push.
+
+Stage Summary:
+- Evolution scoring is fully wired EXCEPT the final read: one wrong data source (local steps vs store row) makes every real run unscored. Fix is surgical and queued first for r119.
+
+Round Handoff:
+Round ID: r118 (novelty scoring root-cause — fix queued)
+Task owner: main (Orchestrator)
+Scope completed: full diagnosis with live repro; fix design.
+User-visible changes: none this round (fix lands r119).
+Verification steps: live manual run repro; store eval (outLens present, nov null); ledger stats unchanged.
+Verification result: DIAGNOSIS PASS / fix pending
+Open risks: rounds overrun this session (~19 tool calls — diagnosis went deep; next review rounds must stop at budget); first scored run will show inflated 100% vs empty seeded priors.
+Blockers: none
+Cron state: fleet 2/2 behavioral (13:07Z patrol clean).
+Next recommended action: r119 — (a) APPLY the one-edit novelty fix + verify (5 scored) + push; (b) Runs board ⇉ server-run history (r110 item, still open); (c) server-lane stagger watch.
