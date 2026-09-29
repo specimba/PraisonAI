@@ -2665,3 +2665,31 @@ Open risks: none; first real export with lane-stamped replies will populate rece
 Blockers: none
 Cron state: cron CLI absent (127) round 46; fleet 2/2 behavioral (patrol 09:37/10:07 on cadence; review 10:23 = this round).
 Next recommended action: r105 — (a) visual capture round: v11 button + v11b chips + v13 ratio + v14 chip + v15 card + v16 receipts on a real failed/relay run (hang-server recipe r96, inject-v8 only); (b) harness-scripts README (recipes still re-derived from worklog each capture attempt); (c) fresh product direction if transport arc feels saturated — e.g. settings "lane preference" toggle (default direct with per-conversation relay override), or callLog retention pruning.
+---
+Task ID: 414940 (hourly review, 2026-09-29 11:23 +08)
+Agent: main (review round)
+Task: v17 — sidebar lane dots (conversation-list) + HARNESS.md README (r104's queue items (c-lite) and (b)).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r104 (v16 exports intact).
+- v17 SHIPPED (1 file, conversation-list.tsx, 2 edits): each conversation row computes the lane of its most recent transport-stamped assistant reply (reverse scan, no allocation) and renders a mini pill after the msg count — ⇄ sky-400 (server relay) or ⊙ emerald-400 (browser-direct, "key stayed local" in tooltip); hidden when no stamped reply exists (honest-empty, v13/v14 doctrine). Emerald is NEW lane color semantics for direct: local/privacy connotation; relay stays sky per v11b/v13/v14/v15.
+- BONUS (b) DELIVERED: scripts/HARNESS.md written — consolidated E2E doctrine: canonical route recipe (Workflows client-side button; /workflows=404), inject-v8-only rule (v4/v7 falsified), hang-server 4319 + 20s watchdog, start-v4-run.sh stale-route warning, expected v9/v10 E2E arc incl. SSRF-by-design, 17-check unit suite (r95 typo noted), atomic restore doctrine, console-scan recipe. Future capture rounds read this instead of re-deriving.
+- VERIFIED: live HMR compile clean; console scan zero errors/warnings; HTTP 200 after edit.
+- Budget: 9/12 tool rounds — clean exit.
+
+Stage Summary:
+- Lane story now reaches the sidebar (v17): a conversation's last-served lane is visible without opening it. Combined with v12/v12b receipts, v13 run chip, v14 chat chip, v15 card, v16 exports — every UI altitude is lane-aware.
+- HARNESS.md retires the biggest recurring budget sink (recipe re-derivation); r96-recipe capture attempts should now fit in budget.
+
+Round Handoff:
+Round ID: r105 (v17 sidebar lane dots + HARNESS.md)
+Budget used: S · ~11 min (9/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v17 shipped (2 edits) + HARNESS.md created; both compile-verified; QA clean.
+User-visible changes: conversation list shows ⇄/⊙ pill for the last stamped reply's lane.
+Verification steps: HMR compile clean; console scan (0 errors); HTTP 200; MultiEdit diffs read back (2/2 anchors); HARNESS.md content cross-checked against inject-v8.js + start-v4-run.sh sources.
+Verification result: PASS
+Open risks: none; dots await first stamped replies (piggyback visual later).
+Blockers: none
+Cron state: cron CLI absent (127) round 47; fleet 2/2 behavioral (patrol 10:37/11:07 on cadence; review 11:23 = this round).
+Next recommended action: r106 — (a) visual capture round now HARNESS.md-assisted: v11 button + v11b chips + v13 ratio + v14 chip + v15 card + v17 dots on a real failed run; (b) settings "lane preference" toggle (default direct, per-conversation relay override) — needs settings field + runner/panel plumbing, scope carefully; (c) callLog retention cap in workflow-runner (prevent unbounded localStorage growth) — small robustness fix.

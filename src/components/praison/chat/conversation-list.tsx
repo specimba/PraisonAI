@@ -291,6 +291,15 @@ export function ConversationList({ onNavigate, className }: ConversationListProp
                   {group.items.map((c) => {
                     const active = c.id === activeId;
                     const convAgent = c.agentId ? agentMap.get(c.agentId) : undefined;
+                    // r105 (v17): lane of the most recent transport-stamped reply — sidebar-glance lane story.
+                    let lastLane: "browser-direct" | "server" | undefined;
+                    for (let i = c.messages.length - 1; i >= 0; i--) {
+                      const m = c.messages[i];
+                      if (m.role === "assistant" && m.transport) {
+                        lastLane = m.transport;
+                        break;
+                      }
+                    }
                     return (
                       <div
                         key={c.id}
@@ -332,6 +341,24 @@ export function ConversationList({ onNavigate, className }: ConversationListProp
                             <span className="tabular-nums">
                               {c.messages.length} {c.messages.length === 1 ? "msg" : "msgs"}
                             </span>
+                            {lastLane ? (
+                              <span
+                                aria-hidden
+                                title={
+                                  lastLane === "server"
+                                    ? "Last reply via server relay ⇄"
+                                    : "Last reply via browser-direct ⊙ (key stayed local)"
+                                }
+                                className={
+                                  "rounded-full border px-1 text-[9px] font-semibold leading-[14px] " +
+                                  (lastLane === "server"
+                                    ? "border-sky-400/30 bg-sky-400/10 text-sky-300/90"
+                                    : "border-emerald-400/30 bg-emerald-400/10 text-emerald-300/90")
+                                }
+                              >
+                                {lastLane === "server" ? "⇄" : "⊙"}
+                              </span>
+                            ) : null}
                           </div>
                         </button>
                         <DropdownMenu>
