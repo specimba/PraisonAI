@@ -3485,3 +3485,31 @@ Verification result: PASS (field test = next real outage's recovery card)
 Open risks: consecutive grouping can split one step's calls if entries interleave (chronologically honest, cosmetically odd — rare); digest counts entries not distinct incidents (chained notes count once per entry); call log still lives only inside the error card — done runs have no call-log view.
 Blockers: none
 Next recommended action: r131 — (a) surface the grouped call log for DONE runs too (currently error-card-only; a small "N calls · all ok" collapsible in run history would close the loop), or (b) extend scripts/cdp-qa.mjs with a seeded failed-run assertion of the digest strip; alternatively rotate to vault UI polish or performance.
+---
+Task ID: 424432 — r131
+Agent: main (platform development — hourly dev round)
+Task: r130 handoff (a) — surface the grouped call log for DONE runs (was error-card-only).
+
+Work Log:
+- Health: root 200, worktree clean (HEAD = r130 snapshot); no collisions.
+- SHIPPED (src/components/praison/workflows/workflow-run-panel.tsx, 1 file, 6 edits):
+  1. Extracted r130's grouped rendering into a shared module component `CallLogList({ log })` — computes groupCallLog + resilienceDigest internally; the error recovery card now calls it instead of its own inline markup (component-level duplicate consts removed).
+  2. Run-history rows: new mono "N calls" ghost button (Server icon, violet when open, aria-expanded, failure count in title) shown only when the run recorded calls; clicking toggles an inline expander under the row rendering <CallLogList> — per-step blocks, lane/skip/substitution notes, global #N numbering.
+  3. Rows wrapped in React.Fragment (key moved) so the expander joins the space-y list without breaking the flex row.
+- Effect: after a SUCCESSFUL run the user can finally answer "what did the pipeline actually call, on which lane, how long per call?" — the resilience digest strip appears there too when a run self-healed mid-flight and still finished.
+- VERIFIED: src-scoped tsc 0 errors; eslint touched file clean; committed 4111f7596, pushed to fork/main.
+- QA gap (honest): r129 CDP suite doesn't cover history-row expanders (needs a seeded run with callLog); verified at source level + compile health only.
+
+Stage Summary:
+- Call-log observability is now symmetric: failures AND successes expose the same grouped ledger. Two-round arc (r130 error card, r131 history rows) closed with zero duplication via the shared CallLogList component.
+
+Round Handoff:
+Round ID: r132
+Task owner: main (platform dev)
+Scope completed: shared CallLogList + per-row call-log expander in run history; push 4111f7596.
+User-visible changes: every run row with recorded calls shows an "N calls" toggle opening the grouped log inline.
+Verification steps: src tsc 0; eslint 0; selective git add (1 file); snapshot pushed.
+Verification result: PASS (UI expander awaits seeded-profile click-through)
+Open risks: expander renders raw callLog inline — very long logs (capped by runner) could make a row tall; no per-run lane chip in history rows yet (relay/direct split visible only inside expander or error card).
+Blockers: none
+Next recommended action: r132 — rotate surface: (a) vault UI polish or a new user-facing feature from the Local Automation Vault epic (r123+), or (b) seeded-profile CDP test asserting the history-row expander + digest strip; alternatively add the lane chip (⇄N/⊙N) to history rows for at-a-glance lane health.
