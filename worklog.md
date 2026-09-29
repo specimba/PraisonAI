@@ -3249,3 +3249,31 @@ Open risks: examples/scripts/skills tsc noise remains (not part of app build —
 Blockers: none
 Cron state: fleet 2/2.
 Next recommended action: r123 — (a) LOCAL AUTOMATION VAULT epic (dedicated round — user-chosen key stored in local DB); (b) workflow-card provider health; (c) tsconfig exclude for examples/scripts/skills to clean the tsc signal; (d) watch first server-lane fire under v24 stagger.
+---
+Task ID: 414940 — r123
+Agent: main (hourly review)
+Task: LOCAL AUTOMATION VAULT epic — slice 1 (schema + API + headless scheduler integration).
+
+Work Log:
+- Recon: SDK (z-ai-web-dev-sdk) reads .z-ai-config {baseUrl, apiKey}; static create() takes NO params; constructor typed private → key override goes through a narrow instance cast. Browser "vault" (Settings→Providers) is client-side only; the headless lane had NO user key — the root of the built-in-lane 429 storms.
+- IMPLEMENTED:
+  1. prisma/schema.prisma — NEW AutomationVault model (provider unique, key, label, timestamps; local-only, opt-in).
+  2. src/app/api/vault/route.ts — GET (MASKED preview only: first4+••••+last4, raw key never leaves the DB), POST upsert (400 on empty), DELETE by provider. All local-first.
+  3. mini-services/workflow-scheduler/index.ts — executeRun() now looks up vault slot "builtin" after ZAI.create(); if present, overrides instance config.apiKey (logged without exposing the key); lookup failure = warn + silent fallback to stock key. Browser BYOK lane untouched.
+- INFRA: prisma db push (additive, in sync) + generate; had to RESTART dev server + scheduler (running processes held the pre-vault client → "Cannot read properties of undefined (reading 'upsert')"). Restart via pkill next dev/server + relaunch `bun run dev >> dev.log` and `bun --hot mini-services/workflow-scheduler/index.ts >> ops/scheduler.log`; root=200 in ~seconds, scheduler pid verified alive.
+- VERIFIED: full roundtrip — POST ok (masked echo), GET shows masked only, 400 on missing key, DELETE + empty GET; tsc src/=0 (held from r122); scheduler alive post-restart.
+
+Stage Summary:
+- The vault epic's backbone is live: a user key stored in the local DB now flows to headless runs at fire time. Closed-tab schedules can finally dial with the user's own quota instead of the congested shared lane.
+
+Round Handoff:
+Round ID: r123 (vault slice 1: DB + API + scheduler)
+Task owner: main (Orchestrator)
+Scope completed: schema+push, /api/vault CRUD, scheduler key override, process restarts, roundtrip verification.
+User-visible changes: none in UI yet (API-only slice); server lane will use the vault key automatically once a "builtin" slot is stored.
+Verification steps: curl roundtrip (POST/GET/400/DELETE); masked-only GET; root 200; scheduler alive; tsc src/=0.
+Verification result: PASS
+Open risks: scheduler was restarted (fresh pid — heartbeat loop re-armed, claim-then-run doctrine protects from double-fire); QA browser tab reconnected after dev restart; vault UI (Settings card) still missing — next slice; vault key stored plaintext in local SQLite (documented local-first tradeoff).
+Blockers: none
+Cron state: fleet 2/2.
+Next recommended action: r124 — (a) vault UI slice: Settings "Automation vault" card (set/remove builtin key, masked display, local-first explainer); (b) workflow-card provider health; (c) optional: tsconfig exclude for examples/scripts/skills.

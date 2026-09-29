@@ -124,3 +124,18 @@ model AutomationState {
   id         String   @id @default("singleton")
   lastSeenAt DateTime @default(now())
 }
+
+// ─── v25: Local Automation Vault ─────────────────────────────────────────────
+// Opt-in, LOCAL-ONLY key slots for the headless server lane. While the tab is
+// open the BYOK lane drives with keys that never leave the browser; when the
+// user chooses, a key stored here lets closed-tab runs dial with their own
+// provider key instead of the shared built-in gateway. GET never returns the
+// raw key — only a masked preview. Nothing ever leaves this machine.
+model AutomationVault {
+  id        String   @id @default(cuid())
+  provider  String   @unique // "builtin" = the built-in engine's gateway key slot
+  key       String
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

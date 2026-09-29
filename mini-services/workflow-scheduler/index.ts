@@ -68,6 +68,27 @@ async function executeRun(
   const outputs: { label: string; output: string; ms: number; ok: boolean }[] = [];
   try {
     const zai = await ZAI.create();
+    // v25: Local Automation Vault — an opt-in key stored in the local DB
+    // (provider "builtin") overrides the shared gateway key for THIS headless
+    // dial, so closed-tab runs use the user's own quota instead of hammering
+    // the built-in lane (the source of the r109-era 429 storms). The browser
+    // BYOK lane is untouched — keys there never leave the tab. The SDK's
+    // constructor is typed private, so the override goes through a narrow
+    // instance cast; a failed lookup falls back to the stock key silently.
+    try {
+      const vault = await prisma.automationVault.findUnique({ where: { provider: "builtin" } });
+      if (vault?.key) {
+        (zai as unknown as { config: { apiKey: string } }).config.apiKey = vault.key;
+        console.log(
+          `[autopilot] using vault key for "builtin" (updated ${vault.updatedAt.toISOString()})`
+        );
+      }
+    } catch (vaultErr) {
+      console.warn(
+        "[autopilot] vault lookup failed — using built-in key:",
+        vaultErr instanceof Error ? vaultErr.message : String(vaultErr)
+      );
+    }
     let chain = "";
     for (let i = 0; i < steps.length; i++) {
       const s = steps[i];
