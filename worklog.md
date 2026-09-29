@@ -2872,3 +2872,31 @@ Open risks: sync-500 root cause is inferred-transient, not reproduced under a de
 Blockers: none
 Cron state: cron CLI absent (127) round 52; fleet 2/2 behavioral (patrol 15:37/16:07 on cadence; review 16:23 = this round).
 Next recommended action: r111 — (a) VERIFY v21: fresh open localhost:3000, console scan (expect zero NEW sync warnings; if any, the new body log names the cause); (b) mini-services/workflow-scheduler: jittered tick (±20% of 30s) + per-workflow 429 backoff delay (built-in engine congestion from r109's E2E) — bun --hot picks it up live; (c) wire server AutomationRun history into the Runs board (kanban) with a server-lane badge so autonomous runs are visible beside browser runs; (d) styling: ServerAutopilot "Run on server" buttons could carry a subtle sky accent + the panel could show last-sync time from the bridge.
+---
+Task ID: 414940 (hourly review, 2026-09-29 17:23 +08)
+Agent: main (review round)
+Task: r111 — v21 VERIFIED clean (r110 follow-up) + scheduler congestion handling shipped (r110 queue items (a) and (b)).
+
+Work Log:
+- QA: HTTP 200; fleet 2/2 behavioral (cron CLI still 127); scheduler mini-service alive (pid 30740, bun --hot).
+- v21 VERIFICATION (r110's honest follow-up): fresh `open` localhost:3000 → console buffer's last session marker "[HMR] connected" at line 344; the two old "sync failed: 500" warnings sit BEFORE it (stale pre-v21 buffer). ZERO new sync failures across fresh load + SPA nav + multiple 60s syncs. PASS. (The fast-retry path stays dormant by design — no failure to exercise it; success path is live-proven.)
+- v21b SHIPPED (1 file, mini-services/workflow-scheduler/index.ts, 6 edits) — engine congestion handling, addresses r109's environmental 429 finding: (1) TICK_JITTER=0.2 — fixed 30s setInterval replaced by a jittered self-rescheduling loop (±20%), desynchronizing from watchdogs/heartbeats/patrol curls; (2) RATE_LIMIT_RE + isRateLimit helper (429 | too many requests | rate-limit, case-insensitive); (3) per-attempt cool-down on rate-limited attempts: 20s/45s instead of 5s/15s — retrying a 429 after 5s just burns the ladder on the same congestion; (4) rate-limited RUN failures push nextRunAt out by failStreak×60s (cap 10min) ON TOP of the claimed interval — a congested gateway is waited out, not hammered; non-rate-limit failures unchanged; (5) simultaneous due claims staggered 2s apart (no thundering-herd on the shared gateway); (6) executeRun signature gains intervalMs (tick's rows already carry it; sole call site verified via grep — run-now route does NOT call it).
+- VERIFIED: bun build transpile exit 0 (no syntax errors); pid 30740 survived the --hot reload (new loop live in-process, reload contract-trusted — stdout not visible); HTTP 200; 6/6 edit anchors read back.
+- Budget: 9/12 — clean exit.
+
+Stage Summary:
+- Headless autopilot now degrades gracefully under engine congestion: jittered ticks, staggered claims, longer 429 cool-downs, and streak-scaled run backoff. The r109 "mechanism proven, engine environmental" caveat now has an active mitigation.
+- Scheduler doctrine line in the boot log now reads "tick 30s ±20% jitter".
+
+Round Handoff:
+Round ID: r111 (v21 verify + v21b scheduler congestion handling)
+Budget used: M · ~10 min (9/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v21 verified clean; v21b shipped (6 edits) + transpile-verified.
+User-visible changes: none when healthy; under engine congestion, headless runs now back off intelligently instead of failing fast on a 429 wall.
+Verification steps: console-buffer forensics (HMR-connected marker vs warning positions); bun build exit 0; pid alive; HTTP 200; 6/6 anchors.
+Verification result: PASS
+Open risks: --hot reload trusted by contract (boot-log line not stdout-verified); a hard scheduler restart (future) would print the new boot line and confirm.
+Blockers: none
+Cron state: cron CLI absent (127) round 53; fleet 2/2 behavioral (patrol 16:37/17:07 on cadence; review 17:23 = this round).
+Next recommended action: r112 — (a) wire server AutomationRun history into the Runs board (kanban) with a server-lane badge (⇉ distinct from ⇄/⊙) so autonomous runs sit beside browser runs — r110 queue (c), still open; (b) ServerAutopilot styling: last-sync timestamp chip from the bridge + sky-accent on "Run on server" buttons — r110 queue (d); (c) LOCAL AUTOMATION VAULT epic (opt-in keys in local DB → headless runs on user's providers with full parity) — the big one, deserves a dedicated direct-build round; (d) optional: HARNESS.md gains the console-buffer forensics recipe (line-position vs session markers) — capture rounds keep re-deriving it.

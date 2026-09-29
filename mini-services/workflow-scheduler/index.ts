@@ -16,8 +16,17 @@ import ZAI from "z-ai-web-dev-sdk";
 
 const prisma = new PrismaClient();
 const TICK_MS = 30_000;
+const TICK_JITTER = 0.2; // v21: ±20% jitter — ticks never align with other 30s cadence loops
 const HEARTBEAT_STALE_MS = 120_000;
 const inFlight = new Set<string>();
+// v21: the built-in engine dials a shared gateway — 429 congestion is
+// environmental (proven live in r109's E2E), not a workflow defect.
+// Rate-limit hits get longer per-attempt waits, and the next RUN is pushed
+// out failStreak-scaled (capped 10min) instead of re-burning attempts.
+const RATE_LIMIT_RE = /\b(429|too many requests|rate.?limit)\b/i;
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const isRateLimit = (e: unknown) => RATE_LIMIT_RE.test(errMsg(e));
+const rateLimitBackoffMs = (streak: number) => Math.min(streak, 10) * 60_000;
 
 type StepDef = { label: string; agentName?: string; prompt: string };
 
@@ -27,7 +36,7 @@ async function clientAlive(): Promise<boolean> {
 }
 
 async function executeRun(
-  wf: { id: string; name: string; task: string; stepsJson: string; failStreak: number },
+  wf: { id: string; name: string; task: string; stepsJson: string; failStreak: number; intervalMs: number },
   trigger: "schedule" | "manual"
 ): Promise<void> {
   let steps: StepDef[] = [];
@@ -97,7 +106,14 @@ async function executeRun(
             e instanceof Error ? e.message : String(e)
           );
         }
-        if (attempt < 3) await new Promise((r) => setTimeout(r, attempt === 1 ? 5_000 : 15_000));
+        if (attempt < 3) {
+          // v21: a rate-limited attempt gets a longer cool-down — retrying a
+          // 429 after 5s just burns the ladder on the same congestion.
+          const rl = isRateLimit(lastErr);
+          await new Promise((r) =>
+            setTimeout(r, attempt === 1 ? (rl ? 20_000 : 5_000) : rl ? 45_000 : 15_000)
+          );
+        }
       }
       if (out.trim().length === 0) throw lastErr ?? new Error("step produced no output");
       const ms = Date.now() - t0;
@@ -132,11 +148,23 @@ async function executeRun(
       data: { status: "error", error: msg, finishedAt: new Date(), stepsJson: JSON.stringify(outputs) },
     });
     const streak = wf.failStreak + 1;
+    const rl = isRateLimit(e);
+    // v21: tick already claimed nextRunAt = now+interval BEFORE executing.
+    // A rate-limited run (environmental congestion) pushes the next attempt
+    // further out — failStreak-scaled, capped 10min — so a congested gateway
+    // is waited out, not hammered on every tick.
     await prisma.automationWorkflow.update({
       where: { id: wf.id },
-      data: { lastRunAt: new Date(), failStreak: streak, enabled: streak < 3 },
+      data: {
+        lastRunAt: new Date(),
+        failStreak: streak,
+        enabled: streak < 3,
+        ...(rl
+          ? { nextRunAt: new Date(Date.now() + Math.max(60_000, wf.intervalMs) + rateLimitBackoffMs(streak)) }
+          : {}),
+      },
     });
-    console.error(`[autopilot] run ${run.id} ERROR — "${wf.name}": ${msg}`);
+    console.error(`[autopilot] run ${run.id} ERROR — "${wf.name}": ${msg}${rl ? " (rate-limited — next attempt pushed out)" : ""}`);
   }
 }
 
@@ -146,16 +174,23 @@ async function tick(): Promise<void> {
     const due = await prisma.automationWorkflow.findMany({
       where: { enabled: true, nextRunAt: { lte: new Date() } },
     });
+    let slot = 0;
     for (const wf of due) {
       if (inFlight.has(wf.id)) continue;
       const interval = Math.max(60_000, wf.intervalMs);
-      // Claim BEFORE running — a slow run can never double-fire on the next tick.
+      // Claim BEFORE running — a slow run can never double-fire on the next tick
+      // (the delayed execution below is still covered by the claim).
       await prisma.automationWorkflow.update({
         where: { id: wf.id },
         data: { nextRunAt: new Date(Date.now() + interval) },
       });
       inFlight.add(wf.id);
-      void executeRun(wf, "schedule").finally(() => inFlight.delete(wf.id));
+      // v21: stagger simultaneous claims 2s apart — N due workflows must not
+      // thundering-herd the shared engine gateway on the same second.
+      const delay = slot++ * 2_000;
+      setTimeout(() => {
+        void executeRun(wf, "schedule").finally(() => inFlight.delete(wf.id));
+      }, delay);
     }
   } catch (e) {
     console.error("[autopilot] tick error", e);
@@ -163,7 +198,15 @@ async function tick(): Promise<void> {
 }
 
 console.log(
-  "[autopilot] headless workflow scheduler up — tick 30s, stand-down while tab heartbeats (<2min stale fires)"
+  "[autopilot] headless workflow scheduler up — tick 30s ±20% jitter, stand-down while tab heartbeats (<2min stale fires)"
 );
-void tick();
-setInterval(tick, TICK_MS);
+// v21: jittered self-rescheduling loop — a fixed 30s interval aligns with every
+// other 30s-cadence process (watchdogs, heartbeats, patrol curls); jitter
+// desynchronizes them so due runs land on free seconds.
+const loop = () => {
+  void tick().finally(() => {
+    const jitter = Math.round((Math.random() * 2 - 1) * TICK_MS * TICK_JITTER);
+    setTimeout(loop, TICK_MS + jitter);
+  });
+};
+loop();
