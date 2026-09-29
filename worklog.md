@@ -3456,3 +3456,32 @@ Verification result: PASS
 Open risks: the headless shell is a setsid process — dies between sessions like the dev server; relaunch line documented in scripts/cdp-qa.mjs header. Suite asserts fresh-profile state only (no seeded user data) — deeper flows (run start, backoff chip) need a seeded profile or a live outage.
 Blockers: none
 Next recommended action: r130 — extend cdp-qa.mjs with a seeded-flow test: create a throwaway agent+workflow via DOM (or inject localStorage before load) and assert the full card chip set incl. "headless: shared key"; alternatively rotate to a product slice (call-log grouping of substitution notes, or run-kanban polish).
+---
+Task ID: 424432 — r130
+Agent: main (platform development — hourly dev round)
+Task: r129 handoff product slice — call-log grouping of substitution/skip notes in the run panel (rotated away from QA tooling per the rotate-surfaces rule).
+
+Work Log:
+- Health: root 200, worktree clean (HEAD = r129 QA commit a2f6a430b); no concurrent-edit collision this round.
+- Diagnosis: the recovery card's call log was a flat chronological list; after a provider bad-window it drowns in repeated r126 notes ("primary skipped — … (Ns left)") — up to one per later step in an 11-step pipeline, each differing only by its volatile countdown suffix.
+- SHIPPED (src/components/praison/workflows/workflow-run-panel.tsx, 1 file, 4 edits):
+  1. Two pure module-scope view-model helpers: groupCallLog (consecutive per-step blocks with per-group call/failed counts; original chronological indices preserved on entries) and resilienceDigest (counts entries whose note contains "primary skipped" / "model substitution" / "rotating to").
+  2. Component computes callGroups + digestText; renders an amber "resilience · ↻ primary skipped ×N · ⇄ model substitution ×N" strip above the list when any event occurred.
+  3. Entries render under per-step headers ("“Step label” · 4 calls · 1 failed") instead of repeating the step label on every line; entry numbering #N still uses the global chronological index so cross-references stay stable.
+- Followed r128 lesson: re-read all edit targets immediately before the MultiEdit; verified via git status that no parallel session had touched the worktree.
+- VERIFIED: tsc src/ = 0 errors (full-project tsc shows pre-existing noise in examples/, scripts/, skills/ — outside the app; gated the commit on src-scoped errors); eslint on the touched file clean; committed 82946fef6 and pushed to fork/main.
+- QA gap (honest): grouped rendering verified at source level only; the r129 CDP suite asserts boot/cards/vault but not the error-card call log (needs a seeded failed run). Field test = next real outage's recovery card.
+
+Stage Summary:
+- The post-outage call log went from a wall of near-duplicate amber notes to a scannable per-step ledger: step headers with call/failed counts, one counted digest strip for all resilience events, chronological numbering preserved. The user can now answer "what did the self-heal engine actually do?" at a glance.
+
+Round Handoff:
+Round ID: r131
+Task owner: main (platform dev)
+Scope completed: call-log grouping + resilience digest in run panel; push 82946fef6.
+User-visible changes: error-card call log now grouped per step with a counted resilience digest line.
+Verification steps: src-scoped tsc 0; eslint 0; selective git add (1 file); snapshot pushed.
+Verification result: PASS (field test = next real outage's recovery card)
+Open risks: consecutive grouping can split one step's calls if entries interleave (chronologically honest, cosmetically odd — rare); digest counts entries not distinct incidents (chained notes count once per entry); call log still lives only inside the error card — done runs have no call-log view.
+Blockers: none
+Next recommended action: r131 — (a) surface the grouped call log for DONE runs too (currently error-card-only; a small "N calls · all ok" collapsible in run history would close the loop), or (b) extend scripts/cdp-qa.mjs with a seeded failed-run assertion of the digest strip; alternatively rotate to vault UI polish or performance.
