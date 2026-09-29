@@ -81,6 +81,7 @@ import { AgentAvatar, DepthChip } from "@/components/praison/atoms";
 import { MarkdownRenderer } from "@/components/praison/markdown";
 import { WorkflowCompareDialog } from "@/components/praison/workflows/workflow-compare-dialog";
 import type {
+  RunCallLogEntry,
   RunErrorKind,
   ToolCallInfo,
   ToolId,
@@ -96,6 +97,44 @@ const STEP_BORDER: Record<WorkflowRunStep["status"], string> = {
   error: "border-l-red-500",
   stopped: "border-l-amber-500",
 };
+
+// ── r130 call-log grouping ──────────────────────────────────────────────────
+// After an outage, the flat call log drowns in repeated r126 resilience notes
+// ("primary skipped — … (Ns left)") — one per later step of the pipeline.
+// Two pure view-model helpers: consecutive per-step blocks for scannability,
+// and a counted digest that collapses repeated resilience events to one line.
+
+function groupCallLog(log: RunCallLogEntry[]) {
+  const groups: {
+    label: string | null;
+    items: { c: RunCallLogEntry; idx: number }[];
+    failed: number;
+  }[] = [];
+  log.forEach((c, idx) => {
+    const label = c.stepLabel ?? null;
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) {
+      last.items.push({ c, idx });
+      if (!c.ok) last.failed += 1;
+    } else {
+      groups.push({ label, items: [{ c, idx }], failed: c.ok ? 0 : 1 });
+    }
+  });
+  return groups;
+}
+
+function resilienceDigest(log: RunCallLogEntry[]) {
+  let skips = 0;
+  let subs = 0;
+  let rotations = 0;
+  for (const c of log) {
+    const n = c.note ?? "";
+    if (n.includes("primary skipped")) skips += 1;
+    if (n.includes("model substitution")) subs += 1;
+    if (n.includes("rotating to")) rotations += 1;
+  }
+  return { skips, subs, rotations };
+}
 
 function StatusIndicator({
   status,
@@ -261,6 +300,16 @@ function RunRecoveryCard({
       ? ` · ⇄${laneRelay} relay / ⊙${laneDirect} direct`
       : "";
 
+  // r130: grouped call-log view model + one-line resilience digest (the
+  // counted "primary skipped ×N" strip) rendered above the step blocks.
+  const callGroups = groupCallLog(run.callLog ?? []);
+  const digest = resilienceDigest(run.callLog ?? []);
+  const digestParts: string[] = [];
+  if (digest.skips > 0) digestParts.push(`↻ primary skipped ×${digest.skips}`);
+  if (digest.subs > 0) digestParts.push(`⇄ model substitution ×${digest.subs}`);
+  if (digest.rotations > 0) digestParts.push(`⇄ relay rotation ×${digest.rotations}`);
+  const digestText = digestParts.join(" · ");
+
   if (dismissed) return null;
 
   function savePartialReport() {
@@ -397,35 +446,56 @@ function RunRecoveryCard({
                 <span>{callsOpen ? "hide" : "show"}</span>
               </button>
               {callsOpen ? (
-                <ul className="mt-2 space-y-1 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
-                  {run.callLog.map((c, i) => (
-                    <li key={`${c.at}-${i}`} className="break-words">
-                      <span className="text-foreground/70">#{i + 1}</span>{" "}
-                      {c.stepLabel ? `“${c.stepLabel}” · ` : ""}
-                      {c.engine}
-                      {c.model ? ` · ${c.model}` : ""} · {(c.ms / 1000).toFixed(1)}s{" "}
-                      {c.ok ? (
-                        <span className="text-emerald-500">✓</span>
-                      ) : (
-                        <span className="text-red-400">✗ {c.error ?? "failed"}</span>
-                      )}
-                      {c.attempt && c.attempt > 1 ? ` (attempt ${c.attempt})` : ""}
-                      {c.note ? (
-                        <span
-                          className={
-                            "mt-0.5 block font-mono text-[10px] " +
-                            (c.note.startsWith("server relay")
-                              ? "text-sky-300/90"
-                              : "text-amber-300/90")
-                          }
-                        >
-                          {c.note.startsWith("server relay") ? "⇄ " : "↻ "}
-                          {c.note}
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-2">
+                  {digestText ? (
+                    <div className="mb-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-2 py-1 font-mono text-[10px] text-amber-300/90">
+                      resilience · {digestText}
+                    </div>
+                  ) : null}
+                  <ul className="space-y-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
+                    {callGroups.map((g, gi) => (
+                      <li key={`g-${gi}`} className="space-y-1">
+                        <div className="flex items-center gap-2 border-b border-border/50 pb-0.5 text-[10px] text-foreground/60">
+                          <span className="truncate">{g.label ? `“${g.label}”` : "calls"}</span>
+                          <span className="ml-auto shrink-0">
+                            {g.items.length} {g.items.length === 1 ? "call" : "calls"}
+                            {g.failed > 0 ? (
+                              <span className="text-red-400"> · {g.failed} failed</span>
+                            ) : null}
+                          </span>
+                        </div>
+                        <ul className="space-y-1">
+                          {g.items.map(({ c, idx }) => (
+                            <li key={`${c.at}-${idx}`} className="break-words">
+                              <span className="text-foreground/70">#{idx + 1}</span>{" "}
+                              {c.engine}
+                              {c.model ? ` · ${c.model}` : ""} · {(c.ms / 1000).toFixed(1)}s{" "}
+                              {c.ok ? (
+                                <span className="text-emerald-500">✓</span>
+                              ) : (
+                                <span className="text-red-400">✗ {c.error ?? "failed"}</span>
+                              )}
+                              {c.attempt && c.attempt > 1 ? ` (attempt ${c.attempt})` : ""}
+                              {c.note ? (
+                                <span
+                                  className={
+                                    "mt-0.5 block font-mono text-[10px] " +
+                                    (c.note.startsWith("server relay")
+                                      ? "text-sky-300/90"
+                                      : "text-amber-300/90")
+                                  }
+                                >
+                                  {c.note.startsWith("server relay") ? "⇄ " : "↻ "}
+                                  {c.note}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
             </div>
           ) : null}
