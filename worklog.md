@@ -3220,3 +3220,32 @@ Open risks: 5 pre-existing tsc errors in other files (typed as debt, runtime una
 Blockers: none
 Cron state: fleet 2/2.
 Next recommended action: r122 — (a) fix the 5 pre-existing tsc errors (small, mechanical, typed); (b) LOCAL AUTOMATION VAULT epic (dedicated round); (c) workflow-card provider health; (d) watch first server-lane fire under v24 stagger.
+---
+Task ID: 414940 — r122
+Agent: main (hourly review)
+Task: Fix all 5 pre-existing tsc errors in src/ (r121 handoff item a — typed debt).
+
+Work Log:
+- Baseline: health 200, fleet 2/2.
+- ROOT CAUSES + FIXES (4 files):
+  1. stores.ts — UiState INTERFACE was missing the two highlight actions that existed in the implementation since the Evolution spotlight feature (stores.ts:577-579): added `requestHighlightWorkflow(workflowId)` + `clearHighlightWorkflow()` declarations → unblocks both workflows-view.tsx call sites.
+  2. message-item.tsx — RouteReceiptChip referenced out-of-scope `message?.transport`: added optional `transport?: "browser-direct" | "server"` prop, parent now passes `transport={message.transport}` (RouteReceipt itself carries no transport field).
+  3. spawn-proposal-engine.ts — buildVariationProposal returned a SpawnProposal missing id/createdAt/status: added `crypto.randomUUID()` / `Date.now()` / `"open"` at the builder (covers both auto maybeProposeSpawn and manual ledger paths).
+  4. workflow-runner.ts — auto-resume executeWorkflowRun call missing required `task`: added `task: run.task` (WorkflowRun carries the original task text; Workflow has no `task` field — first attempt `run.task || wf.task` was wrong and caught by re-typecheck).
+- VERIFIED: `tsc --noEmit` src/ errors = 0 (remaining tsc output is ONLY examples/scripts/skills fixtures outside the Next build — pre-existing, out of app scope); eslint exit 0 on all 5 touched files; root 200; console clean post-reload (only the benign HMR full-reload warning from the edit window).
+- Pushed fork/main 50c2ccc1c→73b68938e.
+
+Stage Summary:
+- src/ is now 100% type-clean: the Evolution spotlight, chat route-receipt lane label, spawn-proposal builder, and stall auto-resume all typecheck. Future `tsc --noEmit | grep '^src/'` is a valid CI-style gate.
+
+Round Handoff:
+Round ID: r122 (type debt: src/ zero errors)
+Task owner: main (Orchestrator)
+Scope completed: 4-file type fix, re-verification, push.
+User-visible changes: none directly (robustness) — auto-resumed runs now correctly carry their original task text into the runner.
+Verification steps: tsc grep '^src/' = 0; eslint 0; root 200; console clean.
+Verification result: PASS
+Open risks: examples/scripts/skills tsc noise remains (not part of app build — could exclude via tsconfig if it ever drowns signal); server-run drawer shows point-in-time row (no live refresh while open).
+Blockers: none
+Cron state: fleet 2/2.
+Next recommended action: r123 — (a) LOCAL AUTOMATION VAULT epic (dedicated round — user-chosen key stored in local DB); (b) workflow-card provider health; (c) tsconfig exclude for examples/scripts/skills to clean the tsc signal; (d) watch first server-lane fire under v24 stagger.
