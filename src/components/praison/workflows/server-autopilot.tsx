@@ -15,6 +15,11 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+// r116: transient = environmental noise (429 congestion, socket blips, the app
+// restarting mid-dial). Mirrors the scheduler's TRANSIENT_RE + RATE_LIMIT_RE —
+// these render as amber "↻ retried", NOT the terminal red "✗ error".
+const TRANSIENT_RE = /\b(429|too many requests|rate.?limit|socket connection|econnreset|econnrefused|fetch failed|network|premature close|terminated|etimeout|timeout)\b/i;
+
 // ─── v20: Server autopilot panel (Workflow Studio) ───────────────────────────
 // Surfaces the headless layer: whether the local server or the open browser
 // tab is currently driving scheduled runs, what is registered, and recent
@@ -228,6 +233,11 @@ export function ServerAutopilot() {
           <ul className="mt-1.5 max-h-64 space-y-1.5 overflow-y-auto pr-1">
             {state.runs.map((r) => {
               const expanded = openRun === r.id;
+              // r116: mirror of the scheduler's TRANSIENT_RE — infra blips
+              // (429/socket/restart-window noise) render as an amber
+              // "↻ retried" (schedule survived, backoff armed) instead of
+              // the red terminal "✗ error" reserved for hard failures.
+              const transient = r.status === "error" && TRANSIENT_RE.test(r.error ?? "");
               return (
                 <li key={r.id} className="text-xs">
                   <button
@@ -241,16 +251,20 @@ export function ServerAutopilot() {
                         "font-semibold",
                         r.status === "done"
                           ? "text-emerald-500"
-                          : r.status === "error"
-                            ? "text-red-400"
-                            : "text-violet-400"
+                          : transient
+                            ? "text-amber-400"
+                            : r.status === "error"
+                              ? "text-red-400"
+                              : "text-violet-400"
                       )}
                     >
                       {r.status === "running"
                         ? `⟳ step ${r.currentStep}/${r.stepsTotal}`
                         : r.status === "done"
                           ? "✓ done"
-                          : "✗ error"}
+                          : transient
+                            ? "↻ retried"
+                            : "✗ error"}
                     </span>
                     <span className="font-medium">{r.workflowName}</span>
                     <span className="text-muted-foreground">
@@ -259,8 +273,13 @@ export function ServerAutopilot() {
                   </button>
                   {expanded ? (
                     <div className="mx-1.5 mt-1 rounded-md border bg-background/60 p-2">
+                      {transient ? (
+                        <p className="mb-1 text-[10.5px] font-medium text-amber-400">
+                          Transient infra error — schedule stays enabled, retry backoff armed.
+                        </p>
+                      ) : null}
                       {r.error ? (
-                        <p className="break-words font-mono text-[10.5px] text-red-400">{r.error}</p>
+                        <p className={cn("break-words font-mono text-[10.5px]", transient ? "text-amber-400/80" : "text-red-400")}>{r.error}</p>
                       ) : null}
                       {r.finalReport ? (
                         <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[10.5px] leading-relaxed text-muted-foreground">

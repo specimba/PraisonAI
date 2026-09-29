@@ -24,7 +24,14 @@ const inFlight = new Set<string>();
 // Rate-limit hits get longer per-attempt waits, and the next RUN is pushed
 // out failStreak-scaled (capped 10min) instead of re-burning attempts.
 const RATE_LIMIT_RE = /\b(429|too many requests|rate.?limit)\b/i;
+// r116: transient = environmental noise (gateway congestion, the app restarting
+// mid-dial — proven live 11:25Z when three schedules fired into the restart
+// window and all errored). Same backoff family as 429, but NEVER trips the
+// circuit breaker — a schedule must survive infra blips, only genuine
+// workflow defects (empty output, bad steps) earn a pause.
+const TRANSIENT_RE = /\b(socket connection|econnreset|econnrefused|fetch failed|network|premature close|terminated|etimeout|timeout)\b/i;
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const isTransient = (e: unknown) => TRANSIENT_RE.test(errMsg(e));
 const isRateLimit = (e: unknown) => RATE_LIMIT_RE.test(errMsg(e));
 const rateLimitBackoffMs = (streak: number) => Math.min(streak, 10) * 60_000;
 
@@ -149,22 +156,25 @@ async function executeRun(
     });
     const streak = wf.failStreak + 1;
     const rl = isRateLimit(e);
+    const transient = rl || isTransient(e);
     // v21: tick already claimed nextRunAt = now+interval BEFORE executing.
     // A rate-limited run (environmental congestion) pushes the next attempt
     // further out — failStreak-scaled, capped 10min — so a congested gateway
     // is waited out, not hammered on every tick.
+    // r116: ALL transient errors get the pushed-out backoff AND never pause
+    // the schedule — only hard failures count toward the 3-strike breaker.
     await prisma.automationWorkflow.update({
       where: { id: wf.id },
       data: {
         lastRunAt: new Date(),
         failStreak: streak,
-        enabled: streak < 3,
-        ...(rl
+        enabled: transient ? true : streak < 3,
+        ...(transient
           ? { nextRunAt: new Date(Date.now() + Math.max(60_000, wf.intervalMs) + rateLimitBackoffMs(streak)) }
           : {}),
       },
     });
-    console.error(`[autopilot] run ${run.id} ERROR — "${wf.name}": ${msg}${rl ? " (rate-limited — next attempt pushed out)" : ""}`);
+    console.error(`[autopilot] run ${run.id} ERROR — "${wf.name}": ${msg}${transient ? " (transient — schedule kept enabled, next attempt pushed out)" : ""}`);
   }
 }
 
@@ -185,9 +195,10 @@ async function tick(): Promise<void> {
         data: { nextRunAt: new Date(Date.now() + interval) },
       });
       inFlight.add(wf.id);
-      // v21: stagger simultaneous claims 2s apart — N due workflows must not
-      // thundering-herd the shared engine gateway on the same second.
-      const delay = slot++ * 2_000;
+      // v21/r116: stagger simultaneous claims 5s apart (was 2s — too tight
+      // after a downtime backlog: 3 schedules firing within 4s congested the
+      // shared gateway live at 11:25Z). N due workflows must not herd.
+      const delay = slot++ * 5_000;
       setTimeout(() => {
         void executeRun(wf, "schedule").finally(() => inFlight.delete(wf.id));
       }, delay);
