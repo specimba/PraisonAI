@@ -8,7 +8,7 @@ import { maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveLlm } from "@/lib/llm-config";
 import { decide, SYSTEMONE_GATE_CONFIDENCE } from "@/lib/systemone";
-import { buildRelayWire, recordRelayHopResult, type RelayTaskFit } from "@/lib/relay";
+import { buildRelayWire, recordRelayHopResult, type RelayTaskFit, type RelayWireHop } from "@/lib/relay";
 import {
   buildConversationalContext,
   buildReviewContext,
@@ -675,28 +675,71 @@ export async function executeWorkflowRun(
     let relayNotes: string[] = [];
     const MAX_STEP_ATTEMPTS = 3; // 1 real attempt + 2 automatic self-heal retries (r83: 2→3 — forensics from two independent failed deep runs (user's Continuous Research 08:xx, QA-profile dossier 07:xx) showed attempt-2-on-a-fresh-lane ALSO dying during the same provider outage window; a third lane dial is the difference between a saved 457s research pass and a terminal error. Each attempt is bounded by the engine's upstream deadlines, so a dead lane costs minutes, not the run.)
 
+    // v22 (mid-stream primary demotion): a provider that dies MID-STREAM —
+    // tool rounds streamed, then the socket dropped — is provably sick, but
+    // the old ladder re-dialed it FIRST on every attempt (the user's
+    // Continuous Research run burned ~26 minutes on one dead Vyce endpoint:
+    // 4/5 dials died at 104–731s each). Attempts 2/3 now demote the primary:
+    // lead with the built-in engine and park the sick primary at the BACK of
+    // the hop chain (its own key rides along, so it stays reachable). BYOK
+    // intact — the auto lane needs no key and touches none of the vault.
+    let demotePrimary = false;
+
     for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt++) {
       // Rebuild the relay wire PER ATTEMPT (r25): attempt 1's failures were
       // recorded into the rotator's health memory as they happened, so the
       // self-heal retry now starts on a DIFFERENT lane instead of re-dialing
       // the same dead primary — the actual "auto-retry hits the same dead
       // hop" fix.
-      const relayHops = buildRelayWire(
-        settings.settings,
-        { providerId: llm.providerId, model: llm.model },
-        { taskFit }
-      );
+      // v22: when the PREVIOUS attempt died mid-stream on the primary, stop
+      // leading with it — dial the built-in engine instead.
+      let dialLlm = llm;
+      if (attempt > 1 && demotePrimary && !forceServer) {
+        const auto = resolveLlm(settings.settings, "auto");
+        dialLlm = {
+          ...llm,
+          provider: auto.provider,
+          apiKey: undefined,
+          baseUrl: undefined,
+          model: undefined,
+          providerId: "auto",
+          label: `${llm.label} → auto (primary demoted)`,
+        };
+      }
+      const relayHops: RelayWireHop[] = [
+        ...buildRelayWire(
+          settings.settings,
+          { providerId: dialLlm.providerId, model: dialLlm.model },
+          { taskFit }
+        ),
+        ...(dialLlm !== llm && llm.providerId !== "auto"
+          ? [
+              {
+                key: `${llm.providerId}::${llm.model ?? ""}`,
+                ...(llm.baseUrl ? { baseUrl: llm.baseUrl } : {}),
+                ...(llm.apiKey ? { apiKey: llm.apiKey } : {}),
+                model: llm.model ?? "",
+                label: llm.label,
+              },
+            ]
+          : []),
+      ];
       try {
         draft = "";
         localToolCalls = [];
         relayNotes = [];
+        if (dialLlm !== llm) {
+          relayNotes.push(
+            `primary demoted after a mid-stream drop — built-in engine dialed first, ${llm.label} parked as last hop`
+          );
+        }
         const res = await runAgentChat(
           {
-            provider: llm.provider,
-            apiKey: llm.apiKey,
-            baseUrl: llm.baseUrl,
-            model: llm.model,
-            providerId: llm.providerId,
+            provider: dialLlm.provider,
+            apiKey: dialLlm.apiKey,
+            baseUrl: dialLlm.baseUrl,
+            model: dialLlm.model,
+            providerId: dialLlm.providerId,
             temperature: agent.temperature,
             maxIterations: agent.maxIterations,
             tools: effectiveTools,
@@ -744,8 +787,8 @@ export async function executeWorkflowRun(
           stepId: runStep.stepId,
           stepLabel: runStep.label,
           agentName: agent.name,
-          engine: llm.label,
-          model: llm.model,
+          engine: dialLlm.label,
+          model: dialLlm.model,
           ms: Date.now() - stepStart,
           ok: true,
           attempt,
@@ -777,8 +820,8 @@ export async function executeWorkflowRun(
             stepId: runStep.stepId,
             stepLabel: runStep.label,
             agentName: agent.name,
-            engine: llm.label,
-            model: llm.model,
+            engine: dialLlm.label,
+            model: dialLlm.model,
             ms: Date.now() - stepStart,
             ok: false,
             error: "aborted by user",
@@ -795,8 +838,8 @@ export async function executeWorkflowRun(
           stepId: runStep.stepId,
           stepLabel: runStep.label,
           agentName: agent.name,
-          engine: llm.label,
-          model: llm.model,
+          engine: dialLlm.label,
+          model: dialLlm.model,
           ms: Date.now() - stepStart,
           ok: false,
           error: message,
@@ -809,10 +852,18 @@ export async function executeWorkflowRun(
         // browser-direct errors.
         const kind =
           ((err as { kind?: RunErrorKind }).kind ?? classifyRunError(message).kind);
+        // v22: tool rounds streamed this attempt → the drop was MID-STREAM.
+        // Demote the primary so the next attempt leads with the built-in
+        // engine instead of re-dialing the provably sick endpoint first.
+        if (localToolCalls.length > 0 && SELF_HEAL_KINDS.includes(kind)) {
+          demotePrimary = true;
+        }
         if (attempt < MAX_STEP_ATTEMPTS && SELF_HEAL_KINDS.includes(kind) && !signal.aborted) {
           toast.info(`"${runStep.label}" hit a ${kind} hiccup — auto-retry ${attempt + 1}/${MAX_STEP_ATTEMPTS} on a fresh lane…`, {
             icon: "🛟",
-            description: "The engine dropped the call mid-step. Tool results already gathered are re-run safely.",
+            description: demotePrimary
+              ? "Primary demoted after its mid-stream drop — this retry dials the built-in engine first. Tool results already gathered are re-run safely."
+              : "The engine dropped the call mid-step. Tool results already gathered are re-run safely.",
           });
           patchRunStep(runStep.stepId, { status: "running", output: "", toolCalls: [] });
           continue;

@@ -18,8 +18,14 @@ export function AutomationBridge() {
   const agents = useAgentsStore((s) => s.agents);
   const workflowsRef = React.useRef(workflows);
   const agentsRef = React.useRef(agents);
-  workflowsRef.current = workflows;
-  agentsRef.current = agents;
+  // Lint fix (react-hooks/refs): ref writes are banned during render — sync
+  // them in an after-paint effect instead. Runs after EVERY render (no deps),
+  // and before the sync effect below (effects fire in declaration order), so
+  // the mount-time sync still sees hydrated stores.
+  React.useEffect(() => {
+    workflowsRef.current = workflows;
+    agentsRef.current = agents;
+  });
 
   React.useEffect(() => {
     let stopped = false;

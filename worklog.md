@@ -2900,3 +2900,32 @@ Open risks: --hot reload trusted by contract (boot-log line not stdout-verified)
 Blockers: none
 Cron state: cron CLI absent (127) round 53; fleet 2/2 behavioral (patrol 16:37/17:07 on cadence; review 17:23 = this round).
 Next recommended action: r112 — (a) wire server AutomationRun history into the Runs board (kanban) with a server-lane badge (⇉ distinct from ⇄/⊙) so autonomous runs sit beside browser runs — r110 queue (c), still open; (b) ServerAutopilot styling: last-sync timestamp chip from the bridge + sky-accent on "Run on server" buttons — r110 queue (d); (c) LOCAL AUTOMATION VAULT epic (opt-in keys in local DB → headless runs on user's providers with full parity) — the big one, deserves a dedicated direct-build round; (d) optional: HARNESS.md gains the console-buffer forensics recipe (line-position vs session markers) — capture rounds keep re-deriving it.
+---
+Task ID: DIRECT BUILD (user message, 2026-09-29 ~17:45 +08) — r112
+Agent: main
+Task: User pasted their failed "Continuous Research" run + Drive link ("check this last try I made"). Diagnosed the run from their exported report, retrieved the Drive file (FIRST successful external retrieval), and shipped v22 — mid-stream primary demotion.
+
+Work Log:
+- DRIVE BREAKTHROUGH: r109's "Drive unreachable" verdict OVERTURNED. curl to drive.google.com = 200; the actual FILE fetched via drive.usercontent.google.com/download?id=…&export=download = 11.4KB markdown — the user's own run-report export of the failed run. Future: always attempt user-pasted Drive file IDs via the usercontent endpoint.
+- RUN DIAGNOSIS (from the export): status failed at step 2/11 after 1043.9s. TOOL LANE HEALTHY (55 tool calls, 3 instant rejects, every web_search 429 auto-fell back to arxiv). PROVIDER LANE KILLED IT: 4/5 dials to Vyce AI · deepseek-v4.1 died at 104s/324s/411s/731s — mid-stream socket death after tool rounds streamed. The retry ladder re-dialed the SAME dead endpoint 3× (~26 min burned on one step). Lane chips honest throughout (⇄0/⊙1).
+- ROOT CAUSE IN CODE: agent-engine.ts:620/672 — upstream retries are gated on !streamedAny, so a MID-STREAM death throws immediately; workflow-runner's step-level retry then rebuilt the wire but ALWAYS led with the primary (hops only engage on pre-stream failure). Structural: no way out of a dead provider once it streamed.
+- v22 SHIPPED (1 file, workflow-runner.ts, 8 edits): mid-stream primary demotion. When an attempt fails with self-heal-class error AND tool rounds streamed this attempt (mid-stream proxy = localToolCalls.length>0), attempts 2/3 demote the primary: dial the built-in engine first (provider "auto", no key — BYOK intact), park the sick primary as the LAST hop (key rides along, still reachable). dialLlm per attempt; call log + notes + toasts honest ("primary demoted after a mid-stream drop — built-in engine dialed first, Vyce AI parked as last hop"); forceServer path untouched; hop key format matches the rotator's `${providerId}::${model}` memory.
+- LINT DEBT FIXED: bun run lint had 2 errors (react-hooks/refs) — automation-bridge.tsx wrote refs during render (v20 pattern). Moved to an after-paint effect (no deps, declaration order preserves mount-sync semantics). Lint now exits 0.
+- VERIFIED: 8/8 edit anchors read back; lint clean; HTTP 200; studio renders (Runs board radio + Server autopilot region); console-buffer forensics (r111 recipe): last [HMR] connected at line 382, ZERO sync failures after it (the two visible warnings are stale pre-v21 buffer).
+- Budget: ~13 tool rounds (direct user order — no cap).
+
+Stage Summary:
+- The exact failure mode that killed the user's run (mid-stream provider death → 3 blind same-endpoint re-dials → terminal error) is now structurally fixed: the retry ladder leads with a healthy lane and demotes the proven-sick endpoint. Next identical outage should produce a degraded-but-DONE run instead of a failed one.
+- External retrieval doctrine updated: user-pasted Google Drive file IDs ARE fetchable (usercontent endpoint) — r109's blanket "unreachable" is retired.
+
+Round Handoff:
+Round ID: r112 (v22 mid-stream primary demotion + Drive retrieval)
+Task owner: main (Orchestrator)
+Scope completed: diagnosis from user's exported report + v22 (8 edits) + lint debt fix + full verification.
+User-visible changes: after a mid-stream provider drop, auto-retries now dial the built-in engine first (honest toast + call-log note); your provider is retried last, not first.
+Verification steps: anchors 8/8; lint exit 0; HTTP 200; studio live-render; console forensics clean.
+Verification result: PASS
+Open risks: v22's demotion path is code-reviewed but not live-fired against a real mid-stream outage (needs a real provider drop to exercise; the next natural outage is the test). The built-in engine has its own congestion (429s) — demotion trades a dead provider for a congested engine; the v21b server-side backoff covers the engine side.
+Blockers: none
+Cron state: cron CLI absent (127) round 54; fleet 2/2 behavioral (patrol 17:37 on cadence; this round = direct user order between patrols).
+Next recommended action: r113 — (a) live-fire v22 when the next mid-stream outage occurs (watch call logs for "primary demoted" notes); (b) Runs board: server AutomationRun history beside browser runs with a ⇉ lane badge (still open since r110); (c) ServerAutopilot last-sync chip + sky-accent styling (r110 (d)); (d) consider surfacing "provider health" on the workflow card (recent dial failure rate from call logs) so users see a sick provider BEFORE launching a run.
