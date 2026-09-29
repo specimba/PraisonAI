@@ -4,6 +4,7 @@
 
 import { toast } from "sonner";
 import { runText, scoreNovelty } from "@/lib/evolution";
+import { noteGateway429 } from "@/lib/gateway-cadence";
 import { maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveLlm } from "@/lib/llm-config";
@@ -877,6 +878,11 @@ export async function executeWorkflowRun(
           // Continuous Research run recorded 3 failed 429 dials back-to-back;
           // v21b's server-side lesson now mirrored client-side).
           if (kind === "rate-limit") {
+            // v24: congestion is shared fate — every scheduled START anywhere
+            // in the app quiets down for 90s (gateway-cadence), not just this
+            // step's own retry ladder. Stops pipeline pile-ups from feeding
+            // the same quota window.
+            noteGateway429();
             const cooldown = attempt === 1 ? 20_000 : 45_000;
             toast.info(`"${runStep.label}" is rate-limited — cooling down ${Math.round(cooldown / 1000)}s before retry ${attempt + 1}/${MAX_STEP_ATTEMPTS}…`, {
               icon: "⏳",

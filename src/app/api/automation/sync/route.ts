@@ -55,11 +55,19 @@ export async function POST(req: Request) {
 
     // Orphan guard: registry rows the client no longer sends are disabled
     // (kept for run history, never deleted).
-    const sentIds = new Set(workflows.map((w) => w.id));
-    const all = await db.automationWorkflow.findMany({ select: { id: true, enabled: true } });
-    for (const row of all) {
-      if (!sentIds.has(row.id) && row.enabled) {
-        await db.automationWorkflow.update({ where: { id: row.id }, data: { enabled: false } });
+    // v24 collapse fix: a push with ZERO enabled schedules is NOT authoritative
+    // — any second client (QA browser profile, a second tab before hydration)
+    // would otherwise disarm the primary user's registry every heartbeat
+    // (proven live 2026-09-29: the QA instance re-disabled all 4 rows every
+    // 60s in a silent tug-of-war with the real tab). Empty push = heartbeat
+    // only. A push with ≥1 enabled schedule still prunes orphans.
+    if (workflows.length > 0) {
+      const sentIds = new Set(workflows.map((w) => w.id));
+      const all = await db.automationWorkflow.findMany({ select: { id: true, enabled: true } });
+      for (const row of all) {
+        if (!sentIds.has(row.id) && row.enabled) {
+          await db.automationWorkflow.update({ where: { id: row.id }, data: { enabled: false } });
+        }
       }
     }
 
