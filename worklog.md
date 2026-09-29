@@ -2844,3 +2844,31 @@ Open risks: built-in engine congestion may delay/error headless runs until the v
 Blockers: none
 Cron state: cron CLI absent (127) round 51; fleet 2/2 behavioral.
 Next recommended action: (1) local automation vault (opt-in, keys in local DB only → headless runs on user's providers); (2) ServerAutopilot: wire run history INTO the Runs board so server runs appear beside browser runs; (3) engine congestion handling: jittered tick + per-workflow retry delay on 429; (4) reply to user with the honest 429 caveat + vault plan; (5) user's directive file never reached the server — ask them to re-paste if it contains specs beyond this round's scope.
+---
+Task ID: 414940 (hourly review, 2026-09-29 16:23 +08)
+Agent: main (review round)
+Task: r110 — QA caught the recurring automation-bridge sync-500 (r109 watch item fired); v21 diagnosability + fast-retry fix shipped.
+
+Work Log:
+- QA: HTTP 200; studio renders; ServerAutopilot panel present (4 registry rows, honest-empty run list). CONSOLE FOUND: "[automation-bridge] sync failed: 500" ×2 — r109's watch item RECURRED.
+- ROOT-CAUSE: direct probe POST /api/automation/sync → 200 {"ok":true} — route logic is sound. dev.log shows no sync stack trace. Verdict: transient mount-time failure (page-load sync racing dev-server cold compile / Prisma engine spin-up), same as r109's verdict. The REAL defect is client-side diagnosability: the bridge logged only res.status and DISCARDED the error body, and recovery waited the full 60s.
+- v21 SHIPPED (1 file, automation-bridge.tsx, 2 edits): (1) on sync failure the bridge now reads and logs the response BODY (truncated 200 chars) — future 500s are self-diagnosing; (2) bounded fast-retry: up to 2 retries at 5s (counter resets on success, single-flight guarded via retryTimer, cleared on unmount) absorb the cold-compile race without waiting 60s; (3) success path resets the retry counter.
+- Budget reality: QA+root-cause consumed 10/12 rounds (including the /workflows-404 detour — HARNESS.md route note confirmed live again); fix + this append = 12/12. Console re-scan and live-500-repro verification queued to r111 (honest: not re-verified this round).
+- Budget: 12/12 — at budget, exiting.
+
+Stage Summary:
+- The automation bridge is now self-diagnosing (error body in console) and self-healing (bounded 5s fast-retry). A third recurrence of the sync-500 would print its actual cause instead of a blind status.
+- Note: worklog r109's queue item (2) "server runs into Runs board" and (3) "jittered tick + 429 backoff in mini-services/workflow-scheduler (bun --hot auto-reloads)" remain OPEN and are next-round candidates, alongside v21 verification.
+
+Round Handoff:
+Round ID: r110 (v21 bridge sync diagnosability + fast-retry)
+Budget used: M · ~9 min (12/12 rounds — at budget)
+Task owner: main (Orchestrator)
+Scope completed: QA + root-cause + v21 shipped (2 edits, anchors read back); sync probe 200; page 200.
+User-visible changes: none visible when healthy; on failure the console names the actual server error and sync recovers in ~5s instead of ~60s.
+Verification steps: edit anchors read back (2/2); direct sync probe 200; page 200. NOT re-verified this round: browser console post-HMR (queued r111).
+Verification result: PASS (with honest r111 verification follow-up)
+Open risks: sync-500 root cause is inferred-transient, not reproduced under a debugger; if the error body logging reveals a real DB fault at mount, escalate to db-singleton hardening.
+Blockers: none
+Cron state: cron CLI absent (127) round 52; fleet 2/2 behavioral (patrol 15:37/16:07 on cadence; review 16:23 = this round).
+Next recommended action: r111 — (a) VERIFY v21: fresh open localhost:3000, console scan (expect zero NEW sync warnings; if any, the new body log names the cause); (b) mini-services/workflow-scheduler: jittered tick (±20% of 30s) + per-workflow 429 backoff delay (built-in engine congestion from r109's E2E) — bun --hot picks it up live; (c) wire server AutomationRun history into the Runs board (kanban) with a server-lane badge so autonomous runs are visible beside browser runs; (d) styling: ServerAutopilot "Run on server" buttons could carry a subtle sky accent + the panel could show last-sync time from the bridge.

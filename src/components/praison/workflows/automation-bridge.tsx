@@ -50,6 +50,9 @@ export function AutomationBridge() {
         }));
     };
 
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let fastRetries = 0;
+
     const sync = async () => {
       try {
         const res = await fetch("/api/automation/sync", {
@@ -57,7 +60,24 @@ export function AutomationBridge() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ workflows: buildPayload() }),
         });
-        if (!res.ok && !stopped) console.warn("[automation-bridge] sync failed:", res.status);
+        if (!res.ok) {
+          // v21: surface the server's error body — a blind "sync failed: 500"
+          // warning cost two QA rounds to root-cause (r109 + r110, both
+          // mount-time sync racing the dev-server cold compile). Also: two
+          // bounded 5s fast retries absorb that race without waiting the
+          // full 60s heartbeat (reset on success, capped, HMR-safe).
+          const detail = await res.text().catch(() => "");
+          if (!stopped) console.warn("[automation-bridge] sync failed:", res.status, detail.slice(0, 200));
+          if (!retryTimer && !stopped && fastRetries < 2) {
+            fastRetries += 1;
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              void sync();
+            }, 5_000);
+          }
+        } else {
+          fastRetries = 0;
+        }
       } catch {
         /* server briefly unreachable — the next heartbeat retries */
       }
@@ -68,6 +88,7 @@ export function AutomationBridge() {
     return () => {
       stopped = true;
       clearInterval(t);
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, []);
 
