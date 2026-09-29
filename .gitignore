@@ -73,3 +73,7 @@ db/*.db-journal
 
 # local backup artifacts (bundles + db snapshots)
 backups/
+
+# local runtime logs (never ship)
+dev.log*
+ops/heartbeat.log
