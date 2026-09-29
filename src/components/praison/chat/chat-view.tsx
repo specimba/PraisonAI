@@ -153,6 +153,18 @@ export function ChatView() {
 
   const messages = conversation?.messages ?? NO_MESSAGES;
 
+  // r102 (v14): lane health over this chat's assistant replies — v12/v12b receipts feed this.
+  const laneCounts = React.useMemo(() => {
+    let relay = 0;
+    let direct = 0;
+    for (const m of messages) {
+      if (m.role !== "assistant") continue;
+      if (m.transport === "server") relay += 1;
+      else if (m.transport === "browser-direct") direct += 1;
+    }
+    return { relay, direct };
+  }, [messages]);
+
   // Show "Regenerate" when the conversation ends on a finished assistant reply
   const canRegenerate = React.useMemo(() => {
     if (streaming || messages.length === 0) return false;
@@ -957,6 +969,18 @@ export function ChatView() {
                 {messages.length} {messages.length === 1 ? "message" : "messages"}
               </span>
             )}
+            {laneCounts.relay + laneCounts.direct > 0 ? (
+              <span
+                className="hidden items-center gap-1 rounded-full border border-sky-400/25 bg-sky-400/10 px-2 py-0.5 text-[11px] font-medium text-sky-300/90 lg:inline-flex"
+                title={`Transport lanes over assistant replies — ⇄ server relay ×${laneCounts.relay}, ⊙ browser-direct ×${laneCounts.direct} (key stayed local)`}
+              >
+                <span aria-hidden className="text-sky-300/70">⇄</span>
+                {laneCounts.relay}
+                <span aria-hidden className="text-sky-400/30">/</span>
+                <span aria-hidden className="text-sky-300/70">⊙</span>
+                {laneCounts.direct}
+              </span>
+            ) : null}
             <MemoryDialog conv={conversation} disabled={streaming} />
             <HeartbeatButton conv={conversation} disabled={streaming} />
             <Button

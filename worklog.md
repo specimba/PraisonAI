@@ -2580,3 +2580,31 @@ Open risks: none; chip awaits first real lane-labelled run (piggyback visual lat
 Blockers: none
 Cron state: cron CLI absent (127) round 43; fleet 2/2 behavioral (patrol 06:37/07:07 on cadence; review 07:23 = this round).
 Next recommended action: r102 — the transport/observability arc is fully closed (v11→v13). Fresh directions: (a) visual capture round combining v11 button + v11b chips + v13 ratio on a real run (hang-server recipe is documented in r96); (b) product backlog per hourly mandate (styling polish on the recovery card, or a new feature); (c) review accumulated harness scripts for archive/writing into a README so future rounds stop re-reading them from the worklog.
+---
+Task ID: 414940 (hourly review, 2026-09-29 08:23 +08)
+Agent: main (review round)
+Task: v14 — chat-level lane-health chip (elevates v12/v12b per-message receipts to a glanceable header aggregate).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r101 (v13 per-run chip intact).
+- SCOUTING: r101's handoff queue picked (b)/(c); chose the chat-altitude lane aggregate — per-message receipts existed but no at-a-glance ratio for the ACTIVE CHAT (v13 covers per-run only).
+- v14 SHIPPED (1 file, chat-view.tsx): `laneCounts` useMemo counts assistant messages by `transport` ("server" → relay, "browser-direct" → direct); header chip "⇄ R / ⊙ D" renders between the message-count and MemoryDialog — sky-300/90 on sky-400/10 pill with sky border, title tooltip spells out both lanes; hidden (null) until at least one lane-labelled reply exists (honest-empty, same doctrine as v13).
+- VERIFIED: live HMR compile clean (app reloads, title renders); console scan zero errors/warnings; HTTP 200 after edit.
+- Budget: 9/12 tool rounds — clean exit.
+
+Stage Summary:
+- Lane story now spans three altitudes + chat aggregate: per-call notes (v11b), per-run ratio (v13), per-message receipts (v12/v12b), and per-chat header chip (v14). Every altitude answers "how was this served?" in one glance.
+- Chip self-populates on the first transport-stamped reply of any conversation; no store/type changes (reads the v12 field).
+
+Round Handoff:
+Round ID: r102 (v14 chat lane-health chip)
+Budget used: XS · ~8 min (9/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v14 chip shipped + compile-verified; QA clean.
+User-visible changes: chat header shows ⇄/⊙ lane ratio once a lane-stamped reply exists.
+Verification steps: HMR compile clean; console scan (0 errors); HTTP 200; MultiEdit diffs read back (2/2 anchors).
+Verification result: PASS
+Open risks: none; chip awaits first transport-stamped reply in a live conversation (piggyback visual later).
+Blockers: none
+Cron state: cron CLI absent (127) round 44; fleet 2/2 behavioral (patrol 07:37/08:07 on cadence; review 08:23 = this round).
+Next recommended action: r103 — (a) visual capture round combining v11 button + v11b chips + v13 ratio + v14 chip on a real failed/relay run (hang-server recipe in r96); (b) harness-scripts README so future rounds stop re-deriving recipes from worklog; (c) styling polish on the workflow recovery card (sky/amber note rows already exist — could add gradient border + icon badge).
