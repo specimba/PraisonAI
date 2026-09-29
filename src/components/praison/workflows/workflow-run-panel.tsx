@@ -136,6 +136,73 @@ function resilienceDigest(log: RunCallLogEntry[]) {
   return { skips, subs, rotations };
 }
 
+// ── r131: shared grouped call-log renderer ──────────────────────────────
+// One component for BOTH surfaces: the error recovery card (r130) and the
+// run-history "N calls" expander (r131). Digest + grouping computed here so
+// callers pass just the log; chronological #N numbering stays global.
+
+function CallLogList({ log }: { log: RunCallLogEntry[] }) {
+  const groups = groupCallLog(log);
+  const d = resilienceDigest(log);
+  const parts: string[] = [];
+  if (d.skips > 0) parts.push(`↻ primary skipped ×${d.skips}`);
+  if (d.subs > 0) parts.push(`⇄ model substitution ×${d.subs}`);
+  if (d.rotations > 0) parts.push(`⇄ relay rotation ×${d.rotations}`);
+  const digestText = parts.join(" · ");
+  return (
+    <>
+      {digestText ? (
+        <div className="mb-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-2 py-1 font-mono text-[10px] text-amber-300/90">
+          resilience · {digestText}
+        </div>
+      ) : null}
+      <ul className="space-y-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
+        {groups.map((g, gi) => (
+          <li key={`g-${gi}`} className="space-y-1">
+            <div className="flex items-center gap-2 border-b border-border/50 pb-0.5 text-[10px] text-foreground/60">
+              <span className="truncate">{g.label ? `“${g.label}”` : "calls"}</span>
+              <span className="ml-auto shrink-0">
+                {g.items.length} {g.items.length === 1 ? "call" : "calls"}
+                {g.failed > 0 ? (
+                  <span className="text-red-400"> · {g.failed} failed</span>
+                ) : null}
+              </span>
+            </div>
+            <ul className="space-y-1">
+              {g.items.map(({ c, idx }) => (
+                <li key={`${c.at}-${idx}`} className="break-words">
+                  <span className="text-foreground/70">#{idx + 1}</span>{" "}
+                  {c.engine}
+                  {c.model ? ` · ${c.model}` : ""} · {(c.ms / 1000).toFixed(1)}s{" "}
+                  {c.ok ? (
+                    <span className="text-emerald-500">✓</span>
+                  ) : (
+                    <span className="text-red-400">✗ {c.error ?? "failed"}</span>
+                  )}
+                  {c.attempt && c.attempt > 1 ? ` (attempt ${c.attempt})` : ""}
+                  {c.note ? (
+                    <span
+                      className={
+                        "mt-0.5 block font-mono text-[10px] " +
+                        (c.note.startsWith("server relay")
+                          ? "text-sky-300/90"
+                          : "text-amber-300/90")
+                      }
+                    >
+                      {c.note.startsWith("server relay") ? "⇄ " : "↻ "}
+                      {c.note}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 function StatusIndicator({
   status,
   ms,
@@ -300,16 +367,6 @@ function RunRecoveryCard({
       ? ` · ⇄${laneRelay} relay / ⊙${laneDirect} direct`
       : "";
 
-  // r130: grouped call-log view model + one-line resilience digest (the
-  // counted "primary skipped ×N" strip) rendered above the step blocks.
-  const callGroups = groupCallLog(run.callLog ?? []);
-  const digest = resilienceDigest(run.callLog ?? []);
-  const digestParts: string[] = [];
-  if (digest.skips > 0) digestParts.push(`↻ primary skipped ×${digest.skips}`);
-  if (digest.subs > 0) digestParts.push(`⇄ model substitution ×${digest.subs}`);
-  if (digest.rotations > 0) digestParts.push(`⇄ relay rotation ×${digest.rotations}`);
-  const digestText = digestParts.join(" · ");
-
   if (dismissed) return null;
 
   function savePartialReport() {
@@ -447,54 +504,7 @@ function RunRecoveryCard({
               </button>
               {callsOpen ? (
                 <div className="mt-2">
-                  {digestText ? (
-                    <div className="mb-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-2 py-1 font-mono text-[10px] text-amber-300/90">
-                      resilience · {digestText}
-                    </div>
-                  ) : null}
-                  <ul className="space-y-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">
-                    {callGroups.map((g, gi) => (
-                      <li key={`g-${gi}`} className="space-y-1">
-                        <div className="flex items-center gap-2 border-b border-border/50 pb-0.5 text-[10px] text-foreground/60">
-                          <span className="truncate">{g.label ? `“${g.label}”` : "calls"}</span>
-                          <span className="ml-auto shrink-0">
-                            {g.items.length} {g.items.length === 1 ? "call" : "calls"}
-                            {g.failed > 0 ? (
-                              <span className="text-red-400"> · {g.failed} failed</span>
-                            ) : null}
-                          </span>
-                        </div>
-                        <ul className="space-y-1">
-                          {g.items.map(({ c, idx }) => (
-                            <li key={`${c.at}-${idx}`} className="break-words">
-                              <span className="text-foreground/70">#{idx + 1}</span>{" "}
-                              {c.engine}
-                              {c.model ? ` · ${c.model}` : ""} · {(c.ms / 1000).toFixed(1)}s{" "}
-                              {c.ok ? (
-                                <span className="text-emerald-500">✓</span>
-                              ) : (
-                                <span className="text-red-400">✗ {c.error ?? "failed"}</span>
-                              )}
-                              {c.attempt && c.attempt > 1 ? ` (attempt ${c.attempt})` : ""}
-                              {c.note ? (
-                                <span
-                                  className={
-                                    "mt-0.5 block font-mono text-[10px] " +
-                                    (c.note.startsWith("server relay")
-                                      ? "text-sky-300/90"
-                                      : "text-amber-300/90")
-                                  }
-                                >
-                                  {c.note.startsWith("server relay") ? "⇄ " : "↻ "}
-                                  {c.note}
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
+                  <CallLogList log={run.callLog ?? []} />
                 </div>
               ) : null}
             </div>
@@ -594,6 +604,8 @@ export function WorkflowRunPanel({
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [compareOpen, setCompareOpen] = React.useState(false);
   const [compareRunId, setCompareRunId] = React.useState<string | null>(null);
+  // r131: which history row's call-log expander is open (one at a time).
+  const [callsOpenRunId, setCallsOpenRunId] = React.useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [, scheduleTick] = React.useReducer((n: number) => n + 1, 0);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -784,8 +796,8 @@ export function WorkflowRunPanel({
       <CollapsibleContent>
         <div className="space-y-1 pt-2">
           {(liveWorkflow?.runs ?? []).map((r) => (
+            <React.Fragment key={r.id}>
             <div
-              key={r.id}
               className={cn(
                 "flex items-center gap-0.5 rounded-lg border pr-0.5 transition",
                 r.id === viewingRunId
@@ -875,7 +887,30 @@ export function WorkflowRunPanel({
               >
                 <GitCompareArrows className="h-3.5 w-3.5" aria-hidden />
               </Button>
+              {r.callLog && r.callLog.length > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`${r.callLog.length} recorded LLM calls — toggle call log`}
+                  aria-expanded={callsOpenRunId === r.id}
+                  title={`${r.callLog.length} recorded LLM calls · ${r.callLog.filter((c) => !c.ok).length} failed — click to inspect lanes, notes and durations`}
+                  onClick={() => setCallsOpenRunId((id) => (id === r.id ? null : r.id))}
+                  className={cn(
+                    "h-7 shrink-0 gap-1 rounded-lg px-2 font-mono text-[11px] tabular-nums text-muted-foreground transition-colors hover:text-violet-400",
+                    callsOpenRunId === r.id && "text-violet-400"
+                  )}
+                >
+                  <Server className="h-3.5 w-3.5" aria-hidden />
+                  {r.callLog.length}
+                </Button>
+              ) : null}
             </div>
+            {callsOpenRunId === r.id && r.callLog && r.callLog.length > 0 ? (
+              <div className="rounded-lg border bg-background/60 p-2.5">
+                <CallLogList log={r.callLog} />
+              </div>
+            ) : null}
+            </React.Fragment>
           ))}
           {(liveWorkflow?.runs.length ?? 0) === 0 && (
             <p className="px-3 py-2 text-xs text-muted-foreground">
