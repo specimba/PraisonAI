@@ -2929,3 +2929,35 @@ Open risks: v22's demotion path is code-reviewed but not live-fired against a re
 Blockers: none
 Cron state: cron CLI absent (127) round 54; fleet 2/2 behavioral (patrol 17:37 on cadence; this round = direct user order between patrols).
 Next recommended action: r113 — (a) live-fire v22 when the next mid-stream outage occurs (watch call logs for "primary demoted" notes); (b) Runs board: server AutomationRun history beside browser runs with a ⇉ lane badge (still open since r110); (c) ServerAutopilot last-sync chip + sky-accent styling (r110 (d)); (d) consider surfacing "provider health" on the workflow card (recent dial failure rate from call logs) so users see a sick provider BEFORE launching a run.
+---
+Task ID: 414940 (hourly review, 2026-09-29 18:23 +08)
+Agent: main (review round)
+Task: r113 — QA + ServerAutopilot observability chips + sky accent styling (closes r110/r112 queue item (c)).
+
+Work Log:
+- OPS CORRECTIONS (both matter for future rounds): (1) /api/health 404s because that path NEVER existed — the real health endpoint is GET /api/cron/forensics (200, returns registry + heartbeat tail). My stale memory, server is fine (root 200, prisma clean). (2) The 18:07+08 patrol DID run — heartbeat line 138 is 2026-09-29T10:07:09Z http=200 fleet=2/2; the compression summary's "patrol pending" was stale. Behavioral cron verification passed: forensics registry shows 414938 (heartbeat-30m) + 414940 (hourly-review), both enabled, kind=agentTurn; heartbeat appended 10:25:50Z http=200 fleet=2/2.
+- QA: home page IS the Workflow Studio (Server autopilot region directly visible, no SPA nav needed); cron fleet chip "2/2 alive · next 11m"; console clean — only Fast Refresh rebuilds + [HMR] connected, ZERO sync failures (v21/v22 verification state holds).
+- r113 SHIPPED (1 file, server-autopilot.tsx, 4 edits):
+  1. Bridge-sync chip: sky chip "bridge sync Xs ago" while the browser drives — data source is SyncState.lastSeenAt, ALREADY in the panel's 15s GET payload (zero bridge changes needed, r110's "from the bridge" satisfied via the server's own record). Flips to amber "bridge silent Xm ago" exactly when the server lane takes over — the BYOK→headless handover is now quantitatively visible, not just labeled.
+  2. Next-fire chip (new functionality): sky outline chip "next fire Xm/due" = earliest nextRunAt across ENABLED registry rows; title tooltip explains it covers either lane. Correctly dormant (absent) when no schedules are enabled.
+  3. "Run on server" buttons now carry the sky accent (border-sky-500/30, sky text, hover bg+text transitions) — r110(d) styling item.
+  4. Refresh button gains a sky hover accent. All chips/buttons use transition-colors for smooth state flips.
+- VERIFIED: bun run lint exit 0; live agent-browser snapshot renders "bridge sync 19s ago" with real data; console clean post-HMR; 4/4 edit anchors read back. HONEST: next-fire chip verified only in the dormant case — sync payload inspection shows all 4 registry rows disabled (Continuous Research / Morning Briefing / Novelty Lab / RSIinFIELD, enabled=false, runs=0). Active-path render is code-reviewed, NOT live-fired; enabling user schedules just to test would be state tampering and was not done.
+- Budget: 10/12 — clean exit.
+
+Stage Summary:
+- Server autopilot panel now shows lane-handover freshness (fresh sky ↔ silent amber) and previews the next scheduled fire; all headless-lane actions wear the sky accent. Queue item (c) from r110/r112 is CLOSED.
+- Registry observation (context, not a defect): the user currently has NO enabled recurring schedules, so the server lane legitimately has nothing to fire; the panel's empty-active state is the correct truthful render.
+
+Round Handoff:
+Round ID: r113 (ServerAutopilot observability chips + sky styling)
+Budget used: M · ~8 min (10/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: QA + ops corrections + r113 shipped (4 edits) + lint + live chip verification.
+User-visible changes: Server autopilot panel gains a bridge-sync freshness chip (sky = tab driving, amber = server took over), a next-fire countdown chip when any schedule is enabled, and sky-accented server actions with hover transitions.
+Verification steps: lint exit 0; live snapshot chip render ("bridge sync 19s ago"); GET /api/automation/sync payload inspection; console forensics post-HMR; 4/4 anchors.
+Verification result: PASS
+Open risks: next-fire chip active-path not live-fired (no enabled schedules exist); v22 "primary demoted" still awaiting a natural mid-stream outage; /api/health folklore now corrected in this log — future checks must use /api/cron/forensics.
+Blockers: none
+Cron state: cron CLI absent (127) round 55; fleet 2/2 behavioral (patrol 18:07 on cadence; review 18:23 = this round).
+Next recommended action: r114 — (a) Runs board: server AutomationRun history beside browser runs with a ⇉ lane badge (open since r110 — the last big UI integration item); (b) LOCAL AUTOMATION VAULT epic (opt-in provider keys in the local DB only → headless runs at full parity) — deserves a dedicated direct-build round; (c) workflow-card provider health (recent dial failure rate from call logs) so a sick provider is visible BEFORE launch; (d) the moment the user enables any schedule, next-fire chip and v22 demotion note become live-testable — check then.

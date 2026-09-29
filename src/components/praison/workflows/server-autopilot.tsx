@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Bot, CircleDot, RefreshCw, RadioTower, Server } from "lucide-react";
+import {
+  Bot,
+  CircleDot,
+  Clock,
+  RefreshCw,
+  RadioTower,
+  Server,
+  Timer,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -105,6 +113,11 @@ export function ServerAutopilot() {
 
   const driving = state?.serverDriving === true;
   const active = state?.registry.filter((r) => r.enabled) ?? [];
+  const nextFire =
+    active
+      .map((r) => r.nextRunAt)
+      .filter((v): v is string => typeof v === "string")
+      .sort()[0] ?? null;
 
   return (
     <section
@@ -135,10 +148,35 @@ export function ServerAutopilot() {
             </>
           )}
         </Badge>
+        <span
+          title={
+            driving
+              ? "Last time the open tab synced its schedules; it went quiet and the server lane took over."
+              : "Last time the open tab synced schedules + keys to the local server (every 60s)."
+          }
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] transition-colors",
+            driving
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+              : "border-sky-500/40 bg-sky-500/10 text-sky-300"
+          )}
+        >
+          <Clock className="h-2.5 w-2.5" aria-hidden />
+          {driving ? "bridge silent" : "bridge sync"} {fmtAgo(state?.lastSeenAt ?? null)}
+        </span>
+        {nextFire ? (
+          <span
+            title="Soonest scheduled fire across all registered pipelines (either lane)"
+            className="inline-flex items-center gap-1 rounded-full border border-sky-500/25 bg-sky-500/[0.06] px-1.5 py-0 text-[10px] text-sky-200/90 transition-colors hover:border-sky-500/40"
+          >
+            <Timer className="h-2.5 w-2.5" aria-hidden />
+            next fire {fmtIn(nextFire)}
+          </span>
+        ) : null}
         <Button
           variant="ghost"
           size="sm"
-          className="ml-auto h-7 px-2 text-xs"
+          className="ml-auto h-7 px-2 text-xs transition-colors hover:text-sky-300"
           onClick={() => void poll()}
         >
           <RefreshCw className="h-3 w-3" aria-hidden />
@@ -166,7 +204,7 @@ export function ServerAutopilot() {
                 size="sm"
                 disabled={busy === r.id}
                 onClick={() => void runNow(r.id, r.name)}
-                className="ml-auto h-6 gap-1 px-1.5 text-[10px]"
+                className="ml-auto h-6 gap-1 border-sky-500/30 px-1.5 text-[10px] text-sky-300/90 transition-colors hover:bg-sky-500/10 hover:text-sky-200"
                 title="Fire this pipeline on the local server now (headless lane)"
               >
                 <Server className="h-3 w-3" aria-hidden />
