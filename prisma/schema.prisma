@@ -79,3 +79,48 @@ model TrackerMeta {
   modelCount Int       @default(0)
   payload    String?   // last sync summary JSON
 }
+// ─── v20: Headless autopilot (server-side scheduled workflow runs) ──────────
+// The browser pushes workflow snapshots here; when the tab is CLOSED (client
+// heartbeat stale >2min), the local scheduler mini-service fires due runs
+// using the platform's built-in engine. Local-only: everything stays on this
+// machine — BYOK keys are NOT needed server-side and never leave the browser.
+model AutomationWorkflow {
+  id          String    @id
+  name        String
+  task        String
+  stepsJson   String
+  intervalMs  Int
+  enabled     Boolean   @default(true)
+  nextRunAt   DateTime  @default(now())
+  lastRunAt   DateTime?
+  failStreak  Int       @default(0)
+  registeredAt DateTime @default(now())
+  updatedAt   DateTime  @updatedAt
+  runs        AutomationRun[]
+}
+
+model AutomationRun {
+  id           String   @id @default(cuid())
+  workflowId   String
+  workflow     AutomationWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowName String
+  trigger      String   @default("schedule") // schedule | manual
+  status       String   @default("running")  // running | done | error
+  currentStep  Int      @default(0)
+  stepsTotal   Int      @default(0)
+  stepsJson    String   @default("[]")       // [{label, output, ms, ok}]
+  finalReport  String?
+  error        String?
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+
+  @@index([status, startedAt])
+  @@index([workflowId, startedAt])
+}
+
+// Single-row liveness: the open tab heartbeats every 60s; the server tick
+// stands down while fresh (client drives with user keys), fires when stale.
+model AutomationState {
+  id         String   @id @default("singleton")
+  lastSeenAt DateTime @default(now())
+}

@@ -72,8 +72,11 @@ function stallTimeoutLabel(): string {
 /** Bounded self-recovery (r72): a watchdog-stalled run auto-resumes from its
  * failed step up to MAX_AUTO_RESUMES times (shared budget with manual resumes
  * — both bump resumeCount) before falling back to the manual-resume card. */
+import { clearWorkerInterval, setWorkerInterval, setWorkerTimeout } from "@/lib/worker-timer";
+
 const MAX_AUTO_RESUMES = 3;
 const STALL_CHECK_MS = 15_000;
+const STALL_WATCHDOG_KEY = "praison-stall-watchdog";
 let stallWatchdog: ReturnType<typeof setInterval> | null = null;
 
 /** Live controller for a workflow's active run — lets the UI re-acquire Stop after a remount. */
@@ -81,9 +84,17 @@ export function getRunController(workflowId: string): AbortController | undefine
   return activeControllers.get(workflowId);
 }
 
+function stopStallWatchdog(): void {
+  clearWorkerInterval(STALL_WATCHDOG_KEY);
+  if (stallWatchdog != null) {
+    clearInterval(stallWatchdog);
+    stallWatchdog = null;
+  }
+}
+
 function ensureStallWatchdog(): void {
   if (stallWatchdog) return;
-  stallWatchdog = setInterval(() => {
+  const tick = () => {
     const now = Date.now();
     for (const wfId of [...activeRuns]) {
       if (now - (lastRunActivity.get(wfId) ?? 0) > stallTimeoutMs()) {
@@ -100,10 +111,16 @@ function ensureStallWatchdog(): void {
       }
     }
     if (activeRuns.size === 0) {
-      clearInterval(stallWatchdog);
-      stallWatchdog = null;
+      stopStallWatchdog();
     }
-  }, Math.min(STALL_CHECK_MS, Math.floor(stallTimeoutMs() / 4)));
+  };
+  const ms = Math.min(STALL_CHECK_MS, Math.floor(stallTimeoutMs() / 4));
+  // v20: run the cadence on the worker clock when possible — background tabs
+  // clamp main-thread timers to ~1/min (intensive throttling), which turned
+  // stall detection into multi-minute hangs. Fallback keeps old behavior.
+  if (!setWorkerInterval(STALL_WATCHDOG_KEY, ms, tick)) {
+    stallWatchdog = setInterval(tick, ms);
+  }
 }
 
 export function isWorkflowRunning(workflowId: string): boolean {
@@ -130,7 +147,7 @@ function scheduleAutoResume(
   fromStepIndex: number,
   previousResumes: number
 ): void {
-  setTimeout(() => {
+  const fireAutoResume = () => {
     const wf = useWorkflowsStore
       .getState()
       .workflows.find((w) => w.id === workflowId);
@@ -146,7 +163,12 @@ function scheduleAutoResume(
       resume: { runId, fromStepIndex },
       source: "scheduled",
     });
-  }, 1200);
+  };
+  // v20: worker-clock delay — a backgrounded tab clamps main-thread timers,
+  // which stretched the 1.2s re-entry into minutes right after a stall abort.
+  if (!setWorkerTimeout(`auto-resume-${runId}`, 1200, fireAutoResume)) {
+    setTimeout(fireAutoResume, 1200);
+  }
 }
 
 export interface ExecuteRunOptions {

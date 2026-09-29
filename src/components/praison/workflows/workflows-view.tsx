@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
+import { ServerAutopilot } from "@/components/praison/workflows/server-autopilot";
 import {
   ChevronRight,
   Clock,
@@ -1148,6 +1149,9 @@ export function WorkflowsView() {
       </PageHeader>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="mb-4">
+          <ServerAutopilot />
+        </div>
         {agents.length === 0 ? (
           <Alert className="mb-4 border-violet-500/30 bg-violet-500/5">
             <Users className="h-4 w-4 text-violet-400" />

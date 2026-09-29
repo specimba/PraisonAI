@@ -1,0 +1,75 @@
+"use client";
+
+import * as React from "react";
+import { useAgentsStore, useWorkflowsStore } from "@/lib/stores";
+
+// ─── v20: Automation bridge (global) ─────────────────────────────────────────
+// Mounted once at the app root. Every 60s it heartbeats the local server and
+// pushes a snapshot of every enabled schedule (workflow + resolved step
+// prompts). While this heartbeat is fresh the server-side autopilot stands
+// down (the in-app scheduler drives with the user's own keys — BYOK lane);
+// when the tab stays closed and the heartbeat goes stale, the server's
+// headless scheduler takes over with the built-in engine.
+
+const SYNC_INTERVAL_MS = 60_000;
+
+export function AutomationBridge() {
+  const workflows = useWorkflowsStore((s) => s.workflows);
+  const agents = useAgentsStore((s) => s.agents);
+  const workflowsRef = React.useRef(workflows);
+  const agentsRef = React.useRef(agents);
+  workflowsRef.current = workflows;
+  agentsRef.current = agents;
+
+  React.useEffect(() => {
+    let stopped = false;
+
+    const buildPayload = () => {
+      const agentMap = new Map(agentsRef.current.map((a) => [a.id, a]));
+      return workflowsRef.current
+        .filter((w) => w.schedule?.enabled === true && w.steps.length > 0)
+        .map((w) => ({
+          id: w.id,
+          name: w.name,
+          task:
+            w.schedule?.task?.trim() ||
+            w.description?.trim() ||
+            `Scheduled run — carry out the "${w.name}" pipeline as designed.`,
+          intervalMs: Math.max(60_000, w.schedule?.intervalMs ?? 900_000),
+          enabled: true,
+          steps: w.steps.map((st) => {
+            const agent = agentMap.get(st.agentId);
+            return {
+              label: st.label,
+              agentName: agent?.name,
+              prompt: [agent?.instructions, st.instruction]
+                .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+                .join("\n\n"),
+            };
+          }),
+        }));
+    };
+
+    const sync = async () => {
+      try {
+        const res = await fetch("/api/automation/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workflows: buildPayload() }),
+        });
+        if (!res.ok && !stopped) console.warn("[automation-bridge] sync failed:", res.status);
+      } catch {
+        /* server briefly unreachable — the next heartbeat retries */
+      }
+    };
+
+    void sync(); // register immediately on mount
+    const t = setInterval(sync, SYNC_INTERVAL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  return null;
+}

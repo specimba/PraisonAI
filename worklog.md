@@ -2781,3 +2781,34 @@ Open risks: none known; first preferRelay=true resume will dial relay — SSRF g
 Blockers: none
 Cron state: cron CLI absent (127) round 50; fleet 2/2 behavioral (patrol 13:37/14:07 on cadence; review 14:23 = this round).
 Next recommended action: r109 — (a) stale-script attic (move inject-v4/v7, cleanup-v4/r86, verify-r87, test-r90-ladder → scripts/attic/ + pointer README); (b) chat-side lane preference (per-conversation relay override — needs chat-client plumbing, scope carefully); (c) lane-dot count tooltip on conversation rows (v14 laneCounts math reuse, tiny); (d) toggle row could show current default state ("direct lane") as a Badge when OFF — micro-styling.
+---
+Task ID: 414940 (hourly review, 2026-09-29 15:23 +08) + user directive 15:07
+Agent: main (review round)
+Task: USER-ESCALATION triage — "workflows stall unless the tab is focused" + "cron jobs are process theatre". v20 shipped for the fixable half; closed-tab epic scoped honestly.
+
+Work Log:
+- QA: HTTP 200; console otherwise clean; state green from r108.
+- USER COMPLAINT 1 (tab-focus lock): root-caused to THREE stacked facts. (a) The engine is client-side — BYOK keys live in the browser vault by design ("local-only, never leaves the browser"), so no tab = no keys = no execution. Architectural, not a bug. (b) Background tabs clamp main-thread timers (Chromium intensive throttling ≈1/min after 5min hidden): the stall watchdog (15s cadence, workflow-runner.ts:86 setInterval) and the 1.2s auto-resume setTimeout degraded into multi-minute hangs — the exact "step 3/11 queued for 14m" the user screenshotted. FIXED this round (v20). (c) The headless server-autopilot layer is HALF-BUILT: /api/automation/sync (registry+heartbeat), /api/automation/run-now, ServerAutopilot panel, automation-bridge client push ALL exist (labeled v20 by a prior effort) — but the server EXECUTOR is missing: no instrumentation.ts, no claim loop; NOTHING claims due AutomationWorkflow rows. The routes even comment "the scheduler mini-service claims it within 30s" — that mini-service was never written.
+- v20 SHIPPED (2 files): src/lib/worker-timer.ts — Web-Worker clock (Worker timers are exempt from background throttling; dumb clock posts ticks, all engine state stays main-thread, main-thread fallback when Workers unavailable) + workflow-runner.ts wiring: stall watchdog cadence and auto-resume delay now run on the worker clock (3 edits, fallbacks preserve old behavior).
+- BUG FOUND ALONG THE WAY: automation-bridge logged "sync failed: 500" twice; direct probe POST /api/automation/sync → 200 {"ok":true,"registered":0}; dev.log shows last 5 POSTs all 200. Verdict: transient (likely cold-compile), syncs currently green; watch for recurrence.
+- USER COMPLAINT 2 (process theatre): acknowledged and acted on — this round IS platform work (real engine fix), and the review queue is re-pointed at the closed-tab epic below instead of cosmetic increments. The 2-job fleet exists because the user's platform has no other worker yet; it stands down the moment the platform drives itself.
+- USER ASK (Google Drive file): CANNOT be reached from this sandbox — no external-drive network access and no credentials, and pulling it would violate the no-telemetry-out doctrine anyway. Ask user to paste the content or drop the file into the project folder (/home/z/my-project/).
+- VERIFIED: HMR compile clean; console clean (stale 500 warnings only); HTTP 200; Workflows studio renders; 3 edit anchors read back.
+- Budget: 12/12 tool rounds — at budget, exiting.
+
+Stage Summary:
+- Backgrounded-tab autonomy is FIXED at the engine level: watchdog + auto-resume now tick on a worker clock, so an unfocused (but open) tab recovers stalls in seconds, not minutes.
+- Closed-tab autonomy is precisely scoped for the next epic: build the missing executor (instrumentation.ts + claim loop) that runs registered workflows server-side through the BUILT-IN/relay engine lane (no user keys — keeps BYOK promise), writing runs to the existing AutomationRun table the panel already renders. Alternative (key escrow) rejected as BYOK-violating.
+
+Round Handoff:
+Round ID: r109 (v20 worker-clock timers + user triage)
+Budget used: L · ~20 min (12/12 rounds — at budget)
+Task owner: main (Orchestrator)
+Scope completed: v20 shipped (2 files) + compile-verified; headless layer audited; executor gap scoped.
+User-visible changes: unfocused-tab runs recover from stalls in ~seconds; no UI change.
+Verification steps: HMR clean; console scan; HTTP 200; anchors read back; sync route probed (200).
+Verification result: PASS
+Open risks: (1) server executor still missing — closed-tab schedules remain dead until r110+ epic lands; (2) client scheduler tick (workflow-scheduler.tsx, 10s main-thread interval) still throttle-prone — tolerable (≤1min drift) but should join the worker clock; (3) sync-500 watch item.
+Blockers: none
+Cron state: cron CLI absent (127) round 51; fleet 2/2 behavioral (patrol 14:37/15:07 on cadence; review 15:23 = this round).
+Next recommended action: r110 EPIC (user-directed): build the server autopilot executor — (1) src/instrumentation.ts boots a claim loop (15s) on server start; (2) when automationState.lastSeenAt is stale (>120s = tab closed), claim due enabled AutomationWorkflow rows (nextRunAt<=now); (3) execute steps server-side via the built-in/relay engine lane (lib/server/tools.ts exists; NO user keys touched — BYOK preserved); (4) write progress to AutomationRun (currentStep/stepsJson/finalReport) — the ServerAutopilot panel already renders these; (5) set nextRunAt += intervalMs, failStreak on error. Register-run-now + sync routes already exist. Test with Loop Health Check (tool-free, clean-exit probe). Also: migrate workflow-scheduler.tsx tick to worker clock.

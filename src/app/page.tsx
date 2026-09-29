@@ -10,6 +10,7 @@ import { HeartbeatEngine } from "@/components/praison/chat/chat-heartbeat";
 import { AgentsView } from "@/components/praison/agents/agents-view";
 import { WorkflowsView } from "@/components/praison/workflows/workflows-view";
 import { WorkflowScheduler } from "@/components/praison/workflows/workflow-scheduler";
+import { AutomationBridge } from "@/components/praison/workflows/automation-bridge";
 import { RadarView } from "@/components/praison/radar/radar-view";
 import { ModelTicker } from "@/components/praison/tracker/model-ticker";
 import { SettingsView } from "@/components/praison/settings/settings-view";
@@ -114,6 +115,7 @@ export default function Page() {
       <CommandPalette />
       <GlobalSearchDialog />
       <WorkflowScheduler />
+      <AutomationBridge />
       <HeartbeatEngine />
     </div>
   );
