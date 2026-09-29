@@ -3309,3 +3309,31 @@ Open risks: if THIS conversation ends, the watchdog may be reaped too (platform 
 Blockers: none
 Cron state: single job 424432 (hourly dev round).
 Next recommended action: r125 — vault UI slice (Settings "Automation vault" card: set/remove builtin key, masked display, local-first explainer) — first pure dev-agent round.
+---
+Task ID: 424432 — r124
+Agent: main (platform development — new round shape: ship ONE real improvement, ritual banned)
+Task: LOCAL AUTOMATION VAULT slice 2 — Settings UI card (r123 handoff).
+
+Work Log:
+- USER FEEDBACK ADOPTED: patrol rounds were process babysitting (heartbeat lines + forensics), not product work. New shape bans the ritual; this round ships the queued vault UI.
+- Dev server was DOWN again (root 000 — sandbox reaps agent-spawned processes between rounds; user-visible as "preview broken"). ONE setsid restart, then moved on per the no-loop rule.
+- IMPLEMENTED (2 files, 1 new):
+  1. NEW src/components/praison/settings/automation-vault-card.tsx — Automation vault card: local-first explainer (browser BYOK vs headless lane), slot status row (masked key via API, updated timestamp), password input with show/hide, Store/Update button, two-click confirm Remove, toasts, loading state. GET/POST/DELETE against /api/vault; raw key never displayed (API returns masked only).
+  2. settings-view.tsx — new "vault" section (after Model Relay, before Referrals) + sticky nav entry "Vault".
+- VERIFIED: eslint exit 0 (both files), tsc src/ = 0 (held), root 200, API contract verified live in r123 (roundtrip incl. masked-only GET).
+- QA gap (honest): agent-browser pass incomplete — page under-hydrated after the mid-session server restart (2 buttons only), so the UI store/remove flow was not clicked-through live. API + types verified; UI flow QA is round-open.
+- Pushed via git-snapshot.sh.
+
+Stage Summary:
+- The vault epic is now user-operable end-to-end: Settings → Vault → paste key → closed-tab schedules dial with the user's own quota. Epic complete (schema r123, API r123, scheduler r123, UI r124).
+
+Round Handoff:
+Round ID: r124 (vault UI — epic complete)
+Task owner: main (platform dev)
+Scope completed: vault settings card, section wiring, lint/type verification, push.
+User-visible changes: Settings has a "Vault" section — store/remove the headless-lane key with masked display and local-first explainer.
+Verification steps: eslint 0; tsc src/=0; root 200; API roundtrip (r123); UI click-through PENDING (hydration).
+Verification result: PASS (with QA follow-up noted)
+Open risks: agent-spawned dev server keeps dying between sessions (sandbox reaping) — "preview broken" recurs until a persistent supervisor (or user-launched process) runs it; UI hydration QA owed.
+Blockers: none
+Next recommended action: r125 — (a) live UI click-through of the vault card once the server has been up continuously (reload → Settings → Vault → store/remove); (b) workflow-card provider health; (c) consider a watchdog that documents (not fights) server death: root curl status surfaced IN-APP.
