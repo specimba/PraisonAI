@@ -258,6 +258,14 @@ const ERROR_PATTERNS: { kind: RunErrorKind; re: RegExp }[] = [
 /** Failure kinds the runner heals by itself (one automatic step retry). */
 const SELF_HEAL_KINDS: RunErrorKind[] = ["network", "timeout", "rate-limit"];
 
+/**
+ * r126: how long a mid-stream-dropped primary stays demoted for the REST of
+ * the run. Matches the providers' own 5-minute telemetry windows (Vyce's
+ * status page reports "Avg Latency (5m)" — a bad window typically outlives a
+ * single step, so per-step demotion re-learned the same sickness 11 times).
+ */
+const PRIMARY_SICK_MS = 5 * 60_000;
+
 /** Classify an engine error message → kind + copy used by the recovery card. */
 export function classifyRunError(message: string): {
   kind: RunErrorKind;
@@ -662,6 +670,12 @@ export async function executeWorkflowRun(
     finish("error", `Step "${step.label}" failed`, info);
   };
 
+  // r126 run-scoped sick memory: a mid-stream drop on the primary marks it
+  // sick for the WHOLE RUN (5m window). Later steps start demoted — they skip
+  // re-dialing the dead provider first instead of replaying the same failure
+  // once per step (the user's 11-step pipeline re-learned one outage 11×).
+  let primarySickUntil = 0;
+
   /**
    * Stream one agent call for a run step; returns the final content + duration.
    * Self-healing (r19): a transient engine failure (network drop / timeout —
@@ -707,7 +721,7 @@ export async function executeWorkflowRun(
     // lead with the built-in engine and park the sick primary at the BACK of
     // the hop chain (its own key rides along, so it stays reachable). BYOK
     // intact — the auto lane needs no key and touches none of the vault.
-    let demotePrimary = false;
+    let demotePrimary = Date.now() < primarySickUntil;
 
     for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt++) {
       // Rebuild the relay wire PER ATTEMPT (r25): attempt 1's failures were
@@ -718,7 +732,10 @@ export async function executeWorkflowRun(
       // v22: when the PREVIOUS attempt died mid-stream on the primary, stop
       // leading with it — dial the built-in engine instead.
       let dialLlm = llm;
-      if (attempt > 1 && demotePrimary && !forceServer) {
+      // r126: sick memory lets attempt 1 demote too — a step opening during
+      // another step's outage window leads with the built-in engine from the
+      // first dial (attempt > 1 alone would still re-dial the dead primary).
+      if (demotePrimary && (attempt > 1 || Date.now() < primarySickUntil) && !forceServer) {
         const auto = resolveLlm(settings.settings, "auto");
         dialLlm = {
           ...llm,
@@ -730,7 +747,7 @@ export async function executeWorkflowRun(
           label: `${llm.label} → auto (primary demoted)`,
         };
       }
-      const relayHops: RelayWireHop[] = [
+      let relayHops: RelayWireHop[] = [
         ...buildRelayWire(
           settings.settings,
           { providerId: dialLlm.providerId, model: dialLlm.model },
@@ -752,9 +769,28 @@ export async function executeWorkflowRun(
         draft = "";
         localToolCalls = [];
         relayNotes = [];
+        // r126 model substitution: on the FINAL attempt, stop dials inside
+        // the failing family — drop every hop from the primary's provider and
+        // lead with whatever healthy alternate families the relay chain
+        // offers (the user's ask: "similar, reliable model substitution").
+        // Guarded: if the chain is ONLY same-family hops, keep the original
+        // wire (a reachable same-family hop beats an empty one).
+        if (attempt === MAX_STEP_ATTEMPTS && llm.providerId !== "auto") {
+          const filtered = relayHops.filter(
+            (h) => !h.key?.startsWith(`${llm.providerId}::`)
+          );
+          if (filtered.length > 0 && filtered.length < relayHops.length) {
+            relayHops = filtered;
+            relayNotes.push(
+              `model substitution — ${llm.label} family deprioritized on the final attempt; leading with alternate lanes`
+            );
+          }
+        }
         if (dialLlm !== llm) {
           relayNotes.push(
-            `primary demoted after a mid-stream drop — built-in engine dialed first, ${llm.label} parked as last hop`
+            attempt === 1
+              ? `primary skipped — marked sick earlier in this run (${Math.max(0, Math.ceil((primarySickUntil - Date.now()) / 1000))}s left on its window)`
+              : `primary demoted after a mid-stream drop — built-in engine dialed first, ${llm.label} parked as last hop`
           );
         }
         const res = await runAgentChat(
@@ -881,6 +917,9 @@ export async function executeWorkflowRun(
         // engine instead of re-dialing the provably sick endpoint first.
         if (localToolCalls.length > 0 && SELF_HEAL_KINDS.includes(kind)) {
           demotePrimary = true;
+          // r126: promote to run scope — every later step starts demoted until
+          // the window passes (stable continuation, not per-step re-learning).
+          primarySickUntil = Date.now() + PRIMARY_SICK_MS;
         }
         if (attempt < MAX_STEP_ATTEMPTS && SELF_HEAL_KINDS.includes(kind) && !signal.aborted) {
           // v23: a 429 is congestion, not flakiness — re-dialing within seconds
@@ -901,6 +940,25 @@ export async function executeWorkflowRun(
             await new Promise((r) => setTimeout(r, cooldown));
             if (signal.aborted) {
               throw new DOMException("Aborted during rate-limit cool-down", "AbortError");
+            }
+          }
+          // r126: escalating backoff for network/timeout — the old ladder
+          // re-dialed instantly, so ALL attempts landed inside the same
+          // provider bad-window (forensics: 3 failed dials back-to-back during
+          // a Vyce latency spike; their dashboard showed the 5m window
+          // elevated the whole time). Jitter desynchronizes concurrent
+          // scheduled runs so they don't re-dial in a stampede.
+          if (kind === "network" || kind === "timeout") {
+            const wait = Math.round(
+              (attempt === 1 ? 8_000 : 25_000) * (0.85 + Math.random() * 0.3)
+            );
+            toast.info(`"${runStep.label}" lost the provider — waiting ${Math.round(wait / 1000)}s before retry ${attempt + 1}/${MAX_STEP_ATTEMPTS}…`, {
+              icon: "⏳",
+              description: "Escalating backoff rides out the provider's bad window instead of burning every attempt inside it.",
+            });
+            await new Promise((r) => setTimeout(r, wait));
+            if (signal.aborted) {
+              throw new DOMException("Aborted during network backoff", "AbortError");
             }
           }
           toast.info(`"${runStep.label}" hit a ${kind} hiccup — auto-retry ${attempt + 1}/${MAX_STEP_ATTEMPTS} on a fresh lane…`, {
