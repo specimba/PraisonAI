@@ -34,6 +34,27 @@ interface ServerRunRow {
   error: string | null;
   startedAt: string;
   finishedAt: string | null;
+  // v25: full Prisma row rides along — per-step outputs + final report feed the detail drawer.
+  stepsJson?: string | null;
+  finalReport?: string | null;
+}
+
+/** v25: one parsed entry of AutomationRun.stepsJson — [{label, output, ms, ok}]. */
+interface ServerStepDetail {
+  label?: string;
+  output?: string;
+  ms?: number;
+  ok?: boolean;
+}
+
+function parseRunSteps(raw?: string | null): ServerStepDetail[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ServerStepDetail[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 interface BoardCard {
@@ -177,9 +198,11 @@ function groupRuns(workflows: Workflow[], serverRuns: ServerRunRow[]): Record<Co
 function RunCard({
   card,
   onSelect,
+  onOpenServer,
 }: {
   card: BoardCard;
   onSelect: (workflowId: string, runId?: string) => void;
+  onOpenServer?: (row: ServerRunRow) => void;
 }) {
   const highlightId = useUiStore((s) => s.highlightWorkflowId);
   const spotlighted = highlightId === card.workflowId;
@@ -221,12 +244,13 @@ function RunCard({
   }
 
   // v24: server-lane card — cyan accent + ⇉ badge, shows DB-side progress.
+  // v25: click opens the detail drawer (steps + final report) instead of navigating.
   if (card.server) {
     const s = card.server;
     return (
       <button
         type="button"
-        onClick={() => onSelect(card.workflowId)}
+        onClick={() => (onOpenServer ? onOpenServer(s) : onSelect(card.workflowId))}
         data-wf-card={card.workflowId}
         className={cn(
           "group w-full rounded-xl border border-cyan-500/30 bg-card/80 p-3 text-left shadow-sm transition-all duration-200",
@@ -244,7 +268,7 @@ function RunCard({
           )}
           <span className="min-w-0 flex-1 truncate text-xs font-semibold">{card.workflowName}</span>
           <span
-            title="Fired headlessly by the local server while the tab was closed — built-in engine, results in the local DB"
+            title="Fired headlessly by the local server while the tab was closed — click to inspect steps & report"
             className="shrink-0 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-600 dark:text-cyan-400"
           >
             ⇉ server
@@ -352,6 +376,145 @@ function RunCard({
   );
 }
 
+// v25: detail drawer for headless server runs — the DB-side stepsJson (per-step
+// output/ms/ok) + finalReport are invisible on the board card; this surfaces them.
+function ServerRunDrawer({
+  row,
+  onClose,
+  onOpenWorkflow,
+}: {
+  row: ServerRunRow;
+  onClose: () => void;
+  onOpenWorkflow: (workflowId: string) => void;
+}) {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const steps = React.useMemo(() => parseRunSteps(row.stepsJson), [row.stepsJson]);
+  const duration = row.finishedAt ? Date.parse(row.finishedAt) - Date.parse(row.startedAt) : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Server run detail: ${row.workflowName}`}
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-cyan-500/30 bg-card shadow-2xl shadow-cyan-500/10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center gap-2 border-b border-border/60 p-4">
+          {row.status === "running" ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-400" aria-hidden />
+          ) : row.status === "error" ? (
+            <X className="h-4 w-4 shrink-0 text-red-500" aria-hidden />
+          ) : (
+            <Check className="h-4 w-4 shrink-0 text-emerald-500" aria-hidden />
+          )}
+          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{row.workflowName}</h3>
+          <span className="shrink-0 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-semibold text-cyan-600 dark:text-cyan-400">
+            ⇉ server · {row.trigger === "manual" ? "manual" : "schedule"}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close server run detail"
+            className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </header>
+
+        <div className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="tabular-nums">started {fmtRel(Date.parse(row.startedAt))}</span>
+            {duration != null && duration >= 0 ? (
+              <span className="tabular-nums">· took {fmtMs(duration)}</span>
+            ) : null}
+            <span className="tabular-nums">
+              · {row.status === "running" ? `step ${row.currentStep}/${row.stepsTotal}` : `${row.stepsTotal} steps`}
+            </span>
+          </div>
+
+          {row.error ? (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-red-500">Error</p>
+              <p className="mt-1 break-words font-mono text-[10px] leading-relaxed text-red-400">{row.error}</p>
+            </div>
+          ) : null}
+
+          {steps.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-400">
+                Steps ({steps.length})
+              </p>
+              {steps.map((st, i) => (
+                <div key={i} className="rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                  <div className="flex items-center gap-1.5">
+                    {st.ok === false ? (
+                      <X className="h-3 w-3 shrink-0 text-red-400" aria-hidden />
+                    ) : (
+                      <Check className="h-3 w-3 shrink-0 text-emerald-500" aria-hidden />
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
+                      {i + 1}. {st.label || `Step ${i + 1}`}
+                    </span>
+                    {typeof st.ms === "number" && st.ms > 0 ? (
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{fmtMs(st.ms)}</span>
+                    ) : null}
+                  </div>
+                  {st.output ? (
+                    <pre className="mt-1.5 max-h-44 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-background/60 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                      {st.output}
+                    </pre>
+                  ) : (
+                    <p className="mt-1 text-[10px] italic text-muted-foreground/60">No output captured for this step.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] italic text-muted-foreground/70">
+              No step detail stored for this run yet{row.status === "running" ? " — still streaming" : ""}.
+            </p>
+          )}
+
+          {row.finalReport ? (
+            <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-cyan-600 dark:text-cyan-400">
+                Final report
+              </p>
+              <pre className="mt-1.5 max-h-60 overflow-y-auto whitespace-pre-wrap break-words font-sans text-[11px] leading-relaxed text-foreground/90">
+                {row.finalReport}
+              </pre>
+            </div>
+          ) : null}
+        </div>
+
+        <footer className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+          <p className="text-[10px] leading-snug text-muted-foreground/70">
+            Headless server lane — results land in the local DB, your keys never leave this machine.
+          </p>
+          <button
+            type="button"
+            onClick={() => onOpenWorkflow(row.workflowId)}
+            className="shrink-0 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-600 transition-colors hover:bg-cyan-500/20 dark:text-cyan-400"
+          >
+            Open pipeline →
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 export function RunKanban({
   onSelect,
 }: {
@@ -360,6 +523,8 @@ export function RunKanban({
   const workflows = useWorkflowsStore((s) => s.workflows);
   const boardOpen = useUiStore((s) => s.workflowBoardOpen);
   const serverRuns = useServerRuns(boardOpen);
+  // v25: which server-lane run's detail drawer is open (null = closed).
+  const [serverDetail, setServerDetail] = React.useState<ServerRunRow | null>(null);
   // Keep countdowns honest
   const [, tick] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => {
@@ -476,7 +641,12 @@ export function RunKanban({
             </header>
             <div className="flex flex-col gap-2">
               {cards.map((c) => (
-                <RunCard key={c.key} card={c} onSelect={onSelect} />
+                <RunCard
+                  key={c.key}
+                  card={c}
+                  onSelect={onSelect}
+                  onOpenServer={setServerDetail}
+                />
               ))}
               {cards.length === 0 ? (
                 <p className="px-1 py-3 text-[11px] leading-relaxed text-muted-foreground/70">
@@ -492,6 +662,16 @@ export function RunKanban({
       })}
       </div>
       )}
+      {serverDetail ? (
+        <ServerRunDrawer
+          row={serverDetail}
+          onClose={() => setServerDetail(null)}
+          onOpenWorkflow={(id) => {
+            setServerDetail(null);
+            onSelect(id);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
