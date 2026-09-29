@@ -2752,3 +2752,32 @@ Open risks: hang-server log written to /tmp (fine, ephemeral); probe run left a 
 Blockers: none
 Cron state: cron CLI absent (127) round 49; fleet 2/2 behavioral (patrol 12:37/13:07 on cadence; review 13:23 = this round).
 Next recommended action: r108 — (a) settings "lane preference" toggle (dedicated round, needs settings field + panel plumbing — scope carefully); (b) stale-script attic: move inject-v4/v7, cleanup-v4/r86, verify-r87, test-r90-ladder to scripts/attic/ with a README pointer (HARNESS.md already marks v4/v7 broken); (c) light styling round if arc saturated: conversation-list lane dot could gain a count tooltip ("3 relay · 2 direct in this chat") reusing v14's laneCounts math.
+---
+Task ID: 414940 (hourly review, 2026-09-29 14:23 +08)
+Agent: main (review round)
+Task: v19 — lane-preference toggle (r107's queue item (a)): "Prefer server relay for workflow runs" in Settings → Model Relay, plumbed into the recovery-card resume path.
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r107.
+- SCOUTING: model-relay.tsx already owns lane semantics (relayEnabled switch, settings+update from useSettingsStore); workflow-run-panel ALREADY imports useSettingsStore — plumbing was 2 lines, no prop drilling.
+- v19 SHIPPED (4 files): (1) types.ts — `preferRelay?: boolean` beside relayEnabled (documented, default false = zero change for existing users); (2) constants.ts — `preferRelay: false` in DEFAULT_SETTINGS; (3) model-relay.tsx — sky-accented bordered row under the card header: label + explanation ("stall watchdog and ⇄/⊙ lane chips stay unchanged") + Switch persisting via update({ preferRelay: v }); (4) workflow-run-panel.tsx — primary resume button now passes { forceServer: true } when preferRelay is on, shows a sky Server icon + tooltip "Lane preference is ON — this resume dials through the server relay first"; the explicit "Retry via relay" escape hatch stays as-is.
+- Scope guard: preference affects workflow resume/retry ONLY (v11 forceServer path). Chat lane logic untouched — chat relay-first remains a future, separately-scoped decision.
+- LIVE-VERIFIED: Settings view renders toggle (aria-label scan: TOGGLE-PRESENT / LABEL-PRESENT / NOTE-PRESENT); HMR compile clean; console zero errors; HTTP 200.
+- Budget: 9/12 tool rounds — clean exit.
+
+Stage Summary:
+- The lane story gains its first CONTROL (v19): users can now choose the default lane for workflow recovery, not just observe it. Direct remains the default; relay becomes one toggle away.
+- Eval-quoting note for future browser rounds: attribute selectors with single quotes break inside single-quoted bash evals — use getAttribute scans instead.
+
+Round Handoff:
+Round ID: r108 (v19 lane-preference toggle)
+Budget used: M · ~12 min (9/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v19 shipped (4 files) + compile + live-DOM verified.
+User-visible changes: Settings → Model Relay gains "Prefer server relay for workflow runs"; recovery-card resume honors it with sky icon + tooltip.
+Verification steps: HMR clean; console 0 errors; HTTP 200; 4 edit anchors read back; toggle present in live DOM.
+Verification result: PASS
+Open risks: none known; first preferRelay=true resume will dial relay — SSRF guard still rejects non-public targets by design (honest surface).
+Blockers: none
+Cron state: cron CLI absent (127) round 50; fleet 2/2 behavioral (patrol 13:37/14:07 on cadence; review 14:23 = this round).
+Next recommended action: r109 — (a) stale-script attic (move inject-v4/v7, cleanup-v4/r86, verify-r87, test-r90-ladder → scripts/attic/ + pointer README); (b) chat-side lane preference (per-conversation relay override — needs chat-client plumbing, scope carefully); (c) lane-dot count tooltip on conversation rows (v14 laneCounts math reuse, tiny); (d) toggle row could show current default state ("direct lane") as a Badge when OFF — micro-styling.

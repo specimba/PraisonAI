@@ -399,6 +399,8 @@ export interface Settings {
   activeProviderId?: string;
   /** Model Relay — automatic fallback rotation when the active model fails. Default true. */
   relayEnabled?: boolean;
+  /** r108/v19 lane preference — workflow resumes/retries dial through the server relay by default. Default false (direct lane). */
+  preferRelay?: boolean;
   /** Saved hop ordering (keys "providerId::model"); missing = recommended Generation-Era order. */
   relayOrder?: string[];
   /**

@@ -122,6 +122,21 @@ export function ModelRelayCard() {
           hops that failed recently are demoted automatically.
         </CardDescription>
       </CardHeader>
+      <div className="flex items-start justify-between gap-3 rounded-lg border border-sky-500/25 bg-sky-500/[0.04] p-3">
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm font-medium leading-tight">Prefer server relay for workflow runs</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Resume and retry workflow LLM calls through the relay by default instead of the
+            direct lane. The stall watchdog and the ⇄/⊙ lane chips stay unchanged.
+          </p>
+        </div>
+        <Switch
+          aria-label="Prefer server relay for workflow runs"
+          checked={settings.preferRelay === true}
+          onCheckedChange={(v) => update({ preferRelay: v })}
+          className="mt-0.5 shrink-0"
+        />
+      </div>
       <CardContent className="space-y-3">
         {/* Primary — always first, not reorderable */}
         <div className="flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/5 px-2.5 py-2">

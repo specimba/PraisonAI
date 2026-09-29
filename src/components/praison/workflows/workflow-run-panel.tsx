@@ -211,6 +211,8 @@ function RunRecoveryCard({
   const firstPending = run.steps.findIndex((s) => s.status !== "done");
   const hasOutput = run.steps.some((s) => s.output.trim().length > 0);
   const stopped = run.status === "stopped";
+  const settings = useSettingsStore((s) => s.settings);
+  const preferRelay = settings.preferRelay === true;
   // r84: live recovery math. The frozen err.stepsDone/err.stepIndex snapshot was
   // built at failure time with the resumed loop's LOCAL index (the resume tail
   // restarts at 0), so an auto-resumed run displayed "0/11 steps done" while
@@ -404,9 +406,11 @@ function RunRecoveryCard({
           type="button"
           size="sm"
           disabled={busy || firstPending === -1}
-          onClick={() => onResume(firstPending)}
+          onClick={() => onResume(firstPending, preferRelay ? { forceServer: true } : undefined)}
+          title={preferRelay ? "Lane preference is ON — this resume dials through the server relay first" : undefined}
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+          {preferRelay ? <Server className="h-3.5 w-3.5 text-sky-300" aria-hidden /> : null}
           {stopped
             ? `Resume from step ${firstPending + 1}`
             : firstPending === err?.stepIndex
