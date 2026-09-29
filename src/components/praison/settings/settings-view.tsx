@@ -5,6 +5,7 @@ import { Download, ExternalLink, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, ThemeToggle } from "@/components/praison/atoms";
 import { ThemePicker } from "@/components/praison/settings/theme-picker";
+import { AutomationVaultCard } from "@/components/praison/settings/automation-vault-card";
 import { LocalModelsPanel } from "@/components/praison/settings/local-models";
 import { ModelRelayCard } from "@/components/praison/settings/model-relay";
 import { ProviderCard } from "@/components/praison/settings/provider-card";
@@ -76,6 +77,7 @@ const SETTINGS_SECTIONS = [
   { id: "providers", label: "Providers" },
   { id: "local-models", label: "Local models" },
   { id: "relay", label: "Model Relay" },
+  { id: "vault", label: "Vault" },
   { id: "referrals", label: "Referrals" },
   { id: "behavior", label: "Behavior" },
   { id: "evolution", label: "Evolution" },
@@ -296,6 +298,9 @@ export function SettingsView() {
           </div>
           <div id="relay" className="scroll-mt-14">
             <ModelRelayCard />
+          </div>
+          <div id="vault" className="scroll-mt-14">
+            <AutomationVaultCard />
           </div>
           <div id="referrals" className="scroll-mt-14">
             <ReferralCard />
