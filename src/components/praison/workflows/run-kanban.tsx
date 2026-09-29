@@ -22,11 +22,28 @@ import { fmtIn, fmtIntervalShort, fmtMs, fmtRel } from "@/lib/helpers";
 import type { Workflow, WorkflowRun } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+/** v24: one server-lane AutomationRun row (from /api/automation/sync GET). */
+interface ServerRunRow {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  trigger: string;
+  status: string;
+  currentStep: number;
+  stepsTotal: number;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
 interface BoardCard {
   key: string;
   workflowId: string;
   workflowName: string;
   run?: WorkflowRun;
+  server?: ServerRunRow;
+  /** epoch ms of run start — uniform sort key across lanes */
+  sortAt: number;
   /** Scheduled cards represent a workflow's next firing, not a stored run. */
   scheduled?: { intervalMs: number; nextRunAt?: number; lastRunAt?: number };
 }
@@ -72,7 +89,34 @@ const COLUMNS: Column[] = [
 
 const MAX_PER_COLUMN = 10;
 
-function groupRuns(workflows: Workflow[]): Record<Column["id"], BoardCard[]> {
+// v24: poll the server lane every 60s while the board is open — headless
+// runs the tab never saw would otherwise stay invisible to the kanban.
+function useServerRuns(enabled: boolean): ServerRunRow[] {
+  const [serverRuns, setServerRuns] = React.useState<ServerRunRow[]>([]);
+  React.useEffect(() => {
+    if (!enabled) return;
+    let stopped = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/automation/sync");
+        if (!res.ok) return;
+        const json = (await res.json()) as { runs?: ServerRunRow[] };
+        if (!stopped && Array.isArray(json.runs)) setServerRuns(json.runs);
+      } catch {
+        /* server briefly unreachable — next poll retries */
+      }
+    };
+    void load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+  }, [enabled]);
+  return serverRuns;
+}
+
+function groupRuns(workflows: Workflow[], serverRuns: ServerRunRow[]): Record<Column["id"], BoardCard[]> {
   const cards: Record<Column["id"], BoardCard[]> = {
     running: [],
     attention: [],
@@ -86,6 +130,7 @@ function groupRuns(workflows: Workflow[]): Record<Column["id"], BoardCard[]> {
         workflowId: wf.id,
         workflowName: wf.name,
         run,
+        sortAt: run.startedAt ?? 0,
       };
       if (run.status === "running") cards.running.push(card);
       else if (run.status === "error" || run.status === "stopped")
@@ -97,6 +142,7 @@ function groupRuns(workflows: Workflow[]): Record<Column["id"], BoardCard[]> {
         key: `sched-${wf.id}`,
         workflowId: wf.id,
         workflowName: wf.name,
+        sortAt: wf.schedule.nextRunAt ?? 0,
         scheduled: {
           intervalMs: wf.schedule.intervalMs,
           nextRunAt: wf.schedule.nextRunAt,
@@ -105,9 +151,23 @@ function groupRuns(workflows: Workflow[]): Record<Column["id"], BoardCard[]> {
       });
     }
   }
-  cards.running.sort((a, b) => (a.run!.startedAt ?? 0) - (b.run!.startedAt ?? 0));
-  cards.attention.sort((a, b) => (b.run!.startedAt ?? 0) - (a.run!.startedAt ?? 0));
-  cards.done.sort((a, b) => (b.run!.startedAt ?? 0) - (a.run!.startedAt ?? 0));
+  // v24: merge the server lane — headless runs fired while the tab was
+  // closed (built-in engine, results in the local DB) now share the board.
+  for (const r of serverRuns) {
+    const card: BoardCard = {
+      key: `srv-${r.id}`,
+      workflowId: r.workflowId,
+      workflowName: r.workflowName,
+      server: r,
+      sortAt: Date.parse(r.startedAt) || 0,
+    };
+    if (r.status === "running") cards.running.push(card);
+    else if (r.status === "error") cards.attention.push(card);
+    else cards.done.push(card);
+  }
+  cards.running.sort((a, b) => a.sortAt - b.sortAt);
+  cards.attention.sort((a, b) => b.sortAt - a.sortAt);
+  cards.done.sort((a, b) => b.sortAt - a.sortAt);
   cards.scheduled.sort((a, b) => (a.scheduled!.nextRunAt ?? 0) - (b.scheduled!.nextRunAt ?? 0));
   cards.done = cards.done.slice(0, MAX_PER_COLUMN);
   cards.attention = cards.attention.slice(0, MAX_PER_COLUMN);
@@ -155,6 +215,50 @@ function RunCard({
           <p className="mt-1 text-[10px] text-muted-foreground/70">
             last run {fmtRel(card.scheduled.lastRunAt)}
           </p>
+        ) : null}
+      </button>
+    );
+  }
+
+  // v24: server-lane card — cyan accent + ⇉ badge, shows DB-side progress.
+  if (card.server) {
+    const s = card.server;
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect(card.workflowId)}
+        data-wf-card={card.workflowId}
+        className={cn(
+          "group w-full rounded-xl border border-cyan-500/30 bg-card/80 p-3 text-left shadow-sm transition-all duration-200",
+          "hover:-translate-y-0.5 hover:border-cyan-500/60 hover:shadow-md hover:shadow-cyan-500/10",
+          spotlighted && "ring-2 ring-violet-500/60 ring-offset-2 ring-offset-background"
+        )}
+      >
+        <div className="flex items-center gap-1.5">
+          {s.status === "running" ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-400" aria-hidden />
+          ) : s.status === "error" ? (
+            <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />
+          ) : (
+            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden />
+          )}
+          <span className="min-w-0 flex-1 truncate text-xs font-semibold">{card.workflowName}</span>
+          <span
+            title="Fired headlessly by the local server while the tab was closed — built-in engine, results in the local DB"
+            className="shrink-0 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-600 dark:text-cyan-400"
+          >
+            ⇉ server
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+          <span className="tabular-nums">{fmtRel(Date.parse(s.startedAt))}</span>
+          <span>
+            · {s.status === "running" ? `step ${s.currentStep}/${s.stepsTotal}` : `${s.stepsTotal} steps`}
+          </span>
+          <span>· {s.trigger === "manual" ? "manual" : "schedule"}</span>
+        </div>
+        {s.error ? (
+          <p className="mt-1 line-clamp-2 break-words font-mono text-[10px] text-red-400">{s.error}</p>
         ) : null}
       </button>
     );
@@ -255,6 +359,7 @@ export function RunKanban({
 }) {
   const workflows = useWorkflowsStore((s) => s.workflows);
   const boardOpen = useUiStore((s) => s.workflowBoardOpen);
+  const serverRuns = useServerRuns(boardOpen);
   // Keep countdowns honest
   const [, tick] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => {
@@ -263,7 +368,7 @@ export function RunKanban({
     return () => clearInterval(t);
   }, [boardOpen, tick]);
 
-  const columns = React.useMemo(() => groupRuns(workflows), [workflows]);
+  const columns = React.useMemo(() => groupRuns(workflows, serverRuns), [workflows, serverRuns]);
   // Pipeline filter lives in the ui store (persisted): it survives layout
   // switches (grid <-> board) and reloads instead of resetting on unmount.
   const filter = useUiStore((s) => s.boardWorkflowFilter);
