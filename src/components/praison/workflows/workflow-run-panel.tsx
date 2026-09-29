@@ -10,6 +10,7 @@ import {
   Copy,
   Download,
   GitCompareArrows,
+  Hourglass,
   KeyRound,
   LifeBuoy,
   Lightbulb,
@@ -96,7 +97,17 @@ const STEP_BORDER: Record<WorkflowRunStep["status"], string> = {
   stopped: "border-l-amber-500",
 };
 
-function StatusIndicator({ status, ms }: { status: WorkflowRunStep["status"]; ms?: number }) {
+function StatusIndicator({
+  status,
+  ms,
+  backoffUntil,
+  backoffKind,
+}: {
+  status: WorkflowRunStep["status"];
+  ms?: number;
+  backoffUntil?: number;
+  backoffKind?: "backoff" | "cooldown";
+}) {
   if (status === "pending") {
     return (
       <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-500">
@@ -106,6 +117,26 @@ function StatusIndicator({ status, ms }: { status: WorkflowRunStep["status"]; ms
     );
   }
   if (status === "running") {
+    // r128: the self-heal ladder's deliberate waits were toast-only — the
+    // step row just sat on a generic spinner, so a 25s provider backoff was
+    // indistinguishable from a hang. Countdown is live (1s tick upstream).
+    if (backoffUntil != null && backoffUntil > Date.now()) {
+      const secs = Math.max(1, Math.ceil((backoffUntil - Date.now()) / 1000));
+      const cooldown = backoffKind === "cooldown";
+      return (
+        <span
+          role="timer"
+          aria-label={`${cooldown ? "Quota cooldown" : "Provider backoff"}: ${secs} seconds remaining`}
+          title={cooldown
+            ? "Rate-limited — the self-heal ladder is cooling down before the retry. Quota windows refill; hammering them just burns attempts."
+            : "The provider dropped mid-step — the self-heal ladder is riding out the bad window (escalating backoff with jitter) before re-dialing. Completed step output is preserved."}
+          className="flex shrink-0 items-center gap-1 text-xs text-amber-500"
+        >
+          <Hourglass className="h-3.5 w-3.5 animate-pulse" aria-hidden />
+          {cooldown ? `Cooldown ${secs}s` : `Backoff ${secs}s`}
+        </span>
+      );
+    }
     return (
       <span className="flex shrink-0 items-center gap-1 text-xs text-violet-400">
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -550,6 +581,18 @@ export function WorkflowRunPanel({
     const t = setInterval(scheduleTick, 5_000);
     return () => clearInterval(t);
   }, [open, scheduleEnabled, scheduleTick]);
+
+  // r128: 1s tick while a step is mid-backoff so the "⏳ backoff Ns" chip
+  // counts down live. Only runs while a wait is actually active — zero idle
+  // cost, and the interval self-clears when the ladder dials again.
+  const anyWaiting = (viewedRun?.steps ?? []).some(
+    (s) => s.backoffUntil != null && s.backoffUntil > Date.now()
+  );
+  React.useEffect(() => {
+    if (!anyWaiting) return;
+    const t = setInterval(scheduleTick, 1_000);
+    return () => clearInterval(t);
+  }, [anyWaiting, scheduleTick]);
 
   // v23: the runner is resolve-only by design, but a throw before its main
   // try (store drift, HMR edge) would escape as an unhandled rejection — the
@@ -1112,7 +1155,12 @@ export function WorkflowRunPanel({
                           redone
                         </span>
                       ) : null}
-                      <StatusIndicator status={step.status} ms={step.ms} />
+                      <StatusIndicator
+                        status={step.status}
+                        ms={step.ms}
+                        backoffUntil={step.backoffUntil}
+                        backoffKind={step.backoffKind}
+                      />
                       {step.output ? (
                         <button
                           type="button"

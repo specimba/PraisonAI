@@ -244,6 +244,16 @@ export interface WorkflowRunStep {
    * downstream instructions) know the material is degraded.
    */
   degraded?: boolean;
+  /**
+   * r128: epoch-ms until which this step is deliberately WAITING (provider
+   * backoff / quota cooldown) instead of dialing. Set by the runner's
+   * self-heal ladder, cleared when the retry dials. Powers the live
+   * "⏳ backoff Ns" chip in the run panel — waits were toast-only and
+   * invisible in the step row before.
+   */
+  backoffUntil?: number;
+  /** Why the step is waiting — drives the chip's copy. */
+  backoffKind?: "backoff" | "cooldown";
 }
 
 /** Classified cause of a failed run — drives the recovery card's copy. */

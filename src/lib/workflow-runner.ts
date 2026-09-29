@@ -933,6 +933,12 @@ export async function executeWorkflowRun(
             // the same quota window.
             noteGateway429();
             const cooldown = attempt === 1 ? 20_000 : 45_000;
+            // r128: surface the wait in the step row (backoffUntil drives the
+            // live "⏳ Cooldown Ns" chip) — waits were toast-only before.
+            patchRunStep(runStep.stepId, {
+              backoffUntil: Date.now() + cooldown,
+              backoffKind: "cooldown",
+            });
             toast.info(`"${runStep.label}" is rate-limited — cooling down ${Math.round(cooldown / 1000)}s before retry ${attempt + 1}/${MAX_STEP_ATTEMPTS}…`, {
               icon: "⏳",
               description: "Free-tier quota windows refill — hammering them just burns attempts.",
@@ -952,6 +958,13 @@ export async function executeWorkflowRun(
             const wait = Math.round(
               (attempt === 1 ? 8_000 : 25_000) * (0.85 + Math.random() * 0.3)
             );
+            // r128: surface the wait in the step row (backoffUntil drives the
+            // live "⏳ Backoff Ns" chip) — a 25s provider wait used to be
+            // indistinguishable from a hang in the UI.
+            patchRunStep(runStep.stepId, {
+              backoffUntil: Date.now() + wait,
+              backoffKind: "backoff",
+            });
             toast.info(`"${runStep.label}" lost the provider — waiting ${Math.round(wait / 1000)}s before retry ${attempt + 1}/${MAX_STEP_ATTEMPTS}…`, {
               icon: "⏳",
               description: "Escalating backoff rides out the provider's bad window instead of burning every attempt inside it.",
@@ -967,7 +980,13 @@ export async function executeWorkflowRun(
               ? "Primary demoted after its mid-stream drop — this retry dials the built-in engine first. Tool results already gathered are re-run safely."
               : "The engine dropped the call mid-step. Tool results already gathered are re-run safely.",
           });
-          patchRunStep(runStep.stepId, { status: "running", output: "", toolCalls: [] });
+          patchRunStep(runStep.stepId, {
+            status: "running",
+            output: "",
+            toolCalls: [],
+            backoffUntil: undefined,
+            backoffKind: undefined,
+          });
           continue;
         }
         // Attach recovery metadata so failRun can attribute the failure precisely.
