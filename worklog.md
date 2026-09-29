@@ -3337,3 +3337,34 @@ Verification result: PASS (with QA follow-up noted)
 Open risks: agent-spawned dev server keeps dying between sessions (sandbox reaping) — "preview broken" recurs until a persistent supervisor (or user-launched process) runs it; UI hydration QA owed.
 Blockers: none
 Next recommended action: r125 — (a) live UI click-through of the vault card once the server has been up continuously (reload → Settings → Vault → store/remove); (b) workflow-card provider health; (c) consider a watchdog that documents (not fights) server death: root curl status surfaced IN-APP.
+---
+Task ID: 424432 — r125
+Agent: main (platform development — hourly dev round, ritual banned)
+Task: WORKFLOW-CARD PROVIDER HEALTH (r124 handoff item b) + r124 anchor-type gap fix.
+
+Work Log:
+- Server was DOWN again on round open (root 000 — recurring sandbox reaping). ONE setsid restart; it came up mid-round (root 200 by verification time). No babysitting beyond that.
+- IMPLEMENTED (2 files):
+  1. workflows-view.tsx — provider health row on every workflow card, mirroring resolveLlm() 1:1 so the chip can never drift from what a run will actually do:
+     • fallbackNote present → amber "No key — Auto fallback" button → Settings → Providers (the silent fallback r0 design accepted is now VISIBLE).
+     • auto → muted violet "Built-in" chip (zero-config path).
+     • custom-with-key → emerald chip with provider label + key-freshness in tooltip (validatedAt via fmtRel).
+     • NEW unassigned-step chip: amber "N unassigned" → opens editor; copy is honest (verified workflow-runner.ts:679 — missing agent THROWS "Agent not found", runs fail, they do not skip).
+     • NEW headless-lane hint: scheduled cards show amber "headless: shared key" when GET /api/vault reports no builtin slot (one masked GET at view level, only when schedules exist) → Settings → Vault. Closes the loop between the r123/124 vault epic and the workflows surface.
+  2. stores.ts — settingsAnchor type extended with "vault" (r124 added the #vault section + nav but never extended the anchor union; deep-link was impossible). Fixed in BOTH the state field and the setter signature.
+- VERIFIED: tsc src/ = 0 errors; eslint touched files clean; root 200; GET /api/vault live-verified (returns {"vault":[]} → hint will render for scheduled cards — correct current state).
+- QA gap (honest): agent-browser is environmentally broken this session (curl 200 while headless Chrome gets ERR_CONNECTION_REFUSED on both localhost and 127.0.0.1 — same failure class r124 hit). UI click-through still owed; API + types + runner copy all verified at source level.
+
+Stage Summary:
+- Every workflow card now answers "can this actually run, and on whose quota?" at a glance — the three silent failure modes (no-key fallback, missing-agent step, shared headless quota) are surfaced with direct fix-links instead of being discovered mid-run.
+
+Round Handoff:
+Round ID: r126
+Task owner: main (platform dev)
+Scope completed: provider health chips (3 states), unassigned-step warning, vault deep-link anchor fix, push.
+User-visible changes: Workflows cards show a provider readiness chip + warnings; amber chips deep-link to the exact Settings section.
+Verification steps: tsc 0; eslint 0; root 200; /api/vault live; runner throw-site confirmed for honest copy.
+Verification result: PASS (browser click-through owed — tool env broken, not the app)
+Open risks: agent-browser env broken across two sessions — investigate or switch QA tooling; dev server still reaped between sessions (platform constraint); browser hydration QA from r124 also still owed.
+Blockers: none
+Next recommended action: r126 — (a) fix/replace agent-browser QA path (try node playwright directly) and do the owed click-through of vault card + new chips; (b) else rotate surface: error-handling polish in workflow-run-panel or docs refresh.
