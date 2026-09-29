@@ -3082,3 +3082,35 @@ Open risks: failStreak now inflates from transient errors (cosmetic — drives b
 Blockers: none
 Cron state: cron CLI absent (127); fleet 2/2 behavioral (forensics-verified 12:23Z, both jobs enabled kind=agentTurn).
 Next recommended action: r117 — (a) Runs board ⇉ server-run integration (open since r110, still urgent — history accumulates only in the small panel list, take 25); (b) dev-server watchdog (curl :3000 every 5min, log ops/watchdog.log, let platform supervisor respawn); (c) LOCAL AUTOMATION VAULT epic; (d) watch first natural 429 for the new amber chip path end-to-end; (e) decide origin/NEXUS_WebGUI_HARNESS fate.
+---
+Task ID: DIRECT (user message, 2026-09-29 ~20:37 +08) — r117
+Agent: main
+Task: User: "the system automation collapsing itself and making exhaustion 429 burst I guess, check that and optimize them smartfully." Diagnosis + fix of the automation self-collapse and 429 burst exhaustion.
+
+Work Log:
+- DIAGNOSIS (3 independent vectors, all confirmed with evidence):
+  1. REGISTRY COLLAPSE (the real "collapse"): the QA agent-browser instance (open since Sep 28) runs its OWN store — no Continuous Research/RSIinFIELD, samples' schedules disabled → its bridge pushed an EMPTY registry every 60s → the sync route's orphan guard read that as "user deleted everything" → DISARMED all 4 server-side rows every minute, in a silent tug-of-war with the user's tab. Headless backup lane was dead around the clock. (DB proof: 4 rows enabled=false, Morning Briefing streak=0 yet disabled — not error-driven.)
+  2. 429 BURST (the exhaustion): the in-tab client scheduler fired ALL due pipelines on the SAME second — Deep (9 steps) + RSIinFIELD (5 steps) had permanently aligned 1h schedules (no jitter → once aligned, forever aligned) — multi-step × 3-attempt storms hit the shared free gateway simultaneously.
+  3. No shared-fate throttling: only the failing workflow backed off; sibling pipelines kept dialing into the same congested quota window.
+- FIX (5 files, commit 92d2324df, pushed 3572a856e→92d2324df):
+  1. NEW src/lib/gateway-cadence.ts — noteGateway429() / gatewayQuietUntil(): a 429 anywhere quiets ALL scheduled STARTS app-wide for 90s (shared fate).
+  2. workflow-runner.ts — calls noteGateway429() at the v23 rate-limit branch.
+  3. workflow-scheduler.tsx — v24 politeness governor: (a) START SPACING 75s min between scheduled run starts (loser re-armed just past the gate, never lost); (b) ±10% JITTER on re-armed intervals (alignment can never persist); (c) cadence gate defers starts while the 429 quiet window is open.
+  4. api/automation/sync/route.ts — orphan guard now gated on workflows.length > 0: an empty push = heartbeat only, NEVER a destructive prune (a client with zero enabled schedules is not authoritative).
+  5. DB re-arm: all 4 rows enabled=true, failStreak=0, staggered nextRunAt (+25m Novelty, +50m Continuous, +70m RSI, +100m Morning) so the server lane never herds either.
+- VERIFIED: empty-POST regression test → all 4 rows stay enabled (collapse vector dead); GET shows 4 EN rows staggered 13:19/13:44/14:04/14:34Z; lint exit 0; fresh reload renders + console clean; root 200. Note: truncated ids caused two silent P2025 SKIPs before the name-matched re-arm — ids are wf_b2f0beed3389 / wf-novelty-lab / wf_c4f577b8fb7b / wf-morning-briefing.
+
+Stage Summary:
+- The automation can no longer collapse itself: no second client can disarm the registry, no two pipelines can start together, and a 429 storm anywhere pauses starts everywhere for 90s. The user's 4 schedules are armed on BOTH lanes (tab BYOK + server headless) with staggered cadence.
+
+Round Handoff:
+Round ID: r117 (automation collapse + 429 burst fix — v24 politeness governor)
+Task owner: main (Orchestrator)
+Scope completed: 3-vector diagnosis, gateway-cadence module, scheduler governor, route orphan-guard fix, registry re-arm, regression test, push.
+User-visible changes: schedules no longer pile-start; card "next in" times get ±10% jitter; registry stays armed regardless of which tabs are open; 429s pause all scheduled starts 90s.
+Verification steps: empty-POST→GET regression; lint; browser snapshot+console; curl root.
+Verification result: PASS
+Open risks: Evolution ledger still "not scored" for all workflows (scoring pipeline not running — next candidate); server-lane first natural fire under the new stagger unwatched; START_SPACING_MS=75s is a heuristic — watch one busy hour and tune.
+Blockers: none
+Cron state: fleet 2/2 behavioral (12:37Z patrol clean).
+Next recommended action: r118 — (a) Evolution ledger novelty scoring actually running (all workflows show "not scored"); (b) Runs board ⇉ server AutomationRun history + ⇉ lane badge (open since r110); (c) watch the first server-lane fire under stagger; (d) LOCAL AUTOMATION VAULT epic; (e) workflow-card provider health.
