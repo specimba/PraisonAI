@@ -3139,3 +3139,28 @@ Open risks: rounds overrun this session (~19 tool calls — diagnosis went deep;
 Blockers: none
 Cron state: fleet 2/2 behavioral (13:07Z patrol clean).
 Next recommended action: r119 — (a) APPLY the one-edit novelty fix + verify (5 scored) + push; (b) Runs board ⇉ server-run history (r110 item, still open); (c) server-lane stagger watch.
+---
+Task ID: 414940 — r119
+Agent: main (hourly review)
+Task: Apply the r118-queued one-edit novelty fix, verify end-to-end, push.
+
+Work Log:
+- Fleet 2/2 (forensics; note: `grep -c` on the single-line JSON undercounts — use `grep -o | wc -l` for fleet checks). Health 200.
+- FIX (src/lib/workflow-runner.ts finish(), commit 97370e196): novelty now reads THIS run's steps from the STORE row (authoritative — outputs land there via patchRunStep), falling back to the local steps only if the store row has no non-empty output. The local-closure read was returning empty text → scoreNovelty null → every real run unscored.
+- VERIFIED LIVE (QA browser, full E2E): reloaded → ran Novelty Lab via dialog → fresh run finished `done nov=100` (100% is honest: seeded priors carry no step text, so nothing matches — real runs self-heal the prior pool) → ledger advanced "4 scored · avg 41%" → "5 scored · avg 53%". The r118 repro run correctly remains nov=null (predates the fix).
+- Pushed fork/main 92d2324df→97370e196.
+
+Stage Summary:
+- The Evolution Layer finally scores real runs: every future done run gets a novelty % vs its workflow's recent output; stall detection (<threshold) and the spawn-proposal engine now receive live data.
+
+Round Handoff:
+Round ID: r119 (novelty scoring fix — landed + verified)
+Task owner: main (Orchestrator)
+Scope completed: one-edit fix, E2E verification, push.
+User-visible changes: Evolution ledger rows light up with per-run novelty trails on every new done run; "not scored" only for pre-fix/empty runs.
+Verification steps: manual run → store eval (nov=100) → ledger stats (5 scored/avg 53%).
+Verification result: PASS
+Open risks: first scored runs vs empty seeded priors show inflated 100% — expected; scheduled runs will normalize the pool. Budget held this round (11 rounds) after r118's overrun.
+Blockers: none
+Cron state: fleet 2/2.
+Next recommended action: r120 — (a) Runs board ⇉ server AutomationRun history + ⇉ lane badge (open since r110 — the last big observability gap); (b) LOCAL AUTOMATION VAULT epic; (c) workflow-card provider health; (d) watch first server-lane fire under v24 stagger.
