@@ -3426,3 +3426,33 @@ Verification result: PASS (field test = next real outage)
 Open risks: multi-agent sessions on one worktree can interleave reads/writes — future rounds should re-read files immediately before editing (this round's stale-read cost 2 rounds); agent-browser QA still owed across 3 sessions of features.
 Blockers: none
 Next recommended action: r129 — (a) agent-browser repair OR node-side playwright one-off for the owed click-through suite (vault card, provider chips, backoff chip); (b) alternative: rotate to a non-contested surface (workflow-run-panel call-log grouping of substitution notes).
+---
+Task ID: 424432 — r129
+Agent: main (platform development — hourly dev round)
+Task: r128 handoff (a) — repair browser QA; run the owed click-through suite (vault card, provider chips, boot).
+
+Work Log:
+- ROOT-CAUSED the agent-browser breakage class: its Chrome is network-isolated (ERR_NAME_NOT_RESOLVED even for 127.0.0.1; no proxy env) — a tool sandbox, not an app bug. curl/node-fetch always reached the server fine.
+- REPAIR: drove the locally-installed playwright headless shell (chromium_headless_shell-1200, HeadlessChrome/143) DIRECTLY over raw CDP from node v24's native WebSocket — no npm installs. Two launch/navigation gotchas fixed en route: (1) binary path is chrome-headless-shell-linux64/ (not chrome-linux/); (2) Chrome 143 ignores /json/new?url= — must Page.navigate over the socket. Driver: scripts/cdp-qa.mjs (reusable: node scripts/cdp-qa.mjs [baseUrl], screenshots to ops/qa/).
+- CLICK-THROUGH SUITE — 5/5 PASS (first live UI verification in 4 sessions):
+  • A1 app boots and renders (PraisonAI shell) ✅
+  • A2 Workflows view: 5 cards render ✅
+  • A2b r125 provider-health chip present on cards — live "Vyce AI" state ✅
+  • A3 Settings #vault section renders + sticky-nav Vault tab ✅
+  • A3b vault card complete: heading + password input + Store affordance + MASKED-ONLY (no raw sk- key anywhere in DOM) ✅
+- Screenshots: ops/qa/A2-workflows.png, ops/qa/A3-vault.png (visually verified: full app render, Vault tab in nav).
+- Debt retired: r124 vault-card click-through, r125 provider-chip render, r128 boot — all closed.
+
+Stage Summary:
+- QA unblocked permanently: any future round can run `node scripts/cdp-qa.mjs` after one setsid launch line. The suite asserts real user-visible behavior, not just compile health.
+
+Round Handoff:
+Round ID: r130
+Task owner: main (platform dev)
+Scope completed: CDP QA driver + 5/5 click-through suite + screenshots; push.
+User-visible changes: none (verification round) — but future features regain a working QA loop.
+Verification steps: 5/5 DOM assertions + 2 screenshots reviewed; root 200.
+Verification result: PASS
+Open risks: the headless shell is a setsid process — dies between sessions like the dev server; relaunch line documented in scripts/cdp-qa.mjs header. Suite asserts fresh-profile state only (no seeded user data) — deeper flows (run start, backoff chip) need a seeded profile or a live outage.
+Blockers: none
+Next recommended action: r130 — extend cdp-qa.mjs with a seeded-flow test: create a throwaway agent+workflow via DOM (or inject localStorage before load) and assert the full card chip set incl. "headless: shared key"; alternatively rotate to a product slice (call-log grouping of substitution notes, or run-kanban polish).
