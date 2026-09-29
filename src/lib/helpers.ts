@@ -480,9 +480,16 @@ export function runDiagnostics(
     run.callLog.forEach((c, i) => {
       const stepRef = c.stepLabel ? `step "${c.stepLabel}"` : "step";
       lines.push(
-        `- #${i + 1} ${stepRef} · ${c.engine}${c.model ? ` · ${c.model}` : ""} · ${fmtMs(c.ms)} · ${c.ok ? "✓" : `✗ ${c.error ?? "failed"}`}${c.attempt && c.attempt > 1 ? ` (attempt ${c.attempt})` : ""}`
+        `- #${i + 1} ${stepRef} · ${c.engine}${c.model ? ` · ${c.model}` : ""} · ${fmtMs(c.ms)} · ${c.ok ? "✓" : `✗ ${c.error ?? "failed"}`}${c.attempt && c.attempt > 1 ? ` (attempt ${c.attempt})` : ""}${c.note ? ` · ${c.note}` : ""}`
       );
     });
+    const relayN = run.callLog.filter((c) => c.note?.startsWith("server relay")).length;
+    const directN = run.callLog.filter((c) => c.note?.startsWith("browser-direct")).length;
+    if (relayN + directN > 0) {
+      lines.push(
+        `lanes    : ⇄ ${relayN} server-relay · ⊙ ${directN} browser-direct · unnoted ${run.callLog.length - relayN - directN}`
+      );
+    }
   }
   if (run.resumeCount) lines.push(`resumes  : ${run.resumeCount}`);
   lines.push("", "[steps]");

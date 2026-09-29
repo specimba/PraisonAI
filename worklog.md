@@ -2693,3 +2693,33 @@ Open risks: none; dots await first stamped replies (piggyback visual later).
 Blockers: none
 Cron state: cron CLI absent (127) round 47; fleet 2/2 behavioral (patrol 10:37/11:07 on cadence; review 11:23 = this round).
 Next recommended action: r106 — (a) visual capture round now HARNESS.md-assisted: v11 button + v11b chips + v13 ratio + v14 chip + v15 card + v17 dots on a real failed run; (b) settings "lane preference" toggle (default direct, per-conversation relay override) — needs settings field + runner/panel plumbing, scope carefully; (c) callLog retention cap in workflow-runner (prevent unbounded localStorage growth) — small robustness fix.
+---
+Task ID: 414940 (hourly review, 2026-09-29 12:23 +08)
+Agent: main (review round)
+Task: v18 — runDiagnostics lane parity (check-first pivot; r105's queue item (c) was already done).
+
+Work Log:
+- QA: HTTP 200; console clean; state green from r105 (v17 dots + HARNESS.md intact).
+- CHECK-FIRST FINDING: queue item (c) "callLog retention cap" ALREADY EXISTS — workflow-runner.ts:457 slices to the last 60 entries. Candidate retired without code churn (speculative backlog items must be existence-checked first).
+- PIVOT: runDiagnostics (clipboard block from the recovery card) listed LLM calls WITHOUT lane notes — the one transport surface still lane-blind after v16 covered exports.
+- v18 SHIPPED (1 file, helpers.ts, 1 edit): (1) per-call diagnostic lines now append the full v11b note (lane + retry chain) — diagnostics favor precision by design; (2) new "lanes" summary line after the call list: "lanes    : ⇄ N server-relay · ⊙ M browser-direct · unnoted K", counted via exact note prefixes ("server relay" / "browser-direct" strings verified against workflow-runner.ts:731/737), rendered only when at least one lane-noted call exists.
+- Zero behavior changes: clipboard content only; same copy handler.
+- VERIFIED: live HMR compile clean; console scan zero errors/warnings; HTTP 200 after edit.
+- Budget: 8/12 tool rounds — clean exit.
+
+Stage Summary:
+- Every transport surface is now lane-aware: receipts (v12/v12b), run chip (v13), chat chip (v14), card polish (v15), exports (v16), sidebar dots (v17), and clipboard diagnostics (v18). A bug report pasted from "Copy diagnostics" now answers both what failed AND which lane served each call.
+- Note-prefix contract documented: "server relay…" = relay lane, "browser-direct…" = direct lane, anything else = retry chains / System-One gate notes (workflow-runner.ts:731-1014).
+
+Round Handoff:
+Round ID: r106 (v18 diagnostics lane parity)
+Budget used: S · ~9 min (8/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: v18 shipped (1 edit) + compile-verified; queue item (c) existence-checked and retired.
+User-visible changes: Copy diagnostics output now includes per-call lane notes + a ⇄/⊙ lanes summary line.
+Verification steps: HMR compile clean; console scan (0 errors); HTTP 200; MultiEdit diff read back (1/1 anchor).
+Verification result: PASS
+Open risks: none.
+Blockers: none
+Cron state: cron CLI absent (127) round 48; fleet 2/2 behavioral (patrol 11:37/12:07 on cadence; review 12:23 = this round).
+Next recommended action: r107 — (a) HARNESS.md-assisted visual capture round: v11 button + v11b chips + v13 ratio + v14 chip + v15 card + v17 dots + v18 diagnostics on a real failed run (hang-server + inject-v8; doctrine in scripts/HARNESS.md); (b) settings "lane preference" toggle (default direct, per-conversation relay override) — needs settings field + runner/panel plumbing, scope carefully in a dedicated round; (c) retire/refresh stale scripts (inject-v4/v7, cleanup-v4, verify-r87, test-r90-ladder) — mark HARNESS.md-broken ones or move to scripts/attic/ to reduce future confusion.
