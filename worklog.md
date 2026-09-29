@@ -2723,3 +2723,32 @@ Open risks: none.
 Blockers: none
 Cron state: cron CLI absent (127) round 48; fleet 2/2 behavioral (patrol 11:37/12:07 on cadence; review 12:23 = this round).
 Next recommended action: r107 — (a) HARNESS.md-assisted visual capture round: v11 button + v11b chips + v13 ratio + v14 chip + v15 card + v17 dots + v18 diagnostics on a real failed run (hang-server + inject-v8; doctrine in scripts/HARNESS.md); (b) settings "lane preference" toggle (default direct, per-conversation relay override) — needs settings field + runner/panel plumbing, scope carefully in a dedicated round; (c) retire/refresh stale scripts (inject-v4/v7, cleanup-v4, verify-r87, test-r90-ladder) — mark HARNESS.md-broken ones or move to scripts/attic/ to reduce future confusion.
+---
+Task ID: 414940 (hourly review, 2026-09-29 13:23 +08)
+Agent: main (review round)
+Task: r107 — HARNESS.md-assisted visual capture round (queue item (a), queued since r101): full E2E stall→failover→SSRF arc on a real failed run.
+
+Work Log:
+- QA baseline: HTTP 200; console clean; state green from r106.
+- E2E ARC EXECUTED per scripts/HARNESS.md (first run of the consolidated doctrine — it held): (1) hang-server up on 4319 (bun pid, LISTEN verified; curl 000 = hang-by-design); (2) inject-v8 → preReal showed real settings (groq base URL, relay=true) backed up to praison-bak-*; agentsTouched=5; (3) route recipe: first Workflows-click missed the card (r95 note confirmed live) → reload → re-click → "Stall Probe v4" h3 present; (4) card Run → dialog fill → RUN-STARTED; (5) ~26s later: V15-CARD-PRESENT ("Run failed — pick a recovery option"), V11-RETRY-BTN-PRESENT, v13 chip "LLM calls · 1 recorded · 1 failed" with EMPTY lane ratio (honest-empty live-confirmed: failed direct call carries no note), ERR-BOX + v15 COPY-ERR-BTN both present; (6) clicked Retry via relay → 6s → SSRF copy captured verbatim: "Base URL rejected by the SSRF guard (protocol http: not allowed). Server-relayed calls must target a public https endpoint — use browser-dir…" and call count went 1→2 (relay dial recorded) — r96 terminal surface reproduced exactly; (7) screenshot evidence: download/r107-relay-leg.png (first attempt failed: download/ dir absent → mkdir, second shot saved).
+- ATOMIC RESTORE: bak→settings/agents/workflows restored, reload, VERIFIED (baseUrl groq, relay=true) → THEN bak keys deleted → baksAfter=[] (zero residue).
+- TEARDOWN: hang-server killed; app HTTP 200; console clean after reload.
+- Budget: 11/12 tool rounds — clean exit.
+
+Stage Summary:
+- The visual-capture queue item (open since r101) is CLOSED: the entire v11→v18 ensemble verified live in one arc — watchdog abort, v15 card + ping + error box + copy button, v11 sky relay button, v13 honest-empty lane chip, relay dial 1→2, SSRF boundary copy, zero-residue restore.
+- HARNESS.md route note validated and slightly extended: "first Workflows click may miss the card; reload once" is now live-proven (will fold into doc if a later round touches it).
+- Queue item (a) done; (b) lane-preference toggle and (c) stale-script attic remain open.
+
+Round Handoff:
+Round ID: r107 (visual capture round — E2E arc)
+Budget used: L · ~18 min (11/12 rounds)
+Task owner: main (Orchestrator)
+Scope completed: full E2E arc + evidence PNG + atomic restore; no source changes this round.
+User-visible changes: none (verification round); evidence at download/r107-relay-leg.png.
+Verification steps: HARNESS.md sequence followed; structured eval evidence at each stage; restore verified before bak deletion; teardown clean.
+Verification result: PASS
+Open risks: hang-server log written to /tmp (fine, ephemeral); probe run left a failed run record in the probe workflow's history (harmless, test-scope artifact).
+Blockers: none
+Cron state: cron CLI absent (127) round 49; fleet 2/2 behavioral (patrol 12:37/13:07 on cadence; review 13:23 = this round).
+Next recommended action: r108 — (a) settings "lane preference" toggle (dedicated round, needs settings field + panel plumbing — scope carefully); (b) stale-script attic: move inject-v4/v7, cleanup-v4/r86, verify-r87, test-r90-ladder to scripts/attic/ with a README pointer (HARNESS.md already marks v4/v7 broken); (c) light styling round if arc saturated: conversation-list lane dot could gain a count tooltip ("3 relay · 2 direct in this chat") reusing v14's laneCounts math.
