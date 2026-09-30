@@ -44,7 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { conversationToMarkdown, downloadText, fmtRel, slugify } from "@/lib/helpers";
+import { conversationToMarkdown, downloadText, fmtListTime, slugify } from "@/lib/helpers";
 import { useAgentsStore, useConversationsStore, useUiStore } from "@/lib/stores";
 import type { Conversation } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -336,7 +336,7 @@ export function ConversationList({ onNavigate, className }: ConversationListProp
                                 aria-label="Pinned"
                               />
                             )}
-                            <span>{fmtRel(c.updatedAt)}</span>
+                            <span title={new Date(c.updatedAt).toLocaleString()}>{fmtListTime(c.updatedAt)}</span>
                             <span aria-hidden>·</span>
                             <span className="tabular-nums">
                               {c.messages.length} {c.messages.length === 1 ? "msg" : "msgs"}

@@ -51,6 +51,16 @@ export function fmtChatTimeFull(ts: number): string {
   return new Date(ts).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
+/**
+ * Sidebar/list timestamp (r147): relative time reads well while fresh, but
+ * "3d ago" under a "Previous 7 days" bucket header is vague — older chats get
+ * a real short date ("Sep 21") instead. Pair with dateBucket headers.
+ */
+export function fmtListTime(ts: number): string {
+  if (Date.now() - ts < 86_400_000) return fmtRel(ts);
+  return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 export function fmtRel(ts: number): string {
   const diff = Date.now() - ts;
   if (diff < 60_000) return "just now";

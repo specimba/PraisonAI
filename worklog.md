@@ -3888,3 +3888,53 @@ Verification result: PASS (L3 live + unit branches; L1/L2 degraded honestly — 
 Open risks: the relay lane flakiness this hour ((interrupted) reply) may be worth a look IF the user reports it — do NOT touch timeout constants without live evidence; chrome headless still dies in ~1-2 min.
 Blockers: none
 Next recommended action: r147 — rotate: (a) conversation-list relative timestamps (sidebar rows show "just now" — could use the same fmtChatTime treatment for older chats), or (b) chat-search fmtTime consistency, or (c) live-paste root-cause FIRST if the user reports anything. Keep rotating.
+Task ID: 424432 — r144
+Agent: main (platform development — hourly dev round)
+Task: r143 handoff — rotate: (a) Chat composer/message-item polish, (b) 2-min scheduler-bridge visibility audit, (c) user-reported live paste (none arrived).
+
+Work Log:
+- Audit (b) FIRST (cheap): automation-bridge.tsx 60s POST is a LIVENESS CLAIM ("tab alive → server lane stands down"), not a data poll — deliberately NOT visibility-gated (suppressing it would hand schedules to the shared 429-prone gateway on a mere window switch). Chromium's background timer throttling already implements the designed handoff. Verdict: keep hidden heartbeats.
+- Chat surface audit (a) with the r139/r140 lens: composer aria coverage dense (role=status queued chip, labelled icon buttons, disabled states, slash-menu keyboard nav, IME-safe Enter), message-item has toolbar role + labelled actions, auto-paused chip is a real <button>, kanban/conversation-list real buttons. One candidate examined and DISCARDED: Escape in the slash menu clears the composer — but slashQuery is non-null only for a spaceless "/query", so Escape clears just the partial command (defensible). No manufactured polish.
+- REAL gap found in the bridge instead: on RETURN to a visible tab, the next fresh heartbeat could be up to 60s away — the still-stale registration window in which the headless lane can claim a due run the tab lane is about to fire (lane-handback lag).
+- SHIPPED (automation-bridge.tsx): visibilitychange → visible now triggers an immediate sync(). Hidden heartbeats KEPT (documented in-code: liveness ≠ polling; the mirror-image of r141, with the reasoning written down so nobody "unifies" them wrongly later). Cleanup removes the listener.
+- QA (scripts/cdp-qa-bridge-resync.mjs, new J-series, 3 checks — fetch-counter on POSTs only): J1 ≥1 heartbeat POST while visible; J2 ≥1 heartbeat POST STILL while forced-hidden (liveness survives — asserts the r141 fix was NOT over-applied here); J3 resync POST within 3s of flipping visible. 3/3 PASS — J3 landed in 0.3s.
+- VERIFIED: tsc src/ = 0; eslint clean; screenshot ops/qa/J-bridge-resync.png reviewed (app renders clean, "bridge sync just now" reflects the J3 resync POST; Morning Briefing shows "next fire due" — the r142 fix gets its real-world test on that fire).
+
+Stage Summary:
+- Lane-handback is now instant on tab return: the headless lane stands down the moment the user looks at the app, instead of up to 60s later. The two visibility behaviors in the app are now deliberately OPPOSITE and both documented in-code (poll: pause hidden + refetch on return; heartbeat: keep hidden + resync on return).
+
+Round Handoff:
+Round ID: r145
+Task owner: main (platform dev)
+Scope completed: bridge resync-on-return + J-series QA (3/3) + audits of composer/message-item/auto-paused chip (all clean, recorded); snapshot pushed.
+User-visible changes: returning to the app re-registers schedules instantly — the autopilot badge flips back to "browser driving" immediately instead of lagging up to a minute; eliminates the narrow double-claim window on a due schedule right after return.
+Verification steps: 3/3 fetch-counter assertions + screenshot review; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: Morning Briefing showed "next fire due" during QA — the r142 TTFB fix faces its first real scheduled fire imminently; check the run history next round. The forced-hidden QA uses descriptor overrides (session-scoped); real-Chromium throttling of the hidden heartbeat (≥1/min) still satisfies the liveness cadence by design.
+Blockers: none
+Next recommended action: r145 — (a) FIRST check reality: did Morning Briefing's due fire succeed post-r142 (run history / LLM-call log), then rotate to (b) Chat composer polish only if a concrete gap surfaces, or (c) perf measurement of the model-tracker ticker (it re-renders a marquee continuously — measure before touching). Do not re-touch the bridge/poll semantics.
+---
+Task ID: 424432 — r147
+Agent: main (platform development — hourly dev round)
+Task: recovery round 2 (sandbox divergence) + sidebar timestamp polish.
+
+Work Log:
+- SANDBOX DIVERGENCE #2 (same class as r145's): local checkout had regressed AGAIN — parallel session's sandbox builds on the STALE 97bd3ed lineage and committed 8d18468a8 (worklog-only, their "r144" section documenting the bridge-resync work that was already in 97bd3ed). My r145/r146 commits were absent locally but SAFE on fork/main (6d29df5 tip; no force-push). Recovery: saved their docs WIP diff to /tmp (65 files, 0 content — exec-bit noise again), reset --hard fork/main, re-set core.fileMode false (rollback reverts .git/config), APPENDED their r144 worklog section verbatim (closes the ledger gap my r145 noted), one dev-server restart (200).
+- LESSON (twice-proven): every round must start by diffing local HEAD against fork/main — the parallel sandbox never pulls; recovery is cheap (fast-forward + re-append) as long as fork/main is the source of truth.
+- Their handoff (a) closed honestly: /api/automation/sync shows serverDriving=true with EMPTY registry + ZERO runs + no vault key — Morning Briefing's post-r142 scheduled fire is not server-observable (user-tab/headless-profile driven, same doctrine as r143). Not chased further.
+- SHIPPED (src/lib/helpers.ts + src/components/praison/chat/conversation-list.tsx): fmtListTime — sidebar conversation rows keep relative time while fresh (<24h: "just now"/"5h ago") and switch to a real short date when older ("Sep 27" instead of "3d ago" under a "Previous 7 days" bucket header); each row time gained an absolute hover title (pre-r147 span had none). Consistent with r146's message-header treatment.
+- VERIFIED: tsc src/ = 0; eslint clean; fmtListTime branches unit-checked via bun: 30s="just now", 5h="5h ago", 23h="23h ago", 25h="Sep 29", 3d="Sep 27", 40d="Aug 21"; M-series CDP QA (scripts/cdp-qa-sidebar-timestamps.mjs) 2/2 live — row time renders with the new title attr, title is absolute with year; screenshot ops/qa/M-sidebar-timestamps.png.
+
+Stage Summary:
+- Sidebar timestamps are now bucket-consistent and hover-exact; the ledger is whole again (their r144 + my r145/r146/r147 in one history); divergence recovery discipline is documented for future rounds.
+
+Round Handoff:
+Round ID: r148
+Task owner: main (platform dev)
+Scope completed: divergence recovery #2 + ledger unification + fmtListTime sidebar polish; M-series QA 2/2; snapshot pushed.
+User-visible changes: older chats show real dates in the sidebar; hover shows the exact last-activity time.
+Verification steps: node scripts/cdp-qa-sidebar-timestamps.mjs (fresh chrome, atomic) → 2/2; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: divergence WILL recur while the parallel sandbox doesn't pull fork/main — start every round with local-vs-fork/main check; r142's real-world validation still pending user evidence; relay lane was flaky at r146 ((interrupted) reply) — watch for user reports.
+Blockers: none
+Next recommended action: r148 — rotate: (a) model-tracker ticker perf measurement (their r144 option (c) — MEASURE first, only fix on evidence), or (b) chat-search fmtTime → fmtChatTime consistency (trivial, helpers already shipped), or (c) live-paste root-cause FIRST if the user reports anything.
