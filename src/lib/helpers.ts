@@ -31,6 +31,26 @@ export function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Chat timestamp (r146): bare "14:32" is meaningless three days later, so
+ * today keeps the bare time, yesterday gets a label, anything older gets a
+ * real date. Pair with fmtChatTimeFull in a `title` for the exact moment.
+ */
+export function fmtChatTime(ts: number): string {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  if (ts >= dayStart.getTime()) return time;
+  if (ts >= dayStart.getTime() - 86_400_000) return `Yesterday ${time}`;
+  return `${d.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/** Full absolute timestamp for hover titles (date + time, locale-aware). */
+export function fmtChatTimeFull(ts: number): string {
+  return new Date(ts).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
 export function fmtRel(ts: number): string {
   const diff = Date.now() - ts;
   if (diff < 60_000) return "just now";

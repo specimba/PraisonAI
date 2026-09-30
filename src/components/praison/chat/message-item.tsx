@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { AgentAvatar, ModelBadge } from "@/components/praison/atoms";
 import { MarkdownRenderer } from "@/components/praison/markdown";
 import { TOOL_META } from "@/lib/constants";
-import { copyText, fmtBytes, fmtMs, fmtTime } from "@/lib/helpers";
+import { copyText, fmtBytes, fmtChatTime, fmtChatTimeFull, fmtMs } from "@/lib/helpers";
 import type { Agent, ChatMessage, MessageAttachment, RouteReceipt, ToolCallInfo, ToolId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -489,6 +489,14 @@ function UserBubble({
         role="toolbar"
         aria-label="Message actions"
       >
+        {/* r146: user bubbles had NO timestamp at all — show it in the hover
+            pill with the exact moment on the title. */}
+        <span
+          className="px-1.5 text-[10px] tabular-nums text-muted-foreground"
+          title={fmtChatTimeFull(message.createdAt)}
+        >
+          {fmtChatTime(message.createdAt)}
+        </span>
         <button
           type="button"
           onClick={handleCopy}
@@ -702,7 +710,12 @@ export const MessageItem = React.memo(function MessageItem({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-sm font-semibold">{displayName}</span>
           <ModelBadge model={agent?.model ?? "auto"} />
-          <span className="text-[11px] text-muted-foreground">{fmtTime(message.createdAt)}</span>
+          <span
+            className="text-[11px] text-muted-foreground"
+            title={fmtChatTimeFull(message.createdAt)}
+          >
+            {fmtChatTime(message.createdAt)}
+          </span>
           {message.heartbeat && (
             <span
               className="inline-flex items-center gap-0.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-violet-400"

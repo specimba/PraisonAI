@@ -3863,3 +3863,28 @@ Verification result: PASS
 Open risks: r142's real-world validation still pending on the user's next scheduled fire; parallel session's worklog section for 97bd3ed still missing (bridge resync is committed but undocumented); chrome headless lifetime now ~1-2 min — QA scripts must stay atomic.
 Blockers: none
 Next recommended action: r146 — rotate: (a) message-item timestamp polish (relative time on hover, absolute on old messages) or (b) chat-search parity check, or (c) live-paste root-cause FIRST if the user reports anything. Do not re-touch timeout constants or radar/vault without live evidence.
+---
+Task ID: 424432 — r146
+Agent: main (platform development — hourly dev round)
+Task: r145 handoff option (a) — chat message timestamp polish.
+
+Work Log:
+- Server was DOWN at round start (000; post-restore reaper) → ONE restart via dev server, 200 in ~2s. Also set git core.fileMode false: the sandbox restore left 67 files with exec-bit-only diffs (0 insertions/deletions) that would have polluted git add -A snapshots.
+- SHIPPED (src/lib/helpers.ts + src/components/praison/chat/message-item.tsx): fmtChatTime — today keeps bare HH:MM, yesterday becomes "Yesterday HH:MM", older gets a real date "Aug 21, 01:30 PM" (bare "14:32" on a 3-day-old message was meaningless); fmtChatTimeFull for absolute hover titles. Applied to the assistant header (was bare fmtTime) AND added the first-ever timestamp to USER bubbles (hover pill, parity gap).
+- VERIFIED: tsc src/ = 0; eslint clean; L-series CDP QA (scripts/cdp-qa-chat-timestamps.mjs) — L3 PASS live in-browser (user pill renders "01:29 PM" with title "Sep 30, 2026, 1:29 PM" — the new code path proven in the served bundle); fmtChatTime branches unit-verified via bun: today="01:29 PM", yesterday="Yesterday 11:00 PM", 40d="Aug 21, 01:30 PM", full="Aug 21, 2026, 1:30 PM". Assistant header visible in ops/qa/L-chat-timestamps.png rendering "01:29 PM".
+- HONEST DEGRADES: L1 (assistant-header selector) and L2 (persisted-store date injection) degraded — the model lane failed slowly this hour ((stopped)/(interrupted) row visible in the screenshot; relay tracker showed "synced 2m ago"), so the assistant row appeared AFTER the 30s probe window and the persist-vs-memory race beat the store patch. The assistant header shares the same helper + JSX pattern as the L3-proven pill, so coverage is reasonable, but the dated branch was proven at unit level only. No constants touched.
+- Harness notes: CSS-escaped class selectors (.text-\[11px\]) break when passed through template-literal eval layers — JS-side className filtering is the robust pattern.
+
+Stage Summary:
+- Chat timestamps are now honest: today reads as a time, yesterday as "Yesterday", anything older carries its date, and the exact moment is one hover away (title). User bubbles gained timestamp parity with assistant messages.
+
+Round Handoff:
+Round ID: r147
+Task owner: main (platform dev)
+Scope completed: fmtChatTime/fmtChatTimeFull + assistant header + user-bubble pill; L-series QA script committed; snapshot pushed.
+User-visible changes: dated timestamps on old messages, hover for exact time, user-bubble timestamps.
+Verification steps: node scripts/cdp-qa-chat-timestamps.mjs (needs fresh chrome, atomic run) → expect L3 pass; bun unit branch check as documented; tsc src 0; eslint 0.
+Verification result: PASS (L3 live + unit branches; L1/L2 degraded honestly — lane failure, see above)
+Open risks: the relay lane flakiness this hour ((interrupted) reply) may be worth a look IF the user reports it — do NOT touch timeout constants without live evidence; chrome headless still dies in ~1-2 min.
+Blockers: none
+Next recommended action: r147 — rotate: (a) conversation-list relative timestamps (sidebar rows show "just now" — could use the same fmtChatTime treatment for older chats), or (b) chat-search fmtTime consistency, or (c) live-paste root-cause FIRST if the user reports anything. Keep rotating.
