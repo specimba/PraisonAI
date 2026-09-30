@@ -2,6 +2,12 @@
 // Drives the locally-installed playwright headless shell over raw CDP (node's
 // native WebSocket) — bypasses the agent-browser CLI whose Chrome is
 // network-isolated (ERR_NAME_NOT_RESOLVED even for 127.0.0.1).
+// r132 B-series: injects a throwaway workflow + DONE run carrying r126-style
+// resilience notes into localStorage ("praison-workflows", zustand persist
+// envelope {state, version:0}), reloads, then asserts the r131 history-row
+// "N calls" expander + r130 grouped log + resilience digest END-TO-END.
+// Note: setItem OVERWRITES the headless profile's workflows — throwaway
+// profile only, never a real user browser.
 // Launch first:
 //   setsid ~/.cache/ms-playwright/chromium_headless_shell-1200/chrome-headless-shell-linux64/chrome-headless-shell \
 //     --headless --no-sandbox --disable-gpu --remote-allow-origins='*' \
@@ -163,6 +169,123 @@ async function main() {
     vaultCard ? `heading=${vaultCard.heading} input=${vaultCard.hasInput} store=${vaultCard.hasStore} masked=${vaultCard.maskedOnly}` : "n/a"
   );
   await shot(ws, "A3-vault");
+
+  // B — seeded-flow: history-row call-log expander + resilience digest (r132)
+  const t0 = Date.now();
+  const seedCallLog = [
+    { at: t0 - 3_500_000, stepId: "s1", stepLabel: "Research", agentName: "QA Agent", engine: "server-relay", model: "deepseek-v4.1-flash", ms: 4200, ok: false, error: "network error", attempt: 1, note: "Model relay: Vyce · deepseek-v4.1-flash failed → rotating to deepseek-v4-flash" },
+    { at: t0 - 3_400_000, stepId: "s1", stepLabel: "Research", agentName: "QA Agent", engine: "server-relay", model: "deepseek-v4-flash", ms: 3100, ok: true, attempt: 2, note: "primary skipped — marked sick earlier in this run (23s left on its window)" },
+    { at: t0 - 3_300_000, stepId: "s2", stepLabel: "Draft", agentName: "QA Agent", engine: "server-relay", model: "deepseek-v4-flash", ms: 2800, ok: true, attempt: 3, note: "primary skipped — marked sick earlier in this run (9s left on its window) → model substitution — Vyce family deprioritized on the final attempt; leading with alternate lanes" },
+    { at: t0 - 3_200_000, stepId: "s2", stepLabel: "Draft", agentName: "QA Agent", engine: "browser-direct", model: "gemini-3-flash", ms: 2200, ok: true },
+  ];
+  const seedWf = {
+    id: "qa-wf-r132",
+    name: "QA Seeded Pipeline",
+    description: "Throwaway QA workflow — safe to delete",
+    createdAt: t0 - 4_000_000,
+    updatedAt: t0 - 3_100_000,
+    steps: [
+      { id: "s1", label: "Research", type: "agent", status: "done" },
+      { id: "s2", label: "Draft", type: "agent", status: "done" },
+    ],
+    runs: [
+      {
+        id: "qa-run-r132",
+        workflowId: "qa-wf-r132",
+        workflowName: "QA Seeded Pipeline",
+        task: "QA seeded run — call-log expander",
+        status: "done",
+        startedAt: t0 - 3_600_000,
+        finishedAt: t0 - 3_100_000,
+        steps: [
+          { id: "s1", label: "Research", status: "done", startedAt: t0 - 3_600_000, finishedAt: t0 - 3_400_000, output: "qa" },
+          { id: "s2", label: "Draft", status: "done", startedAt: t0 - 3_400_000, finishedAt: t0 - 3_100_000, output: "qa" },
+        ],
+        callLog: seedCallLog,
+        novelty: 61,
+      },
+    ],
+  };
+  await evalJs(
+    ws,
+    `localStorage.setItem("praison-workflows", JSON.stringify({ state: { workflows: [${JSON.stringify(seedWf)}] }, version: 0 }))`
+  );
+  await wsSend(ws, "Page.navigate", { url: BASE }); // reload → hydrate the seed
+  await waitFor(ws, `document.readyState === 'complete'`);
+  await new Promise((r) => setTimeout(r, 2500));
+  await evalJs(ws, clickByText("Workflows")); // cards live on the Workflows view
+  // Post-reload dev-mode hydration can swallow the first nav click — retry.
+  for (let i = 0; i < 6; i++) {
+    if (await evalJs(ws, `document.querySelectorAll('[data-wf-card]').length > 0`)) break;
+    await new Promise((r) => setTimeout(r, 1200));
+    await evalJs(ws, clickByText("Workflows"));
+  }
+  const seedCardReady = await waitFor(
+    ws,
+    `[...document.querySelectorAll('[data-wf-card]')].some((e) => (e.textContent || "").includes("QA Seeded Pipeline"))`,
+    10_000
+  );
+  const cardNames = await evalJs(
+    ws,
+    `[...document.querySelectorAll('[data-wf-card]')].map((e) => (e.textContent || "").replace(/\\s+/g, " ").slice(0, 36))`
+  );
+  check(
+    "B1 seeded workflow card renders",
+    Boolean(seedCardReady),
+    seedCardReady
+      ? `${(cardNames ?? []).length} cards`
+      : `cards=${JSON.stringify(cardNames)} body=${(await evalJs(ws, `document.body.innerText.slice(0, 150)`))?.replace(/\n/g, " ")}`
+  );
+  if (seedCardReady) {
+    // The grid card opens its run panel via the card-scoped "Run" button
+    // (wrapper click is inert — verified by cdp-probe2 anatomy dump).
+    await evalJs(ws, `
+      (() => {
+        const c = [...document.querySelectorAll('[data-wf-card]')]
+          .find((e) => (e.textContent || "").includes("QA Seeded Pipeline"));
+        const btn = c && [...c.querySelectorAll("button")].find((e) => (e.textContent || "").trim() === "Run");
+        if (btn) btn.click();
+        return Boolean(btn);
+      })()
+    `);
+  }
+  await new Promise((r) => setTimeout(r, 1500));
+
+  await evalJs(ws, clickByText("Run history"));
+  const TOGGLE = `document.querySelector('button[aria-label*="recorded LLM calls"]')`;
+  const rowReady = seedCardReady && (await waitFor(ws, `Boolean(${TOGGLE})`, 10_000));
+  const toggleText = rowReady
+    ? await evalJs(ws, `${TOGGLE}.textContent.trim()`)
+    : "";
+  check("B2 history row shows N-calls toggle", rowReady && /4/.test(toggleText), `toggle="${toggleText}"`);
+
+  if (rowReady) {
+    await evalJs(ws, `${TOGGLE}.click()`);
+    const expanded = await waitFor(ws, `/resilience ·/.test(document.body.innerText)`, 8_000);
+    const exp = await evalJs(ws, `
+      (() => {
+        const t = document.body.innerText;
+        return {
+          digestSkips: /primary skipped ×2/.test(t),
+          digestSubs: /model substitution ×1/.test(t),
+          stepHeaders: /Research/.test(t) && /Draft/.test(t),
+          globalIdx: /#1/.test(t) && /#4/.test(t),
+          failedMark: /network error/.test(t),
+        };
+      })()
+    `);
+    check(
+      "B3 expander opens with counted resilience digest",
+      Boolean(expanded && exp?.digestSkips && exp?.digestSubs),
+      `skips=${exp?.digestSkips} subs=${exp?.digestSubs}`
+    );
+    check(
+      "B4 per-step grouping + global numbering + failure line",
+      Boolean(exp?.stepHeaders && exp?.globalIdx && exp?.failedMark),
+      `steps=${exp?.stepHeaders} idx=${exp?.globalIdx} fail=${exp?.failedMark}`
+    );
+    await shot(ws, "B-history-calls");
+  }
 
   await wsSend(ws, "Page.close");
   ws.close();
