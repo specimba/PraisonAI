@@ -3994,3 +3994,32 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; doc drift CAN recur — the footer stamp makes it detectable; parallel-session divergence watch continues.
 Blockers: none
 Next recommended action: r150 — (b) from r148's handoff, never yet done: agents/workflows surface audit with the r139 lens (aria/keyboard coverage — the last major surfaces never audited), or (a2) if a user reports anything automation-related, root-cause FIRST. Do not touch TTFB constants without live evidence.
+---
+Task ID: 424432 — r150
+Agent: main (platform development — hourly dev round)
+Task: r149 handoff — agents/workflows surface audit with the r139 lens (aria/keyboard coverage — the last major surfaces never audited).
+
+Work Log:
+- Start-of-round discipline: local ahead by one benign cron-autosave commit (b1519a1cf, worklog-only, same pattern as r149); health 200 (12.9s cold compile); no user reports → task (b) as handed off.
+- STATIC AUDIT (r139 lens, all 38 praison components — wider than the handoff's agents/workflows scope, same effort):
+  * Built scripts/a11y-icon-button-audit.mjs (attribute-run parser, not regex-roulette): 131 <Button> tags, 0 icon-only without aria-label.
+  * No onKeyDown on non-focusable elements; no tabIndex misuse (only 0/-1); no <img> without alt; the one role="button" (agents card) has role+tabIndex+aria-label+Enter/Space handler+focus-visible ring — exemplary.
+  * TWO self-caught false positives recorded honestly: my multiline regex flagged the editor's step movers — wrong, they have aria-labels (my lookahead window cut before them); and the sidebar nav buttons' bundled text ("WorkflowsMulti-agent pipelines") is verbose-but-informative for SRs, adding aria-label would HIDE the description — defensible, not fixed (no manufactured polish).
+- LIVE AUDIT (O-series, scripts/cdp-qa-editor-kbd.mjs — the editor dialog is the most complex surface never live-QA'd): 4/4 — O1 dialog opens + focus lands inside (on the name INPUT, ideal initial focus); O2 Tab×8 focus trapped (Radix holds); O3 Escape closes; O4 after a live "Add step", movers carry names ("Move step 1 up/down", "Remove step 1") in the rendered tree. Screenshot ops/qa/O-editor-kbd.png reviewed: dialog closed cleanly, Workflow Studio renders, "bridge sync just now" chip visible (r145 resync alive).
+- Debug lessons baked into the script header: sidebar nav buttons bundle title+desc (prefix-match, not equality); two JSON.parse omissions produced undefined reads (script bug, not app — fixed before verdict).
+- SHIPPED: scripts/a11y-icon-button-audit.mjs wired as `bun run a11y:audit` (package.json) — the audit is now a re-runnable project gate, not a one-off; scripts/cdp-qa-editor-kbd.mjs (O-series) for future dialog changes.
+- VERDICT: agents/workflows surfaces PASS with ZERO real defects. The "never audited" debt is closed with both static and live evidence; no product code needed changing this round (research-spike category, ends in committed tooling).
+
+Stage Summary:
+- The r139 lens has now swept every major surface (chat r144, agents/workflows r150): the codebase's a11y floor is genuinely high — 131/131 icon buttons named, keyboard-complete cards, dialog traps and Escape verified live. Negative results are results: future rounds should NOT re-audit these surfaces without cause.
+
+Round Handoff:
+Round ID: r151
+Task owner: main (platform dev)
+Scope completed: full-surface a11y audit (0 defects) + O-series live dialog keyboard QA (4/4) + a11y:audit npm gate; snapshot pushed (63d906873).
+User-visible changes: none in-app (audit clean); `bun run a11y:audit` now exists for every future round.
+Verification steps: node scripts/a11y-icon-button-audit.mjs → 0 missing; node scripts/cdp-qa-editor-kbd.mjs (fresh chrome, atomic) → 4/4.
+Verification result: PASS
+Open risks: r142 real-world validation still pending user evidence; a11y gate is static-only (dialog-level behaviors need the O-series when surfaces change).
+Blockers: none
+Next recommended action: r151 — rotate: (a) perf measure the Workflows view mount (heaviest view, never measured — cards + evolution ledger + autopilot panel), or (b) error-handling pass on the tracker sync paths (silent catch blocks in model-ticker refresh could strand a stale cache invisibly), or (c) root-cause FIRST any user report. Keep rotating.
