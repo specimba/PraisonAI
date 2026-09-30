@@ -3513,3 +3513,30 @@ Verification result: PASS (UI expander awaits seeded-profile click-through)
 Open risks: expander renders raw callLog inline — very long logs (capped by runner) could make a row tall; no per-run lane chip in history rows yet (relay/direct split visible only inside expander or error card).
 Blockers: none
 Next recommended action: r132 — rotate surface: (a) vault UI polish or a new user-facing feature from the Local Automation Vault epic (r123+), or (b) seeded-profile CDP test asserting the history-row expander + digest strip; alternatively add the lane chip (⇄N/⊙N) to history rows for at-a-glance lane health.
+---
+Task ID: 424432 — r132
+Agent: main (platform development — hourly dev round)
+Task: r131 handoff (b) — seeded-profile CDP test asserting the history-row call-log expander + resilience digest (rotated off workflow-run-panel.tsx per the rotate-surfaces rule; vault "test key" was investigated first and descoped honestly — see below).
+
+Work Log:
+- Vault option (a) investigated and DESCOPED: read automation-vault-card.tsx + /api/vault route; found db.automationVault has NO server-side consumer in src/ (headless-lane key is stored but never dialed by any code path in src/) — a "Test key" button would verify nothing real. Honest descope, noted for the epic's next step (wire the headless consumer first, then verify).
+- SHIPPED (scripts/ — QA tooling, 3 files):
+  1. cdp-qa.mjs B-series: injects a throwaway workflow + DONE run (4 callLog entries carrying r126-style notes: relay rotation, 2× "primary skipped (Ns left)" with different countdown suffixes, a chained skip→substitution note, a browser-direct lane entry) into localStorage key "praison-workflows" (zustand persist {state, version:0}), reloads, then asserts: B1 seed card renders on the Workflows grid; B2 the run panel's history row shows the "4" N-calls toggle; B3 clicking it opens the expander with the counted amber digest ("primary skipped ×2 · model substitution ×1"); B4 per-step headers (Research/Draft), global #1–#4 numbering, and the failure line render.
+  2. cdp-probe.mjs / cdp-probe2.mjs: reusable diagnostics (seed-survival across reload; workflow-card interactive anatomy).
+- DEBUGGING PAYOFF (3 bugs found in the TEST, not the app): (1) cards live on the Workflows view — a nav click is needed after the post-reload boot, and dev-mode hydration swallows the first click → retry-click loop; (2) grid-card wrapper click is INERT — the run panel opens via the card-scoped "Run" button (probe2 anatomy dump); (3) headless profile PERSISTS localStorage across shell launches — the suite's overwrite-seed is idempotent but the profile is not "fresh" (r129's assumption corrected in comments).
+- VERIFIED: 9/9 checks PASS (A1–A3b + B1–B4) on a fresh shell; screenshot ops/qa/B-history-calls.png visually confirms history row → "4" toggle → amber digest strip → per-step blocks with global numbering; node --check on all 3 scripts; root 200; committed + pushed to fork/main.
+- This retires r131's open risk: the r130/r131 grouped-log + digest UI now has REAL behavioral coverage, not just compile health.
+
+Stage Summary:
+- First end-to-end behavioral QA of the call-log observability arc: a seeded done-run renders its expander with the counted resilience digest exactly as designed. QA harness lessons (card anatomy, hydration retries, persistent profile) are documented in-script for future rounds.
+
+Round Handoff:
+Round ID: r133
+Task owner: main (platform dev)
+Scope completed: seeded-flow B-series in CDP QA (4 new checks, 9/9 PASS) + 2 probe scripts; push.
+User-visible changes: none (verification round) — but the r130/r131 observability UI is now regression-protected.
+Verification steps: 9/9 DOM assertions + screenshot review; node --check ×3; root 200.
+Verification result: PASS
+Open risks: B-series depends on card text "Run"/seed name — UI copy changes can break it (assertions are explicit, failures will be loud, not silent); headless profile accumulates the seed workflow (idempotent overwrite, no user impact — throwaway profile).
+Blockers: none
+Next recommended action: r133 — back to product, vault epic prerequisite: wire the ACTUAL headless-lane consumer for the AutomationVault key (server-side scheduler dials with the stored key instead of the shared lane) — this unblocks the descoped "Test key" verify button; alternatively rotate to error handling / docs / performance.
