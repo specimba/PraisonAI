@@ -4050,3 +4050,30 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; retry timer is additive to POLL_MS (no hammering — caps at 60s); a11y gate unchanged.
 Blockers: none
 Next recommended action: r152 — rotate: (a) docs/README user-facing touch-up if anything drifted (check README against current nav: Radar/"Workflow Studio" naming), or (b) small feature: copy-to-clipboard on tracker panel rows already exists — audit the Settings vault card for a "reveal-once" pattern (masked-only today; a deliberate reveal would need a threat-model note), or (c) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r152
+Agent: main (platform development — hourly dev round)
+Task: r151 handoff — (a) README vs current nav naming drift check (Radar / "Workflow Studio").
+
+Work Log:
+- Start-of-round discipline: local ahead by one benign cron-autosave commit (7962e65e0, worklog-only — folded in); health 200 warm (0.05s); no user reports → handoff order followed.
+- DRIFT CHECK VERDICT: no wrong claims exist — README.md was a 3-line STUB (title + one link). The real gap is the opposite of drift: the product had no user-facing entry document at all. shell.tsx naming check: nav labels vs page titles are intentional short/descriptive PAIRS (Workflows↔"Workflow Studio" at workflows-view.tsx:1082, Radar↔"Trend Radar" in VIEW_TITLES) — not drift.
+- SHIPPED: full README.md grounded in code facts — views table (NAV_ITEMS + VIEW_TITLES with the naming-pair note), per-view feature map (chat search fmtChatTime, Hermes-style heartbeat, Workflow Studio editor + autopilot, radar lanes, vault/WebLLM/relay in settings, tracker 15-min poll + r151 retry), stack rules (API routes only), dev commands (from package.json), verification harness section (cdp-qa-*.mjs atomic runs, a11y:audit gate, git-snapshot.sh, ops/qa screenshots), docs index.
+- FACT-CHECK PASS CAUGHT A FALSE CLAIM BEFORE COMMIT: I had written "drag-sortable via dnd-kit" — dnd-kit has 3 deps in package.json but ZERO usage in src/; steps reorder via moveStep+splice arrow movers (workflow-editor-dialog.tsx:147,485 — "Move step ${i+1} up/down"). Fixed to "arrow-button reordering with aria-labelled movers". Lesson: presence in package.json ≠ usage; every README claim was grep-verified against code.
+- All remaining claims verified: POLL_MS=15min + backoff [5s,15s,60s] (model-ticker.tsx:36,149), HF proxy route (src/app/api/radar/hf/), WebLLM (local-models.tsx:100), ops/qa has 19 artifacts.
+- VERIFIED: docs-only round → verification IS the fact-check pass; no tsc needed, server untouched, no UI change (browser QA n/a).
+
+Stage Summary:
+- README now matches the product line-for-line; the "Radar/Workflow Studio" naming question is settled on the record as intentional pairs, so future rounds stop re-flagging it.
+- New cheap debt surfaced for a future round: 3 unused @dnd-kit/* dependencies in package.json (zero src imports).
+
+Round Handoff:
+Round ID: r153
+Task owner: main (platform dev)
+Scope completed: README stub → full fact-checked product README (docs round, naming-drift question closed); snapshot pushed.
+User-visible changes: the repo now has a real README (entry point for humans/agents landing in the repo).
+Verification steps: rg-verified claims listed above; grep README vs code = all concrete claims traceable.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; README will drift if views are renamed (mitigation: claims are grep-able, views table cites shell.tsx as source of truth).
+Blockers: none
+Next recommended action: r153 — rotate: (a) unused-deps removal: @dnd-kit/* (3 packages, zero src imports — verify no dynamic/resolver usage first, then drop from package.json and lockfile), or (b) the vault card "reveal-once" small feature from r151's handoff (still undone; needs a threat-model note), or (c) root-cause FIRST any user report. Keep rotating.
