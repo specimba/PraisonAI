@@ -4187,3 +4187,29 @@ Verification result: PASS
 Open risks: the gateway congestion itself is external (free tier) — the app can only back off gracefully; a "done" run with 0 steps done would defeat the breaker (unproven suspicion — r157 should verify run status accounting); the user's Google Docs plan link was not fetched (auth-required) — the pipeline task text works without it.
 Blockers: none
 Next recommended action: r157 — (1) audit run-status accounting: confirm no path finalizes a 0-steps-done run as "done" (ledger said 1 done run while history showed 0/11 durations — if found, that's the breaker-hole; the new rate-limit breaker makes it visible), (2) consider surfacing "run died at step N because <kind>" directly in the run-history rows (the user had to paste the whole UI to report this — the error text exists but isn't visible in the history list), (3) root-cause FIRST any user report.
+---
+Task ID: 424432 — r157
+Agent: main (platform development — hourly dev round)
+Task: r156 handoff — (1) audit run-status accounting (the "1 done run with 0 steps" breaker-hole suspicion), (2) surface "run died at step N because <kind>" in run-history rows.
+
+Work Log:
+- Start-of-round discipline: divergence 0/0, health 200 warm, no new user reports → handoff order followed.
+- AUDIT VERDICT (item 1): accounting is SOUND — no path finalizes a 0-steps-done run as "done". Evidence, per path: `finish("done")` (workflow-runner.ts:1268) is reachable only when the step loop completes, and EVERY loop exit marks its step done first — streamStep patches status:"done" only after a successful stream (:878), the System-One gate path patches done (:1204), review gates patch done (:1071/:1094), "Agent not found" patches error then failRun+return (:1046), both abort branches finish "stopped"/"error" and return (:1167, :1259), the escaped-error outer catch routes to failRun (:1278). Resume path preserves prior done steps and resets only the tail from startIndex (:436). Empty-steps workflows are rejected at entry (:410). "stopped" finalizations come ONLY from a user-initiated abort (sole .abort() caller is the panel's stop button) — correctly breaker-blind (a user stop is not a failure; streak neither increments nor resets).
+- LEDGER MYSTERY RESOLVED: the user's "1 done run" is data, not a code hole — consistent with the history's one 6/11 run being manually resumed to completion (resume → finish("done") with 6 preserved + 5 fresh done steps). No breaker hole exists: 0/11 runs can only finalize "error", which feeds the streak (and since r156, trips at 2 for rate-limit).
+- SHIPPED (item 2, src/components/praison/workflows/workflow-run-panel.tsx): every errored run-history row now carries a compact WHY chip — red AlertTriangle + failed step's label (truncated) + error kind (hidden on narrow widths); tooltip = verbatim failure message + the actionable hint; aria-label states "Run failed at step <label>: <kind>". Previously the reason lived only inside the run view — the user had to paste the whole UI to report the 12× 0/11 outage. With this, the same history list would have read "⚠ Research Scout · rate-limit" twelve times.
+- VERIFIED: tsc --noEmit → 0 errors repo-wide (r155's zero-noise gate held); eslint on the touched file → clean; app 200. Live render QA of the chip needs an errored run in the store — deliberately NOT staged: the user's re-enabled pipeline will surface real rows naturally, and the chip's conditional JSX is trivial (guarded by `r.status === "error" && r.error`).
+
+Stage Summary:
+- The r156 breaker can now be SEEN working: when the gateway 429s, the history list itself shows which step and why — no more forensic pastes.
+- Audit turned the r156 suspicion into a documented negative result: the accounting is correct; the "1 done run" was a resumed run.
+
+Round Handoff:
+Round ID: r158
+Task owner: main (platform dev)
+Scope completed: run-status accounting audit (sound, evidence per code path) + failure-reason chips on errored history rows; snapshot pushed (f31ff0753).
+User-visible changes: errored runs in Run history now show "⚠ <step label> · <kind>" inline with the verbatim message + fix hint in the tooltip.
+Verification steps: tsc --noEmit → 0; eslint touched file → clean; curl root → 200.
+Verification result: PASS
+Open risks: chip live-render unverified in-browser (data-driven; will be exercised by the next real errored run); r142 real-world validation still pending; gateway congestion remains external — the app can only fail gracefully and visibly now.
+Blockers: none
+Next recommended action: r158 — rotate: (b) the never-measured radar view mount perf pass (last handoff item still open), or (a) if the user's pipeline errored again, read the new WHY chips off the history and treat any NON-rate-limit kind as the next root-cause target, or (c) root-cause FIRST any new user report. Keep rotating.
