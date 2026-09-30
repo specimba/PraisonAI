@@ -4023,3 +4023,30 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending user evidence; a11y gate is static-only (dialog-level behaviors need the O-series when surfaces change).
 Blockers: none
 Next recommended action: r151 — rotate: (a) perf measure the Workflows view mount (heaviest view, never measured — cards + evolution ledger + autopilot panel), or (b) error-handling pass on the tracker sync paths (silent catch blocks in model-ticker refresh could strand a stale cache invisibly), or (c) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r151
+Agent: main (platform development — hourly dev round)
+Task: r150 handoff — (a) Workflows view mount perf measurement, (b) tracker sync error-handling.
+
+Work Log:
+- Start-of-round discipline: local ahead by one benign cron-autosave commit (4d35112ad); health 200; no user reports → handoff order followed.
+- MEASUREMENT (a) — P-series (scripts/cdp-qa-workflows-mount.mjs), cold + warm design: FIRST RUN WAS LIED TO BY THE INSTRUMENT — all-zero deltas (ΔScript=0.000s, ΔNodes=0) during a mount that demonstrably happened. Root cause: I dropped `Performance.enable` (r148's script had it; without the domain, getMetrics returns frozen zeros and deltas silently compute 0-0). Cross-checked the all-views-mounted hypothesis with a DOM probe (wf text NOT in DOM while on chat, 741 nodes — views are conditionally mounted), re-ran with the domain enabled.
+- REAL NUMBERS: cold mount text-visible=267ms, ΔScript=142ms, ΔNodes=463, ONE 60ms longtask (dev chunk compile included); warm remount text-visible=50ms, ΔScript=1ms, ΔStyle=10, 0 layouts, 0 longtasks. VERDICT: the "heaviest view" is effectively free on revisit and healthy on first mount — no perf fix warranted; suspicion closed with numbers (same pattern as r148's ticker).
+- REAL GAP FOUND instead (the handoff's (b), sharpened): model-ticker refresh() swallowed ALL fetch failures silently — a failed FIRST fetch with no localStorage cache left the strip DARK (ModelTicker returns null) until the next 15-min poll; dev servers restart constantly, so the ticker could vanish for a quarter hour after any boot hiccup.
+- SHIPPED (src/components/praison/tracker/model-ticker.tsx): short-backoff retry on failed tracker fetches — 5s / 15s / 60s (failsRef), reset on success, timer cleared on unmount; self-reference via refreshRef (mirrors the syncNowRef pattern). Comments document why and when the path matters.
+- LIVE VERIFICATION (Q-series, scripts/cdp-qa-ticker-retry.mjs, 3/3): uses Page.addScriptToEvaluateOnNewDocument to install a /api/tracker fetch blocker + cache clear BEFORE app scripts — Q1 dark state reproduced (strip absent at 3s, blocker alive, cache empty); Q2 blocker lifted → strip recovered in ~3.0s via the armed 5s retry timer (pre-r151: 15min); Q3 recovered strip functional (trigger button + synced chip). Screenshot ops/qa/Q-ticker-retry.png reviewed: recovered lanes + "synced 4m ago" visible.
+- VERIFIED: tsc src/ = 0; eslint clean; P-series 1/1; Q-series 3/3 live.
+
+Stage Summary:
+- Two instrument lessons are now in committed harnesses: (1) Performance.getMetrics without Performance.enable lies with zeros (comment in the P-series script), (2) boot-failure states need addScriptToEvaluateOnNewDocument, not post-load patching (Q-series). The ticker's resilience gap is closed and the Workflows mount cost is on the record.
+
+Round Handoff:
+Round ID: r152
+Task owner: main (platform dev)
+Scope completed: Workflows mount measurement (clean verdict) + ticker dark-recovery retry + Q-series live failure-injection QA (3/3); snapshot pushed (14a24de06).
+User-visible changes: the model tracker recovers in seconds after a failed fetch / server restart instead of staying dark up to 15 minutes.
+Verification steps: node scripts/cdp-qa-workflows-mount.mjs → P2 pass; node scripts/cdp-qa-ticker-retry.mjs (fresh chrome, atomic) → 3/3; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; retry timer is additive to POLL_MS (no hammering — caps at 60s); a11y gate unchanged.
+Blockers: none
+Next recommended action: r152 — rotate: (a) docs/README user-facing touch-up if anything drifted (check README against current nav: Radar/"Workflow Studio" naming), or (b) small feature: copy-to-clipboard on tracker panel rows already exists — audit the Settings vault card for a "reveal-once" pattern (masked-only today; a deliberate reveal would need a threat-model note), or (c) root-cause FIRST any user report. Keep rotating.
