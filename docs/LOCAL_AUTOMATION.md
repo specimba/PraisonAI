@@ -13,7 +13,23 @@ schedules directly in the browser using the user's own provider keys — the sam
 keys the chat uses. Keys never leave the browser in this mode. Every 60 seconds
 the tab pushes the enabled schedules plus a heartbeat to the server
 (`POST /api/automation/sync`, `SYNC_INTERVAL_MS = 60_000` in
-`automation-bridge.tsx`). The server stands down while that heartbeat is fresh.
+`src/components/praison/workflows/automation-bridge.tsx`). The server stands
+down while that heartbeat is fresh.
+
+The heartbeat's visibility behaviour is deliberate and is the mirror image of
+the Server Autopilot panel's poll (r144/r145, documented in-code):
+
+- **Hidden tabs keep heartbeating.** The POST is a *liveness claim* ("tab
+  alive → server lane stands down"), not a data poll. Suppressing it while
+  hidden would hand schedules to the shared built-in gateway the moment the
+  user merely switches windows, so it is NOT paused on
+  `visibilitychange`. Chromium's background throttling still bounds it to
+  ≥1/minute, which satisfies the 120s staleness window by design.
+- **Returning to a visible tab resyncs immediately.** Without this, the next
+  fresh heartbeat could be up to 60s away and in that window the still-stale
+  registration lets the headless lane claim a due run the tab lane is about
+  to fire itself — the resync makes lane handback land the instant the user
+  actually looks.
 
 **Server lane (headless).** When the heartbeat goes stale (>120s — tab closed,
 machine asleep, or the tab busy), the server lane takes over: a scheduler
@@ -49,7 +65,7 @@ closed-tab runs dial with your quota instead of the shared lane.
 | Method & path | Caller | Behaviour |
 | --- | --- | --- |
 | `POST /api/automation/sync` | open tab, every 60s | Heartbeat + push enabled schedules. A push with ≥1 enabled schedule prunes orphaned registry rows; an empty push is heartbeat-only (protects against a second client disarming the registry). |
-| `GET /api/automation/sync` | Server autopilot panel (15s poll) & drivers | `{ serverDriving, lastSeenAt, registry, runs[last 25], vaultLane { hasKey, maskedKey, updatedAt } }`. `serverDriving` = heartbeat stale >120s. |
+| `GET /api/automation/sync` | Server autopilot panel (15s poll) & drivers | `{ serverDriving, lastSeenAt, registry, runs[last 25], vaultLane { hasKey, maskedKey, updatedAt } }`. `serverDriving` = heartbeat stale >120s. The panel poll pauses while the tab is hidden and refetches on return (r141) — the deliberate mirror of the heartbeat's keep-hidden semantics. |
 | `POST /api/automation/run-now` | UI ("Run on server") | Sets `nextRunAt = now` and re-enables the row; the external scheduler claims it within ~30s when it is driving. |
 | `POST /api/vault` | Settings UI | Upsert `{ provider, key, label }` → masked ack. |
 | `GET /api/vault` | Settings UI | Masked slots only — raw key never leaves the DB except through `consume`. |
@@ -65,3 +81,13 @@ closed-tab runs dial with your quota instead of the shared lane.
 - Run history rows with recorded LLM calls expose an "N calls" expander: the
   grouped per-step call log with global numbering and a counted resilience
   digest (`↻ primary skipped ×N · ⇄ model substitution ×N · ⇄ relay rotation ×N`).
+
+---
+
+Fact-checked against code as of r149 (2026-10-01): `SYNC_INTERVAL_MS = 60_000`,
+`HEARTBEAT_STALE_MS = 120_000`, `GET /api/automation/sync` response shape
+(verified live against the dev server), `take: 25` run history, the r138
+consume-guard header list, `run-now`'s `nextRunAt + enabled: true`, the
+`TRANSIENT_RE` timeout coverage, and the digest strings in
+`workflow-run-panel.tsx`. Future rounds changing these endpoints should treat
+this file as part of the blast radius.
