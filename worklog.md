@@ -3645,3 +3645,29 @@ Verification result: PASS
 Open risks: docs can drift from code — the fact-check is as-of r136; future rounds changing endpoint shapes or UI copy should treat LOCAL_AUTOMATION.md as part of the blast radius (noted here so the drift risk is visible, not silent).
 Blockers: none
 Next recommended action: r137 — rotate to code per the handoff menu: (a) error handling polish, or (c) performance. Concrete candidate for (a): the consume endpoint's localhost-only guard is documented as a trust assumption but not enforced — a cheap same-host check (reject requests whose Host is not localhost/127.0.0.1 or that carry forwarding headers) would make the documented trust model real. Alternatively pick a perf item (the ServerAutopilot 15s poll + vault GET on mount are the only recurring client fetches — likely fine; measure before touching).
+---
+Task ID: 424432 — r137
+Agent: main (platform development — hourly dev round)
+Task: r136 handoff (rotate to code) — superseded by LIVE BUG EVIDENCE: the user pasted two rendered app-state snapshots showing "bridge sync -5s ago" (negative relative time) and "next due" on pipelines that had run minutes earlier. Both mined as this round's fix targets (the documented consume-guard candidate stays queued).
+
+Work Log:
+- Root causes (2): (1) fmtAgo had no clamp — a heartbeat timestamp landing a hair after the tab's clock (server-write vs client-read skew) rendered "-5s ago". (2) The DB registry's nextRunAt only advances when the EXTERNAL scheduler claims a due run; while the tab drives (BYOK), it goes stale-past, so the panel's "next fire"/"next due" showed the headless lane's stale claim view as if it were the tab's countdown.
+- SHIPPED (server-autopilot.tsx):
+  1. fmtAgo clamps: <10s ⇒ "just now" — negative durations can never render again.
+  2. Lane-true countdowns: the panel now reads the tab's OWN schedule.nextRunAt (zustand, maintained by the in-tab runner) while browser-driving — chip AND per-registry-row "next" — falling back to the DB registry once the server lane is driving (where the registry IS the truth). Chip tooltip explains which lane's view it shows.
+- QA (scripts/cdp-qa-lane-true.mjs, new E-series, 6 checks): decisive seed — LOCAL nextRunAt = +6h (safe, never fires) vs DB registry row created by the bridge's mount sync with interval 2m (⇒ "2m"/"due" for a buggy registry-only build). E1 chip renders "next fire 6.0h" (LOCAL truth); E2 row renders "every 2m · next 6.0h"; E3 no negative/stale-due strings across 3 poll samples; E4 bridge-sync label format sane; E5a/b cleanup — the seed's DB row DISABLED via the sync API's own enabled:false update path (registry's designed disabled-for-history state; nothing the headless lane could claim) + localStorage seed rewritten disabled.
+- VERIFIED: 6/6 E-series PASS on first run; tsc src/ = 0; eslint clean; screenshot ops/qa/E-lane-true.png reviewed (header shows "bridge sync 18s ago · next fire 6.0h", row lane-true, no negatives).
+
+Stage Summary:
+- The ServerAutopilot panel now tells the truth for whichever lane is active — fixing both defects visible in the user's pasted app state. The pasted snapshots also re-confirmed the shared-lane 429 storm pattern (all three workflows "↻ retried" at the same timestamps) — the vault (r123–r135) remains the real fix for that, user-side.
+
+Round Handoff:
+Round ID: r138
+Task owner: main (platform dev)
+Scope completed: negative-time clamp + lane-true countdowns in ServerAutopilot; E-series QA (6/6); snapshot pushed.
+User-visible changes: "bridge sync" never shows negative ago; "next fire" and registry rows show the ACTIVE lane's real countdown (tab schedules while browser-driving, registry while server-driving).
+Verification steps: 6/6 DOM assertions + screenshot; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: while browser-driving, a workflow synced to the registry but with NO local nextRunAt (e.g. armed before this build) falls back to the stale registry value — acceptable (row tooltip/chip label still say what they mean); E-series leaves one disabled "QA Lane-True Pipeline" registry row (inert, by design).
+Blockers: none
+Next recommended action: r138 — the r136-documented candidate: enforce the consume endpoint's localhost-only guard (reject non-local Host or forwarding headers) so docs/LOCAL_AUTOMATION.md's trust model is enforced, not just assumed; add a negative-case check to the D-series. Alternatively rotate to perf or UI polish elsewhere.

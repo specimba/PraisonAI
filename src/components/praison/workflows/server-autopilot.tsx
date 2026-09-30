@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useUiStore } from "@/lib/stores";
+import { useUiStore, useWorkflowsStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 // r116: transient = environmental noise (429 congestion, socket blips, the app
@@ -79,6 +79,10 @@ function fmtIn(iso: string | null): string {
 function fmtAgo(iso: string | null): string {
   if (!iso) return "never";
   const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  // r137: the heartbeat timestamp can land a hair AFTER this tab's clock
+  // (server write vs client read skew) — the panel rendered "-5s ago" live.
+  // Anything under 10s is "just now"; never render a negative duration.
+  if (s < 10) return "just now";
   if (s < 60) return `${s}s ago`;
   const m = Math.round(s / 60);
   if (m < 60) return `${m}m ago`;
@@ -129,6 +133,35 @@ export function ServerAutopilot() {
 
   const driving = state?.serverDriving === true;
   const active = state?.registry.filter((r) => r.enabled) ?? [];
+  // r137: lane-true countdowns. The DB registry's nextRunAt only advances
+  // when the EXTERNAL scheduler claims a due run — while the tab drives
+  // (BYOK), it goes stale-past and the panel showed "due" on pipelines that
+  // had run minutes ago (seen live 2026-09-30). The tab's own
+  // schedule.nextRunAt is the truth for the active lane; the registry is the
+  // truth once the server lane is driving.
+  const workflows = useWorkflowsStore((s) => s.workflows);
+  const localNextByWf = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of workflows) {
+      if (
+        w.schedule?.enabled === true &&
+        w.steps.length > 0 &&
+        typeof w.schedule.nextRunAt === "number"
+      ) {
+        m.set(w.id, new Date(w.schedule.nextRunAt).toISOString());
+      }
+    }
+    return m;
+  }, [workflows]);
+  const registryNextFire =
+    active
+      .map((r) => r.nextRunAt)
+      .filter((v): v is string => typeof v === "string")
+      .sort()[0] ?? null;
+  const localNextFire = !driving
+    ? ([...localNextByWf.values()].sort()[0] ?? null)
+    : null;
+  const nextFire = localNextFire ?? registryNextFire;
   const vaultKeyMasked =
     state?.vaultLane?.hasKey === true ? (state.vaultLane.maskedKey ?? null) : null;
   // r134: chip deep-links to the vault card (same r125 pattern the workflow
@@ -137,11 +170,6 @@ export function ServerAutopilot() {
     useUiStore.getState().setView("settings");
     useUiStore.getState().setSettingsAnchor("vault");
   }, []);
-  const nextFire =
-    active
-      .map((r) => r.nextRunAt)
-      .filter((v): v is string => typeof v === "string")
-      .sort()[0] ?? null;
 
   return (
     <section
@@ -190,7 +218,11 @@ export function ServerAutopilot() {
         </span>
         {nextFire ? (
           <span
-            title="Soonest scheduled fire across all registered pipelines (either lane)"
+            title={
+              driving
+                ? "Soonest scheduled fire across all registered pipelines (headless-lane claim view)"
+                : "Soonest fire among this tab's enabled schedules (the active BYOK lane)"
+            }
             className="inline-flex items-center gap-1 rounded-full border border-sky-500/25 bg-sky-500/[0.06] px-1.5 py-0 text-[10px] text-sky-200/90 transition-colors hover:border-sky-500/40"
           >
             <Timer className="h-2.5 w-2.5" aria-hidden />
@@ -243,7 +275,8 @@ export function ServerAutopilot() {
             <li key={r.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
               <span className="font-medium">{r.name}</span>
               <span className="text-muted-foreground">
-                every {Math.max(1, Math.round(r.intervalMs / 60_000))}m · next {fmtIn(r.nextRunAt)}
+                every {Math.max(1, Math.round(r.intervalMs / 60_000))}m · next{" "}
+                {fmtIn(localNextByWf.get(r.id) ?? r.nextRunAt)}
                 {r.failStreak > 0 ? ` · ⚠ ${r.failStreak} fail${r.failStreak === 1 ? "" : "s"}` : ""}
               </span>
               <Button
