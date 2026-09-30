@@ -3726,3 +3726,32 @@ Verification result: PASS
 Open risks: proxy adds one server hop to HF fetches (negligible: ~0.3s measured); localStorage caches written by the OLD direct-fetch build remain compatible (same HfCache shape); G-series leaves a HF cache in the QA browser profile (inert).
 Blockers: none
 Next recommended action: r140 — rotate again: (a) Chat/Agents surface polish (still untouched for many rounds — e.g. audit empty/error/loading states there with the same lens); (b) perf: measure the two recurring client fetches (ServerAutopilot 15s poll, vault GET on mount) before touching; (c) small a11y pass on settings cards. Avoid touching radar/vault again unless a live bug surfaces.
+---
+Task ID: 424432 — r140
+Agent: main (platform development — hourly dev round)
+Task: r139 handoff — fresh surface: Agents. Shipped: keyboard a11y for the agent roster cards (the clickable Card was a bare div — invisible to keyboards and screen readers).
+
+Work Log:
+- Survey (agents-view.tsx full read + chat/agents fetch audit): all chat/agents calls already go through our own API (no radar-style direct third-party calls); error/loading states (toasts, stream error status, EmptyState) were already covered. Real gap found: AgentCard opened the test playground via onClick + cursor-pointer on a bare div — no role, no tabIndex, no keyboard handler; keyboard users could reach only the kebab menu.
+- SHIPPED (src/components/praison/agents/agents-view.tsx, AgentCard):
+  1. role="button" + tabIndex={0} + aria-label "Open test playground for <name>".
+  2. onKeyDown: Enter/Space → preventDefault + openTest (matches native button semantics).
+  3. focus-visible ring (ring-2 primary/60, outline-none) so keyboard focus is visible; hover ring unchanged.
+  4. "Updated <rel>" stamp gains a title with the absolute locale timestamp (honest-time pattern from r137).
+- QA (scripts/cdp-qa-agents-a11y.mjs, new H-series, 4 checks): H1 card renders as role=button, tabindex=0, labelled; H2 programmatic focus + Enter keydown opens the playground dialog FOR THE SAME agent (name extracted from the card's aria-label — relative assertion, roster-agnostic); H3 Escape closes, Space reopens; H4 focus-visible ring classes present. Seeds/removes a throwaway agent via the zustand persist key ("praison-agents" v1) only when the roster is empty.
+- QA iteration note (1 fix): first run failed H1/H2 on assertion wiring, NOT product behavior — the profile roster already had agents, and the checks demanded the seeded name. Fixed to relative assertions; second run 4/4.
+- VERIFIED: 4/4 H-series PASS; tsc src/ = 0; eslint 0; screenshot ops/qa/H-focus-ring-dialog.png reviewed (Enter-opened playground over the roster, no layout regression).
+
+Stage Summary:
+- The Agents roster is now fully keyboard-operable (Tab → card → Enter/Space → playground; Escape out) and screen readers announce the card's action. Agent cards finally match the interaction contract every native button already had.
+
+Round Handoff:
+Round ID: r141
+Task owner: main (platform dev)
+Scope completed: AgentCard keyboard a11y + focus ring + timestamp title; H-series QA (4/4); snapshot pushed.
+User-visible changes: roster cards are Tab-focusable with a visible focus ring and open the test playground via Enter/Space; screen readers announce "Open test playground for <name>"; hovering "Updated 7h ago" shows the absolute time.
+Verification steps: 4/4 DOM+keyboard assertions + screenshot review; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: role=button card nests a real button (kebab menu) — standard practical pattern (stopPropagation + its own label), but strictly nested interactive ARIA roles are debatable; other clickable-card surfaces (workflow cards? radar cards are links already) may have the same bare-div pattern — a future sweep could apply this fix uniformly.
+Blockers: none
+Next recommended action: r141 — rotate: (a) sweep the remaining clickable-card surfaces (workflows view) for the same bare-div pattern and fix with the same recipe; (b) perf measurement of the two recurring client fetches (ServerAutopilot 15s poll, vault GET) before touching anything; or (c) Chat composer/message-item polish. Keep rotating surfaces.

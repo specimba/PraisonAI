@@ -297,8 +297,17 @@ function AgentCard({
 
   return (
     <Card
-      className="card-lift flex cursor-pointer flex-col gap-4 p-4 hover:ring-1 hover:ring-primary/30"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open test playground for ${agent.name}`}
+      className="card-lift flex cursor-pointer flex-col gap-4 p-4 outline-none hover:ring-1 hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-primary/60"
       onClick={onTest}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onTest();
+        }
+      }}
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
@@ -366,7 +375,12 @@ function AgentCard({
             ) : null}
           </div>
         </div>
-        <p className="text-[11px] text-muted-foreground">Updated {fmtRel(agent.updatedAt)}</p>
+        <p
+          className="text-[11px] text-muted-foreground"
+          title={`Last updated ${new Date(agent.updatedAt).toLocaleString()}`}
+        >
+          Updated {fmtRel(agent.updatedAt)}
+        </p>
         {usage && usage.replies > 0 && (
           <div
             className="flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2 py-1 text-[11px] text-foreground/85"
