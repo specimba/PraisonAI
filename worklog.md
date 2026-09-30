@@ -3619,3 +3619,29 @@ Verification result: PASS
 Open risks: toast copy is QA-anchored (D1c/D2b assert text — copy changes fail loudly by design); the button's round-trip check trusts GET /api/vault's maskedKey (both derive from the same DB row, so a true corruption of the row would be caught only if mask(raw) ≠ mask(displayed) — i.e. partial corruption; full-row corruption is undetectable client-side).
 Blockers: none
 Next recommended action: r136 — ROTATE SURFACES away from the vault (epic complete): (a) error handling polish, (b) docs (a short "Local automation" README section covering the vault lane + headless contract), or (c) performance. Rotate per the no-grinding rule; vault work is done unless the external scheduler integration surfaces bugs.
+---
+Task ID: 424432 — r136
+Agent: main (platform development — hourly dev round)
+Task: r135 handoff — rotate surfaces away from the vault epic; picked (b) docs: the "Local automation" section (README had ZERO coverage of the r123–r135 feature suite).
+
+Work Log:
+- Survey: README.md was a 22-byte placeholder ("# NEXUS_WebGUI_HARNESS") — the entire two-lane automation model, vault, and HTTP contract were undocumented.
+- SHIPPED (2 docs files):
+  1. docs/LOCAL_AUTOMATION.md (new, ~90 lines): the two-lane model (in-tab BYOK lane with 60s heartbeat sync vs headless server lane when heartbeat stale >120s); the Automation Vault (why, storage + masking rule, Test key semantics — what it proves and what it does NOT); the full localhost HTTP contract table (7 endpoints with caller + behaviour, including the consume endpoint's trust model and the "must gain auth before remote exposure" warning); an honest "the scheduler mini-service is external to this repo" note; reliability notes (TRANSIENT_RE amber "↻ retried" vs terminal red, N-calls expander + resilience digest).
+  2. README.md: one-line pointer to the new doc (title placeholder preserved — not this round's job to rebrand).
+- FACT-CHECK: every claim written from code read THIS session (sync/vault/consume/run-now routes, automation-bridge SYNC_INTERVAL_MS=60_000, HEARTBEAT_STALE_MS=120_000, take:25); all quoted UI copy strings verified byte-exact in src/ via rg ("headless lane: your key|shared lane", "Run on server", "N calls", all three digest note kinds).
+- VERIFIED: heading structure sane (5 sections); link target exists; tsc/eslint N/A — no compiled surface touched (diff = 2 .md files only; last code tsc=0 at r135 stands). Root 200 before and after.
+
+Stage Summary:
+- The platform's most complex local feature suite (two-lane automation + vault) now has a single accurate reference doc, grounded in code, written while the epic's context is fresh. New-user onboarding and future maintenance both benefit; zero runtime risk.
+
+Round Handoff:
+Round ID: r137
+Task owner: main (platform dev)
+Scope completed: docs/LOCAL_AUTOMATION.md + README pointer; snapshot pushed.
+User-visible changes: none in-app (docs only).
+Verification steps: fact-check vs code (this session's reads + rg byte-exact copy checks); structure + link checks; tsc/eslint N/A (md-only).
+Verification result: PASS
+Open risks: docs can drift from code — the fact-check is as-of r136; future rounds changing endpoint shapes or UI copy should treat LOCAL_AUTOMATION.md as part of the blast radius (noted here so the drift risk is visible, not silent).
+Blockers: none
+Next recommended action: r137 — rotate to code per the handoff menu: (a) error handling polish, or (c) performance. Concrete candidate for (a): the consume endpoint's localhost-only guard is documented as a trust assumption but not enforced — a cheap same-host check (reject requests whose Host is not localhost/127.0.0.1 or that carry forwarding headers) would make the documented trust model real. Alternatively pick a perf item (the ServerAutopilot 15s poll + vault GET on mount are the only recurring client fetches — likely fine; measure before touching).
