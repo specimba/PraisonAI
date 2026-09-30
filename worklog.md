@@ -4103,3 +4103,29 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; pre-existing 6 tsc errors in non-app dirs (examples/skills) remain out of scope; a future dep addition must be grep-checked on arrival (scanner exists now).
 Blockers: none
 Next recommended action: r154 — rotate: (a) the vault card "reveal-once" small feature from r151's handoff (twice queued now; needs a threat-model note), or (b) fix or quarantine the 6 pre-existing tsc errors in non-app dirs (examples/skills) so `tsc --noEmit` is fully green — decide: fix socket.io import (examples), @types/bun dev-dep (hang-server), or exclude non-app dirs from tsconfig, or (c) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r154
+Agent: main (platform development — hourly dev round)
+Task: r153 handoff — (a) the vault card "reveal-once" feature (twice queued; needs a threat-model note).
+
+Work Log:
+- Start-of-round discipline: divergence 0/0, health 200 warm, no user reports → handoff order followed.
+- SHIPPED (src/components/praison/settings/automation-vault-card.tsx): deliberate reveal-once on the stored-slot row — eye button dials the SAME POST /api/vault/consume the headless scheduler uses, renders the raw key ~8s, then auto re-masks. Immediate re-mask on second click / unmount / re-store / remove; no auto-copy; reload re-masks (reveal state never persisted); amber "visible — auto-hides" hint while exposed; aria-label flips Reveal↔Hide; threat-model doctrine comment in-code + title tooltip.
+- THREAT MODEL (honest): the raw key is ALREADY plaintext in local SQLite and consume is already reachable by any same-machine caller (localhost-only guard since r138) — a UI reveal does NOT expand the programmatic surface; the only new exposure is eyes-on-screen. Mitigations target exactly that. NOT defended: an in-window screenshot or malicious client-side code (which can already call consume). Docs: LOCAL_AUTOMATION.md gained a "Reveal (r154)" contract bullet + stamp bumped r149→r154.
+- LIVE QA (V-series, scripts/cdp-qa-vault-reveal.mjs): 8/8 PASS — store, masked+button, click-effect (aria flips), raw+hint+mask-gone, immediate re-mask, 8s auto re-mask (label flips back), reload re-masks, vault left empty. Screenshots ops/qa/V3-vault-revealed.png + V6-vault-remasked.png.
+- THREE DEBUG LESSONS baked into the script header: (1) r150's lesson re-bitten — sidebar buttons bundle label+hint, exact-match nav fails, use startsWith; (2) click-until-EFFECT, not click-until-found (hydration swallows first clicks) — effect = aria-label flip; (3) THE BIG ONE: operator precedence in the harness helper — `a?.innerText ?? "".includes(x)` parses as `a?.innerText ?? ("".includes(x))`, so every check returned the whole card text (truthy) or its negation — the run's 4 FAILs were pure harness bug while the dumped card text proved the feature was working at every stage. Fixed with explicit parens; comment in the helper.
+- VERIFIED: tsc src/ = 0 (6 pre-existing non-app errors unchanged); eslint targeted clean (new script's ternary-expression warning fixed in-place rather than shipped); a11y gate 0 missing; V-series 8/8.
+
+Stage Summary:
+- The twice-queued vault reveal is closed with a documented threat model and a reusable failure-injection QA script. The QA harness gained a cheap doctrine: assert via aria-label STATE FLIPS (component truth), not text scraping where avoidable.
+
+Round Handoff:
+Round ID: r155
+Task owner: main (platform dev)
+Scope completed: vault reveal-once (component + doctrine + docs) + V-series 8/8 live QA; snapshot pushed.
+User-visible changes: Settings → Automation vault now has a deliberate one-click reveal of the stored key (8s auto re-mask) — no more "delete and re-paste" to check what you stored.
+Verification steps: node scripts/cdp-qa-vault-reveal.mjs (fresh chrome, atomic) → 8/8; tsc src 0; a11y gate 0; eslint clean on touched files.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; reveal is eyes-only mitigation (documented) — if the app is ever exposed beyond localhost, real auth remains the blocker (r138 note).
+Blockers: none
+Next recommended action: r155 — rotate: (a) green the 6 pre-existing tsc errors in non-app dirs (examples/skills/scripts) so `tsc --noEmit` is fully clean (fix socket.io import, add @types/bun dev-dep, or exclude non-app dirs from tsconfig — decide honestly), or (b) perf/error-handling pass on a never-measured surface (radar view mount?), or (c) root-cause FIRST any user report. Keep rotating.

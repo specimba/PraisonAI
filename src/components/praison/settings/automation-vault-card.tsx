@@ -8,6 +8,8 @@
 // built-in gateway (congested — the r109-era 429 storms). A key stored here
 // (local SQLite only, nothing telemetered) lets closed-tab runs use the
 // user's own quota instead. GET never returns the raw key — masked preview.
+// The raw key is reachable ONLY through POST /api/vault/consume (the scheduler
+// handoff); r154 adds the card's deliberate reveal-once on that same path.
 
 import * as React from "react";
 import {
@@ -51,6 +53,9 @@ export function AutomationVaultCard() {
   const [saving, setSaving] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
+  const [revealed, setRevealed] = React.useState<string | null>(null);
+  const [revealing, setRevealing] = React.useState(false);
+  const revealTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = React.useCallback(async () => {
     try {
@@ -67,6 +72,17 @@ export function AutomationVaultCard() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  const maskNow = React.useCallback(() => {
+    if (revealTimer.current) {
+      clearTimeout(revealTimer.current);
+      revealTimer.current = null;
+    }
+    setRevealed(null);
+  }, []);
+
+  // Reveal never survives unmount — a freshly mounted card is always masked.
+  React.useEffect(() => maskNow, [maskNow]);
 
   const builtin = slots.find((s) => s.provider === "builtin");
 
@@ -87,6 +103,7 @@ export function AutomationVaultCard() {
       setKey("");
       setShowKey(false);
       setConfirmRemove(false);
+      maskNow(); // a revealed OLD key must not linger past an Update
       await load();
       toast.success("Vault key stored — closed-tab runs will dial with it.", {
         description: "Local SQLite only. Nothing leaves this machine.",
@@ -110,6 +127,7 @@ export function AutomationVaultCard() {
       const res = await fetch("/api/vault?provider=builtin", { method: "DELETE" });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      maskNow();
       await load();
       toast.success("Vault key removed — headless runs fall back to the built-in lane.");
     } catch (e) {
@@ -173,6 +191,55 @@ export function AutomationVaultCard() {
     }
   }
 
+  // r154: deliberate reveal-once — THREAT MODEL, honestly:
+  // The raw key already sits in plaintext in this machine's SQLite, and
+  // POST /api/vault/consume already hands it to any same-machine caller
+  // (localhost-only guard since r138; the doc records the LAN spoofing caveat).
+  // A UI reveal therefore does NOT expand the programmatic attack surface —
+  // the only new exposure is to EYES on screen (shoulder-surf, screen-share,
+  // capture). Mitigations target exactly that: one deliberate click per
+  // reveal, ~8s auto re-mask, immediate re-mask on second click / unmount /
+  // re-store, no auto-copy, no reveal-state persistence (a reload re-masks),
+  // and the raw key still never reaches logs or telemetry. NOT defended:
+  // a screenshot taken inside the 8s window, or malicious client-side code —
+  // the latter can already call consume directly.
+  async function revealKey() {
+    if (revealed !== null) {
+      maskNow();
+      return;
+    }
+    if (!builtin) return;
+    setRevealing(true);
+    try {
+      const res = await fetch("/api/vault/consume", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "builtin" }),
+      });
+      if (res.status === 404) {
+        toast.error("Nothing to reveal", {
+          description: "The vault slot vanished — store a key first.",
+        });
+        maskNow();
+        await load();
+        return;
+      }
+      const json = (await res.json()) as { ok?: boolean; key?: string; error?: string };
+      if (!res.ok || !json.ok || typeof json.key !== "string" || json.key.length === 0) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      setRevealed(json.key);
+      if (revealTimer.current) clearTimeout(revealTimer.current);
+      revealTimer.current = setTimeout(maskNow, 8_000);
+    } catch (e) {
+      toast.error("Could not reveal the key", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setRevealing(false);
+    }
+  }
+
   return (
     <Card className="gap-4">
       <CardHeader className="pb-3">
@@ -205,8 +272,33 @@ export function AutomationVaultCard() {
                   {PROVIDER_LABELS[builtin.provider] ?? builtin.provider}
                 </span>
                 <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                  {builtin.maskedKey}
+                  {revealed ?? builtin.maskedKey}
                 </span>
+                <button
+                  type="button"
+                  onClick={revealKey}
+                  disabled={revealing}
+                  aria-label={
+                    revealed !== null
+                      ? "Hide stored key"
+                      : "Reveal stored key (auto-hides after 8 seconds)"
+                  }
+                  title="Deliberate reveal: shows the stored key for 8 seconds, then re-masks itself. Uses the same localhost-only handoff the headless scheduler uses — it changes who can see the key on screen, not who can already get it."
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {revealing ? (
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                  ) : revealed !== null ? (
+                    <EyeOff className="h-3 w-3" aria-hidden />
+                  ) : (
+                    <Eye className="h-3 w-3" aria-hidden />
+                  )}
+                </button>
+                {revealed !== null ? (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                    visible — auto-hides
+                  </span>
+                ) : null}
                 <span className="text-[10px] text-muted-foreground/70">
                   updated {new Date(builtin.updatedAt).toLocaleString()}
                 </span>
@@ -298,7 +390,8 @@ export function AutomationVaultCard() {
           <p className="text-[10px] leading-relaxed text-muted-foreground/70">
             The key is written to this machine&apos;s SQLite DB only. The chat/agent BYOK
             keys in Providers above stay browser-side and are unaffected. Removing the
-            slot makes headless runs fall back to the built-in lane automatically.
+            slot makes headless runs fall back to the built-in lane automatically. The
+            eye button reveals the stored key once for ~8 seconds, then re-masks.
           </p>
         </div>
       </CardContent>

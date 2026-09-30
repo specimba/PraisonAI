@@ -56,6 +56,14 @@ closed-tab runs dial with your quota instead of the shared lane.
   without ever rendering the raw key. It does **not** dial an LLM (the built-in
   lane is environment-credentialed in-repo; dialing with the key is the
   external scheduler's job).
+- **Reveal (r154):** the card's eye button on the stored-slot row dials the
+  same `POST /api/vault/consume` and renders the raw key for ~8 seconds, then
+  re-masks itself — immediate re-mask on second click / unmount / re-store,
+  no auto-copy, and a reload re-masks (reveal state is never persisted).
+  Threat model unchanged: the key is already plaintext in this machine's
+  SQLite and `consume` is already reachable by any same-machine caller — the
+  reveal changes who can *see* the key on screen, not who can programmatically
+  *get* it.
 - **Status at a glance:** the *Server autopilot* panel (top of the Workflows
   view) shows a chip — cyan "headless lane: your key <mask>" or amber
   "headless lane: shared lane" — and clicking it deep-links to the vault card.
@@ -84,10 +92,11 @@ closed-tab runs dial with your quota instead of the shared lane.
 
 ---
 
-Fact-checked against code as of r149 (2026-10-01): `SYNC_INTERVAL_MS = 60_000`,
+Fact-checked against code as of r154 (2026-10-01): `SYNC_INTERVAL_MS = 60_000`,
 `HEARTBEAT_STALE_MS = 120_000`, `GET /api/automation/sync` response shape
 (verified live against the dev server), `take: 25` run history, the r138
-consume-guard header list, `run-now`'s `nextRunAt + enabled: true`, the
+consume-guard header list, the r154 reveal-once path (consume reuse + 8s auto
+re-mask), `run-now`'s `nextRunAt + enabled: true`, the
 `TRANSIENT_RE` timeout coverage, and the digest strings in
 `workflow-run-panel.tsx`. Future rounds changing these endpoints should treat
 this file as part of the blast radius.
