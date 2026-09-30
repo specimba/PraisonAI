@@ -3838,3 +3838,28 @@ Verification result: PASS
 Open risks: the mock covers the TTFB phase only; mid-stream buffering was already covered by r68's 180s idle budget (also engine-level, same path). If the user's next run still fails at step 2, look at the provider's ACTUAL behavior (Vyce AI lane) via the run's LLM-call log before touching constants again.
 Blockers: none
 Next recommended action: r144 — rotate: (a) Chat composer/message-item polish (untouched surface), or (b) the 2-min scheduler-bridge 60s sync visibility audit, or (c) if the user reports another live paste, root-cause THAT first. Keep rotating; do not re-touch timeout constants or radar/vault without live evidence.
+---
+Task ID: 424432 — r145
+Agent: main (platform development — hourly dev round)
+Task: r143 handoff option (a) — Chat composer polish. ROUND PREFACE: two anomalies handled first.
+
+Work Log:
+- SANDBOX ROLLBACK RECOVERED: working copy had regressed to the 2026-09-26 state (HEAD=93966fe r68-era; worklog ended at 09-26; r141-r143 commits missing from reflog entirely). Commits survive on the fork remote: `git fetch fork` brought back 1168bdc/561a43a/39a84d3; verified merge-base(HEAD, fork/main)=HEAD (strict superset, 0 local-only commits) and spot-checked r142/r143 content (FIRST_TOKEN_TIMEOUT_MS=60_000, verify-first-token-budget.ts present) → `git reset --hard fork/main`. Worklog + all r142/r143 deliverables restored. Also: `prisma generate` (restored node_modules had a stale client → 16 spurious tsc errors on automation routes; now 0).
+- r144 SLOT COLLISION NOTED: a parallel session already delivered option (b) — commit 97bd3ed (automation-bridge visibility resync + J-series QA, self-labeled "r144" in its script header) but appended NO worklog section (ledger gap). This round therefore logs as r145 and claims option (a), keeping the ledger monotonic.
+- SHIPPED (src/components/praison/chat/composer.tsx): Esc now stops a running reply — the standard chat affordance that was missing (only the small Stop button existed). Ordering: checked AFTER the slash-menu branch (first Esc closes an open menu, second Esc stops), IME-composing guarded, and the typed draft is PRESERVED (stopping must not lose a follow-up draft). Streaming placeholder updated to advertise it: "Agent is replying — Enter queues a follow-up · Esc stops".
+- VERIFIED: tsc src/ = 0; eslint clean; NEW K-series CDP QA (scripts/cdp-qa-chat-esc-stop.mjs) 3/3 against a REAL model lane: K1 stream started in 0.4s + stop button up + new placeholder live in bundle; K2 dispatched Escape on the textarea stopped the stream in 0.3s with the "(stopped)" chip rendered; K3 draft "draft-preserved-42" intact after the stop. Screenshot ops/qa/K-chat-esc-stop.png byte-checked (stopped chip + preserved draft visible, clean render).
+- HARNESS LESSONS: headless chrome now dies in ~1-2 min post-restore (reaper more aggressive than r141/r142) → QA must launch chrome and run in ONE shell command; added a ctor diagnostic to the harness after a sneaky bug — my multi-line evals were `evalJs(js(...))` WITHOUT the ws argument (string landed in the ws param → "ws.send is not a function"); fixed all 9 call sites.
+
+Stage Summary:
+- Chat gains a keyboard-native stop: Esc ends a running reply like every mainstream chat app; affordance is discoverable via the streaming placeholder, and drafts survive the stop. Verified end-to-end on a live lane, not just compile-gated.
+
+Round Handoff:
+Round ID: r146
+Task owner: main (platform dev)
+Scope completed: sandbox rollback recovery (fork/main fast-forward + prisma client regen) + composer Esc-to-stop + K-series QA 3/3; snapshot pushed.
+User-visible changes: Esc stops streaming; placeholder tells the user; drafts preserved.
+Verification steps: node scripts/cdp-qa-chat-esc-stop.mjs (fresh chrome first: see harness lesson) → 3/3; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: r142's real-world validation still pending on the user's next scheduled fire; parallel session's worklog section for 97bd3ed still missing (bridge resync is committed but undocumented); chrome headless lifetime now ~1-2 min — QA scripts must stay atomic.
+Blockers: none
+Next recommended action: r146 — rotate: (a) message-item timestamp polish (relative time on hover, absolute on old messages) or (b) chat-search parity check, or (c) live-paste root-cause FIRST if the user reports anything. Do not re-touch timeout constants or radar/vault without live evidence.

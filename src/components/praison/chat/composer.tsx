@@ -991,13 +991,22 @@ export function Composer({
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   submit();
+                  return;
+                }
+                // r144: Esc stops the running reply (standard chat affordance) —
+                // checked AFTER the slash-menu branch, so an open menu closes on
+                // the first Esc and a second Esc stops the stream. Typed text is
+                // preserved: stopping the reply should not lose a follow-up draft.
+                if (e.key === "Escape" && streaming && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  onStop();
                 }
               }}
               placeholder={
                 voice.state === "recording"
                   ? `Listening… ${recSeconds}s (click the mic to stop)`
                   : streaming
-                    ? `Agent is replying — type a follow-up and press Enter to queue it`
+                    ? `Agent is replying — Enter queues a follow-up · Esc stops`
                     : `Message ${agentName}…  (Enter to send, / for commands)`
               }
               aria-label={`Message ${agentName}`}
