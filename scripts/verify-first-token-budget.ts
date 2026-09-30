@@ -14,8 +14,8 @@
 // Run: bun scripts/verify-first-token-budget.ts   (bun executes TS natively)
 
 import * as http from "node:http";
-import { runRelayedCustom, type EngineBody, type EngineToolIO } from "../src/lib/agent-engine";
-import { buildToolDefs } from "../src/lib/tools-defs";
+import { runRelayedCustom, type EngineBody } from "../src/lib/agent-engine";
+import { buildToolDefs, type EngineToolIO } from "../src/lib/tools-defs";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
