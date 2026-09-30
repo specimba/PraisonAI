@@ -3755,3 +3755,30 @@ Verification result: PASS
 Open risks: role=button card nests a real button (kebab menu) — standard practical pattern (stopPropagation + its own label), but strictly nested interactive ARIA roles are debatable; other clickable-card surfaces (workflow cards? radar cards are links already) may have the same bare-div pattern — a future sweep could apply this fix uniformly.
 Blockers: none
 Next recommended action: r141 — rotate: (a) sweep the remaining clickable-card surfaces (workflows view) for the same bare-div pattern and fix with the same recipe; (b) perf measurement of the two recurring client fetches (ServerAutopilot 15s poll, vault GET) before touching anything; or (c) Chat composer/message-item polish. Keep rotating surfaces.
+---
+Task ID: 424432 — r141
+Agent: main (platform development — hourly dev round)
+Task: r140 handoff — (a) sweep remaining clickable-card surfaces for the bare-div pattern; pivoted to (b) when the sweep came back clean. Shipped: visibility-aware autopilot poll (perf).
+
+Work Log:
+- Sweep (handoff option a, done first): workflows-view main card is NOT a click target (all actions are real Buttons/chip-buttons); run-kanban cards are real <button>s; conversation-list items are real buttons inside a wrapper. Project-wide rg for div/Card-with-onClick found only modal backdrops (legit) + the already-fixed r140 AgentCard. Verdict: no bare-div clickable cards remain — the pattern class is closed, recorded here so nobody re-guesses.
+- Pivot to handoff option (b) — measure the two recurring client fetches:
+  1. Vault GET on mount (automation-vault-card.tsx): one-shot per settings visit, no interval — honest verdict: NOT a recurring fetch, nothing to fix. No churn.
+  2. ServerAutopilot 15s poll (server-autopilot.tsx): bare setInterval dialing /api/automation/sync with zero visibility awareness — a backgrounded tab kept firing ~240 GETs/hour against the local server forever, and on return the panel could sit on up-to-15s stale state until the next tick.
+- SHIPPED (server-autopilot.tsx): interval ticks now no-op while document.hidden (zero network in hidden tabs) + visibilitychange listener refetches the moment the tab returns (fresh countdowns/lane badges instead of one tick late). Cleanup removes the listener.
+- QA (scripts/cdp-qa-autopilot-poll.mjs, new I-series, 5 checks): wraps window.fetch with a sync-GET counter BEFORE the Workflows view mounts, then I1 mount poll fires; I2 ≥1 more GET over 16s visible (interval alive); I3 forces document.hidden=true + dispatches visibilitychange → 16s with ZERO new GETs (two interval ticks suppressed); I4 flips visible → GET lands within 2.5s (no stale window); I5 vault-lane chip (state non-null render gate) present after return. Screenshot ops/qa/I-autopilot-visibility-poll.png reviewed: "bridge sync just now" stamp from the return refetch, next-fire countdown + lane chip + classified run history, no layout regression.
+- VERIFIED: 5/5 I-series PASS; tsc app src/ = 0 (the lone "src/" rg hit was skills/stock-analysis-skill/... — noise zone); eslint clean; note: the hidden-tab simulation overrides document.hidden/visibilityState descriptors in-page (harness-only, session-scoped).
+
+Stage Summary:
+- The last always-on client poller is now visibility-aware: hidden tabs cost zero sync traffic, and returning to the tab shows fresh state immediately. Vault GET measured and acquitted — the two-fetch audit the handoff asked for is complete with one real fix and one documented non-issue.
+
+Round Handoff:
+Round ID: r142
+Task owner: main (platform dev)
+Scope completed: clickable-card sweep (clean, closed) + autopilot visibility-aware poll + I-series QA (5/5) + screenshot; snapshot pushed.
+User-visible changes: leaving the Workflows tab open in the background no longer generates sync traffic; switching back to the tab shows fresh countdowns/lane badges instantly instead of up to 15s late.
+Verification steps: 5/5 fetch-counter assertions + screenshot review; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: other pollers? A quick rg found no other setInterval-fetch client loops (chat streaming is event-driven; scheduler bridge sync is 60s and only runs while its own view lives — same hidden-tab exposure applies there IF it is an interval; worth a 2-minute check next round before touching).
+Blockers: none
+Next recommended action: r142 — rotate surfaces: (a) 2-min audit of the 60s scheduler-bridge sync poll for the same visibility exposure (fix only if it is an unguarded interval-fetch), then (b) Chat composer/message-item polish (last fresh surface), or (c) perf: wrap radar fetches' error paths with the same no-refetch-while-hidden lens. Do NOT touch radar/vault internals without a live bug.
