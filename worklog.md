@@ -3593,3 +3593,29 @@ Verification result: PASS
 Open risks: chip copy is QA-anchored (C2/C4 assert the text — copy changes fail loudly by design); the masked-key rendering couples chip text to the sync route's mask() (a mask change requires updating QA_MASK in the C-series).
 Blockers: none
 Next recommended action: r135 — vault epic finale: the r132-descoped "Test key" verify button on the Automation vault card (store key → button POSTs /api/vault/consume exactly as the external scheduler would → asserts the raw key returns → reports masked OK, no key ever rendered). Alternatively rotate surfaces: error handling / docs / perf.
+---
+Task ID: 424432 — r135
+Agent: main (platform development — hourly dev round)
+Task: r134 handoff — vault epic finale: the r132-descoped "Test key" verify button on the Automation vault card.
+
+Work Log:
+- Honest scope re-derived before building: a real LLM dial with the vault key is NOT possible in-repo (the builtin engine lane is environment-credentialed, takes no config — r133 finding), so the button verifies the REAL thing it can: the handoff contract the external scheduler depends on. This retires the r132 descope rationale ("a test button would verify nothing real") — /api/vault/consume now exists to verify against.
+- SHIPPED (1 component):
+  1. automation-vault-card.tsx: cyan "Test key" button (FlaskConical icon, rendered only when a builtin key exists) → POSTs /api/vault/consume {provider:"builtin"} EXACTLY as the external scheduler would → round-trips the returned raw key through the same mask() as the API → compares with the displayed masked preview. Success toast "Vault key verified" carries the MASKED key only; mismatch → "Key round-trip mismatch" error with a re-store hint; 404 → "No key to test". In-file comment documents what the test proves (endpoint reachable, slot readable, key intact) and what it does NOT (an actual LLM dial). The raw key is never rendered, never logged.
+- QA (scripts/cdp-qa-vault-test.mjs, new D-series, 7 checks): D1a API store; D1b button renders with key; D1c click → verified toast with mask qa-r••••2xyz; D1d RAW key appears NOWHERE in document.body.innerText; D2a API delete; D2b guard — after reload with no key the button is ABSENT and the honest empty state renders; D3 vault left EMPTY. Same CDP harness lessons (hydration retry-click, new-tab boot).
+- VERIFIED: 7/7 D-series PASS on first run; tsc src/ = 0; eslint clean; screenshot ops/qa/D1-test-key-toast.png visually reviewed (toast text + mask visible, no raw key anywhere).
+- Vault epic arc now closes end-to-end: store (Settings card) → at-a-glance status (ServerAutopilot chip, r134) → consume (scheduler handoff, r133) → verify (this round).
+
+Stage Summary:
+- The Local Automation Vault epic (r123 → r135) is feature-complete at the in-repo boundary. Remaining work is OUT of this repo: teach the external scheduler mini-service to call /api/vault/consume when claiming due workflows (it currently dials the shared lane).
+
+Round Handoff:
+Round ID: r136
+Task owner: main (platform dev)
+Scope completed: Test key verify button + D-series behavioral QA (7/7); snapshot pushed.
+User-visible changes: vault card gains a one-click "Test key" that proves the headless handoff returns the stored key intact (masked-only display).
+Verification steps: 7/7 DOM/API assertions + screenshot review; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: toast copy is QA-anchored (D1c/D2b assert text — copy changes fail loudly by design); the button's round-trip check trusts GET /api/vault's maskedKey (both derive from the same DB row, so a true corruption of the row would be caught only if mask(raw) ≠ mask(displayed) — i.e. partial corruption; full-row corruption is undetectable client-side).
+Blockers: none
+Next recommended action: r136 — ROTATE SURFACES away from the vault (epic complete): (a) error handling polish, (b) docs (a short "Local automation" README section covering the vault lane + headless contract), or (c) performance. Rotate per the no-grinding rule; vault work is done unless the external scheduler integration surfaces bugs.

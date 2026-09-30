@@ -10,7 +10,15 @@
 // user's own quota instead. GET never returns the raw key — masked preview.
 
 import * as React from "react";
-import { Eye, EyeOff, KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  FlaskConical,
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +49,7 @@ export function AutomationVaultCard() {
   const [key, setKey] = React.useState("");
   const [showKey, setShowKey] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [testing, setTesting] = React.useState(false);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
 
   const load = React.useCallback(async () => {
@@ -110,6 +119,57 @@ export function AutomationVaultCard() {
     } finally {
       setSaving(false);
       setConfirmRemove(false);
+    }
+  }
+
+  // r135: the vault epic's verify affordance (descoped in r132 when the key
+  // had NO consumer to prove anything against). What this test verifies —
+  // honestly: the EXACT handoff the external headless scheduler depends on.
+  // It POSTs /api/vault/consume as the scheduler would, then round-trips the
+  // returned raw key through the same mask() the API uses and compares with
+  // the displayed masked preview. A match proves: endpoint reachable, slot
+  // readable, key intact end-to-end. What it does NOT verify: a real LLM
+  // dial — the builtin lane is environment-credentialed in-repo; dialing
+  // with the key is the external scheduler's job. The raw key is never
+  // rendered, never logged — only the masked form ever reaches the UI.
+  async function testKey() {
+    if (!builtin) return;
+    setTesting(true);
+    try {
+      const res = await fetch("/api/vault/consume", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "builtin" }),
+      });
+      if (res.status === 404) {
+        toast.error("No key to test", {
+          description: "The vault slot vanished — store a key first.",
+        });
+        return;
+      }
+      const json = (await res.json()) as { ok?: boolean; key?: string; error?: string };
+      if (!res.ok || !json.ok || typeof json.key !== "string" || json.key.length === 0) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      const raw = json.key;
+      const masked =
+        raw.length > 12 ? `${raw.slice(0, 4)}••••${raw.slice(-4)}` : "••••••••";
+      if (masked !== builtin.maskedKey) {
+        toast.error("Key round-trip mismatch", {
+          description:
+            "The handoff endpoint returned a key that does not match the stored slot — re-store the key.",
+        });
+        return;
+      }
+      toast.success("Vault key verified", {
+        description: `The headless handoff returns it intact (${masked}) — closed-tab runs will dial with it.`,
+      });
+    } catch (e) {
+      toast.error("Key test failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -205,6 +265,23 @@ export function AutomationVaultCard() {
               )}
               {builtin ? "Update" : "Store"}
             </Button>
+            {builtin ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={testKey}
+                disabled={testing || saving}
+                title="Dials /api/vault/consume exactly as the external headless scheduler would, and verifies the stored key comes back intact — the raw key is never shown."
+                className="shrink-0 border-cyan-500/40 text-cyan-600 transition-colors hover:bg-cyan-500/10 hover:text-cyan-600 dark:text-cyan-400"
+              >
+                {testing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <FlaskConical className="h-3.5 w-3.5" aria-hidden />
+                )}
+                Test key
+              </Button>
+            ) : null}
             {builtin ? (
               <Button
                 type="button"
