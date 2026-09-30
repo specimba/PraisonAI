@@ -234,7 +234,14 @@ export function ModelTicker() {
           </button>
         </PopoverTrigger>
 
-        {/* Marquee — duplicated track for a seamless loop, decorative copy hidden */}
+        {/* Marquee — duplicated track for a seamless loop, decorative copy hidden.
+            r148 MEASURED verdict (scripts/cdp-qa-ticker-perf.mjs, N-series 5/5):
+            this is a pure compositor animation — ΔLayout=0, ΔScript≈22ms/2.5s,
+            ΔNodes=0 over the window, RAF locked at 16.7ms, 0 long tasks, and
+            RecalcStyleCount identical with the animation running vs paused
+            (8 vs 8 per 1.5s). The frame-rate style recalc seen under an active
+            rAF loop is instrument reactivity, NOT ticker cost. Do not "fix"
+            this marquee without new live evidence it hurts. */}
         <div className="relative min-w-0 flex-1 overflow-hidden" aria-hidden>
           <div className="ticker-track flex w-max items-center gap-6 whitespace-nowrap">
             {[0, 1].map((dup) => (

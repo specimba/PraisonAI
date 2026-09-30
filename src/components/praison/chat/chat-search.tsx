@@ -4,7 +4,10 @@ import * as React from "react";
 import { CornerDownLeft, MessageSquare, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fmtTime, truncate } from "@/lib/helpers";
+// r148: search hits now use the r146 fmtChatTime branches (bare HH:MM only for
+// today; "Yesterday HH:MM"; "Aug 21, 01:30 PM" older) — a 3-day-old hit used to
+// render a context-free "14:32". Hover title gives the absolute moment.
+import { fmtChatTime, fmtChatTimeFull, truncate } from "@/lib/helpers";
 import type { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -155,8 +158,11 @@ export function ChatSearch({ open, messages, onClose }: ChatSearchProps) {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="text-xs font-semibold">{h.who}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {fmtTime(h.time)}
+                      <span
+                        className="text-[10px] text-muted-foreground"
+                        title={fmtChatTimeFull(h.time)}
+                      >
+                        {fmtChatTime(h.time)}
                       </span>
                     </span>
                     <span className="mt-0.5 block truncate text-xs leading-relaxed text-muted-foreground">

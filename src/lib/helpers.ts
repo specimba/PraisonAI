@@ -27,10 +27,6 @@ export function titleFrom(text: string): string {
   return truncate(clean, 42) || "New chat";
 }
 
-export function fmtTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 /**
  * Chat timestamp (r146): bare "14:32" is meaningless three days later, so
  * today keeps the bare time, yesterday gets a label, anything older gets a
@@ -248,7 +244,7 @@ export function conversationToMarkdown(conv: Conversation): string {
     const who = m.role === "user" ? "You" : m.agentName ?? "Assistant";
     lines.push(
       "",
-      `### ${m.role === "user" ? "🧑" : "🤖"} ${who} · ${fmtTime(m.createdAt)}`,
+      `### ${m.role === "user" ? "🧑" : "🤖"} ${who} · ${fmtChatTimeFull(m.createdAt)}`,
       "",
       m.content.trim() || "_(no content)_"
     );
