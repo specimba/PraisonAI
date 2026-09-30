@@ -4077,3 +4077,29 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; README will drift if views are renamed (mitigation: claims are grep-able, views table cites shell.tsx as source of truth).
 Blockers: none
 Next recommended action: r153 — rotate: (a) unused-deps removal: @dnd-kit/* (3 packages, zero src imports — verify no dynamic/resolver usage first, then drop from package.json and lockfile), or (b) the vault card "reveal-once" small feature from r151's handoff (still undone; needs a threat-model note), or (c) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r153
+Agent: main (platform development — hourly dev round)
+Task: r152 handoff — (a) unused-deps removal: @dnd-kit/* (verify no dynamic/resolver usage first, then drop from package.json and lockfile).
+
+Work Log:
+- Start-of-round discipline: divergence 0/0 (clean sync), health 200 warm, no user reports → handoff order followed.
+- SAFETY SWEEP: repo-wide rg for "dnd-kit" outside node_modules/lockfile/manifest = ZERO references (src, scripts, all configs). Removed @dnd-kit/{core,sortable,utilities}; bun install synced lockfile ("3 packages removed").
+- VALUE-ADD (same verification class): built scripts/dep-usage-scan.mjs (zero-import scanner: walks src/ + scripts/ + root configs, regex over import specifiers incl. subpaths). 65 deps scanned → 10 zero-import candidates. SCANNER SELF-CHECK: 9/9 findings confirmed by direct rg spot-checks (mdxeditor, syntax-highlighter, date-fns, react-query, react-table, next-auth, next-intl, reactuses, hookform/resolvers = all 0 hits).
+- REMOVED the 9 verified candidates (65 → 56 deps). KEPT react-dom despite zero direct imports — it is Next.js's required peer in App Router (internal imports, never first-party). NOTE: react-hook-form itself stays (has importers); only @hookform/resolvers was dead.
+- VERIFIED: tsc full-project filtered → src/ errors = 0 (6 pre-existing errors all in non-app dirs: examples/websocket, scripts/hang-server.ts, skills/* — untouched, out of scope); eslint 0 errors / 18 pre-existing warnings; health 200 (0.03s) on slimmed node_modules.
+- CLI TRIVIA FOR FUTURE ROUNDS: `tsc --noEmit src` now fails TS6231 (bunx AND local 5.9.3 binary) — the reliable src-scoped check is full `tsc --noEmit` filtered to ^src/ (one line, honest).
+
+Stage Summary:
+- Dependency hygiene shipped: 12 packages removed in total (3 dnd-kit + 9 verified scaffold leftovers incl. next-auth/next-intl/tanstack that never made it into the app). Install surface and lockfile shrink; zero behavior change, proven by tsc/eslint/live-boot gate.
+
+Round Handoff:
+Round ID: r154
+Task owner: main (platform dev)
+Scope completed: dnd-kit removal + repo-wide zero-import audit + 9 further verified removals + reusable scripts/dep-usage-scan.mjs; snapshot pushed.
+User-visible changes: none in-app (pure dependency hygiene); faster installs for anyone cloning the repo.
+Verification steps: node scripts/dep-usage-scan.mjs → 0 remaining candidates; tsc --noEmit | rg ^src/ → 0; bun run lint → 0 errors; curl root → 200.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; pre-existing 6 tsc errors in non-app dirs (examples/skills) remain out of scope; a future dep addition must be grep-checked on arrival (scanner exists now).
+Blockers: none
+Next recommended action: r154 — rotate: (a) the vault card "reveal-once" small feature from r151's handoff (twice queued now; needs a threat-model note), or (b) fix or quarantine the 6 pre-existing tsc errors in non-app dirs (examples/skills) so `tsc --noEmit` is fully green — decide: fix socket.io import (examples), @types/bun dev-dep (hang-server), or exclude non-app dirs from tsconfig, or (c) root-cause FIRST any user report. Keep rotating.
