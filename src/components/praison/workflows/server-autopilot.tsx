@@ -5,6 +5,7 @@ import {
   Bot,
   CircleDot,
   Clock,
+  KeyRound,
   RefreshCw,
   RadioTower,
   Server,
@@ -13,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useUiStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 // r116: transient = environmental noise (429 congestion, socket blips, the app
@@ -46,11 +48,20 @@ type RunRow = {
   startedAt: string;
   finishedAt: string | null;
 };
+type VaultLaneState = {
+  hasKey: boolean;
+  maskedKey: string | null;
+  updatedAt: string | null;
+};
 type SyncState = {
   serverDriving: boolean;
   lastSeenAt: string | null;
   registry: RegistryRow[];
   runs: RunRow[];
+  // r134: the sync GET reports the AutomationVault lane so the panel shows
+  // WHAT closed-tab runs will dial with — the user's stored key (masked) or
+  // the shared built-in gateway. Optional: tolerant of older responses.
+  vaultLane?: VaultLaneState;
 };
 
 const POLL_MS = 15_000;
@@ -118,6 +129,14 @@ export function ServerAutopilot() {
 
   const driving = state?.serverDriving === true;
   const active = state?.registry.filter((r) => r.enabled) ?? [];
+  const vaultKeyMasked =
+    state?.vaultLane?.hasKey === true ? (state.vaultLane.maskedKey ?? null) : null;
+  // r134: chip deep-links to the vault card (same r125 pattern the workflow
+  // cards use) so the fix for a missing key is one click away.
+  const openVault = React.useCallback(() => {
+    useUiStore.getState().setView("settings");
+    useUiStore.getState().setSettingsAnchor("vault");
+  }, []);
   const nextFire =
     active
       .map((r) => r.nextRunAt)
@@ -177,6 +196,29 @@ export function ServerAutopilot() {
             <Timer className="h-2.5 w-2.5" aria-hidden />
             next fire {fmtIn(nextFire)}
           </span>
+        ) : null}
+        {state ? (
+          <button
+            type="button"
+            onClick={openVault}
+            title={
+              vaultKeyMasked
+                ? `Closed-tab runs dial with your stored key ${vaultKeyMasked} (Automation vault). Click to manage.`
+                : "Closed-tab runs share the built-in gateway (rate-limited). Click to store a vault key."
+            }
+            aria-label="Headless lane key status"
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] transition-colors",
+              vaultKeyMasked
+                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:border-cyan-500/60 hover:bg-cyan-500/15"
+                : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:border-amber-500/60 hover:bg-amber-500/15"
+            )}
+          >
+            <KeyRound className="h-2.5 w-2.5" aria-hidden />
+            {vaultKeyMasked
+              ? `headless lane: your key ${vaultKeyMasked}`
+              : "headless lane: shared lane"}
+          </button>
         ) : null}
         <Button
           variant="ghost"

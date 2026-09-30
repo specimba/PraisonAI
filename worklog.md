@@ -3566,3 +3566,30 @@ Verification result: PASS (contract verified live; external service integration 
 Open risks: consume endpoint returns the raw key to any localhost caller — same trust domain as the DB itself, but if the app ever gains a remote-exposed deployment this endpoint MUST gain auth first; external scheduler does not call consume yet (integration unknown).
 Blockers: none
 Next recommended action: r134 — (a) surface vaultLane in the ServerAutopilot panel UI (small chip: "headless lane: your key" vs "shared lane", deep-linking to #vault); (b) then/alternatively the r132-descoped "Test key" verify affordance, or rotate surfaces entirely (error handling / docs / perf).
+---
+Task ID: 424432 — r134
+Agent: main (platform development — hourly dev round)
+Task: r133 handoff — surface the vault lane in the ServerAutopilot panel UI (chip: "your key" vs "shared lane", deep-linking to the vault card).
+
+Work Log:
+- Pre-flight: worklog tail showed r133 was ALREADY executed (640da898f — /api/vault/consume endpoint + vaultLane in sync GET) by a prior session; adopted its handoff (r134 = the UI chip) instead of re-doing r133.
+- False-alarm investigation, closed with evidence: a tool-display artifact made workflows-view.tsx:915 look like `}, ighlightId, clearHighlight]);` (missing `h`, missing `[`). Byte-level od -c check showed the real line is `}, [highlightId, clearHighlight]);` — file healthy, tsc clean. Nothing fixed (nothing was broken); noted so future rounds don't chase the same ghost.
+- SHIPPED (1 component + 1 QA script):
+  1. server-autopilot.tsx: vault-lane chip in the panel header — cyan KeyRound "headless lane: your key <maskedKey>" when the vault holds a builtin key, amber "headless lane: shared lane" when not; title tooltips state what closed-tab runs will dial with + the fix path; renders only after the first poll (no misleading pre-data state); SyncState gained an OPTIONAL vaultLane (tolerant of older responses).
+  2. The chip is a real affordance: onClick → setView("settings") + setSettingsAnchor("vault") — the r125 deep-link mechanism scrolls the Automation vault card into view. A missing/wrong key is now one click from its fix.
+- QA (scripts/cdp-qa-vault-chip.mjs, new C-series, 7 checks): C1 API store→sync masked roundtrip; C2 chip renders "your key qa-r••••9abc"; C3 chip click → Settings → #vault card in viewport (top=144px, card text confirmed); C4 DELETE → panel Refresh click → chip flips to "shared lane"; C5 vault left EMPTY afterwards (r133 no-residue discipline). Reuses r132 harness lessons (hydration retry-click, new-tab CDP boot, persistent-profile caveats).
+- VERIFIED: 7/7 C-series PASS on first run; tsc src/ = 0; eslint touched file clean; screenshots ops/qa/C2-vault-chip.png + C3-vault-deeplink.png visually reviewed (chip in header row; Vault tab active; card scrolled into view).
+
+Stage Summary:
+- The vault epic's UI loop closes: the panel that pilots the headless layer now states WHICH credential closed-tab runs will use, at a glance, and deep-links to where to change it. r132's descoped "Test key" affordance is the epic's last piece — now unblocked, since /api/vault/consume gives it something real to verify against.
+
+Round Handoff:
+Round ID: r135
+Task owner: main (platform dev)
+Scope completed: vaultLane chip + deep-link in ServerAutopilot; C-series behavioral QA (7/7); snapshot pushed.
+User-visible changes: ServerAutopilot header now shows the headless-lane credential state (your key vs shared lane) with a one-click path to the vault card.
+Verification steps: 7/7 DOM/API assertions + 2 screenshot reviews; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: chip copy is QA-anchored (C2/C4 assert the text — copy changes fail loudly by design); the masked-key rendering couples chip text to the sync route's mask() (a mask change requires updating QA_MASK in the C-series).
+Blockers: none
+Next recommended action: r135 — vault epic finale: the r132-descoped "Test key" verify button on the Automation vault card (store key → button POSTs /api/vault/consume exactly as the external scheduler would → asserts the raw key returns → reports masked OK, no key ever rendered). Alternatively rotate surfaces: error handling / docs / perf.
