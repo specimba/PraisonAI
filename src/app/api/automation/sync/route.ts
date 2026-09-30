@@ -82,17 +82,27 @@ export async function POST(req: Request) {
 
 export async function GET() {
   try {
-    const [state, registry, runs] = await Promise.all([
+    const [state, registry, runs, vaultSlot] = await Promise.all([
       db.automationState.findUnique({ where: { id: "singleton" } }),
       db.automationWorkflow.findMany({ orderBy: { name: "asc" } }),
       db.automationRun.findMany({ orderBy: { startedAt: "desc" }, take: 25 }),
+      // r133: expose the vault lane state so the ServerAutopilot panel (and
+      // any driver) knows whether closed-tab runs will dial with the user's
+      // own key or the shared builtin lane. Masked only — never the raw key
+      // (the raw handoff lives at POST /api/vault/consume for the service).
+      db.automationVault.findUnique({ where: { provider: "builtin" } }),
     ]);
     const lastSeen = state?.lastSeenAt?.getTime() ?? 0;
+    const mask = (k: string) =>
+      k.length > 12 ? `${k.slice(0, 4)}••••${k.slice(-4)}` : "••••••••";
     return NextResponse.json({
       serverDriving: Date.now() - lastSeen > HEARTBEAT_STALE_MS,
       lastSeenAt: state?.lastSeenAt ?? null,
       registry,
       runs,
+      vaultLane: vaultSlot
+        ? { hasKey: true, maskedKey: mask(vaultSlot.key), updatedAt: vaultSlot.updatedAt }
+        : { hasKey: false, maskedKey: null, updatedAt: null },
     });
   } catch (e) {
     return NextResponse.json(
