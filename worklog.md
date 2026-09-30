@@ -3938,3 +3938,33 @@ Verification result: PASS
 Open risks: divergence WILL recur while the parallel sandbox doesn't pull fork/main — start every round with local-vs-fork/main check; r142's real-world validation still pending user evidence; relay lane was flaky at r146 ((interrupted) reply) — watch for user reports.
 Blockers: none
 Next recommended action: r148 — rotate: (a) model-tracker ticker perf measurement (their r144 option (c) — MEASURE first, only fix on evidence), or (b) chat-search fmtTime → fmtChatTime consistency (trivial, helpers already shipped), or (c) live-paste root-cause FIRST if the user reports anything.
+---
+Task ID: 424432 — r148
+Agent: main (platform development — hourly dev round)
+Task: r147 handoff — (a) model-tracker ticker perf MEASURE first, (b) chat-search fmtTime consistency.
+
+Work Log:
+- Start-of-round discipline held: local HEAD == fork/main == 63ff8c084 (r147's commit, shipped by the parallel session at 22:27) — ZERO divergence for the first time in 3 rounds; no recovery needed. Health: 200 (14.2s first-compile TTFB, dev-server cold path, not chased per r142 doctrine).
+- MEASUREMENT (a) — new N-series harness (scripts/cdp-qa-ticker-perf.mjs), 3 atomic chrome runs, final 5/5:
+  N0 ticker running (ticker-scroll 55s confirmed). N1 over a 2.5s window with an active RAF sampler: ΔLayout=0, ΔScript=22ms, ΔNodes=0 → the handoff's "re-renders a marquee continuously" hypothesis DISPROVEN.
+  N1b is the round's honest-measurement story in three acts: v1 JS-proxy (RAF-wait timing) had no discriminating power (16.45 vs 16.65ms — frame-dominated); v2 CDP ΔStyle A/B showed running=7 paused=7/1.5s, REVEALING the frame-rate ΔStyle in N1 (151/2.5s) was MY SAMPLER's RAF loop requesting frames — instrument reactivity, not animation cost. Final contract: running ≈ paused with no RAF polling → the marquee drives ZERO main-thread style work (pure compositor, will-change doing its job).
+  N2 RAF median 16.7ms / p95 16.8 / max 16.8. N3 zero long tasks. N4 recorded-only: ~20% of one core for the whole chrome tree (headless software compositing — not representative of GPU; no verdict).
+- VERDICT: no perf fix needed. Wrote the measured verdict as an in-code doctrine comment on the marquee (model-ticker.tsx) so nobody blindly "optimizes" it later — same pattern as the r144/r145 visibility semantics.
+- SHIPPED (b) chat-search timestamp consistency (src/components/praison/chat/chat-search.tsx): search hits used bare HH:MM for hits of ANY age (a 3-day-old hit read "14:32" with no context) → now fmtChatTime branches + hover title with fmtChatTimeFull, consistent with r146/r147.
+- Dead-code completion: chat-search was the LAST fmtTime caller → removed fmtTime from helpers.ts entirely. tsc then caught a hidden in-file caller my earlier rg glob missed: conversationToMarkdown (chat export) — fixed to fmtChatTimeFull, which is the CORRECT semantics for exports (a transcript archive should carry absolute moments, not UI-relative shorthand). Genuine improvement, not just repair.
+- VERIFIED: tsc src/ = 0; eslint clean on all touched files; zero fmtTime refs remain (fmtChatTime/fmtChatTimeFull/fmtListTime are now the single timestamp system); N-series 5/5 live; screenshot ops/qa/N-ticker-perf.png reviewed (ticker strip rendering lanes + "synced 3m ago", sidebar "just now" from r147, app clean).
+
+Stage Summary:
+- The ticker suspicion is closed with numbers, not taste: pure compositor animation, main-thread cost ~0. The measurement harness itself is the reusable artifact — including the lesson that an active RAF sampler distorts RecalcStyleCount (measure isolation windows without it).
+- Timestamp system is now unified: message headers + user bubbles (r146), sidebar rows (r147), search hits + exports (r148), with fmtTime deleted.
+
+Round Handoff:
+Round ID: r149
+Task owner: main (platform dev)
+Scope completed: ticker perf spike (measured verdict, no fix needed) + chat-search/export timestamp consistency + fmtTime removal; N-series 5/5; snapshot pushed (6de9f0aaf).
+User-visible changes: search hits and exported transcripts now carry honest timestamps (dated when old, absolute on hover/export).
+Verification steps: node scripts/cdp-qa-ticker-perf.mjs (fresh chrome, atomic) → 5/5; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: r142 real-world validation still pending user evidence; parallel-session divergence can recur (start every round with local-vs-fork/main check — held clean this round).
+Blockers: none
+Next recommended action: r149 — rotate surfaces (3 chat rounds in a row now): (a) vault epic progress (LOCAL_AUTOMATION.md drift or /api/vault/consume auth guard — long-standing debt from r123+), or (b) agents/workflows surface audit with the r139 lens (aria/keyboard coverage — never audited), or (c) perf measure the model-tracker PANEL mount cost (60 TickerRows) only if a user reports jank. Keep rotating.
