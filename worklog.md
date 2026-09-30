@@ -3968,3 +3968,29 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending user evidence; parallel-session divergence can recur (start every round with local-vs-fork/main check — held clean this round).
 Blockers: none
 Next recommended action: r149 — rotate surfaces (3 chat rounds in a row now): (a) vault epic progress (LOCAL_AUTOMATION.md drift or /api/vault/consume auth guard — long-standing debt from r123+), or (b) agents/workflows surface audit with the r139 lens (aria/keyboard coverage — never audited), or (c) perf measure the model-tracker PANEL mount cost (60 TickerRows) only if a user reports jank. Keep rotating.
+---
+Task ID: 424432 — r149
+Agent: main (platform development — hourly dev round)
+Task: r148 handoff — (a) vault epic debt: LOCAL_AUTOMATION.md drift fact-check, (b) agents/workflows a11y audit (deferred).
+
+Work Log:
+- Start-of-round discipline: local ahead of fork/main by exactly ONE local-only commit (05a5af1db, cron-titled, worklog-only, 30 lines = my own r148 worklog section committed by the platform's cron autosave at 23:34). Not a parallel-session collision; folded into this round's push. Health: 200 (13.9s cold-compile).
+- Chose (a) over (b): /api/vault/consume "real auth" debt turned out ALREADY RESOLVED by r138 (localhost-only guard with proxy-header rejection, enforced, honestly caveated as defense-in-depth in-code) — the worklog debt line was stale, not the code. The REAL gap was docs/LOCAL_AUTOMATION.md, fact-checked "as-of r136" with 12 rounds of drift since.
+- FACT-CHECK of every claim in the doc (9 claims, all verified against code): SYNC_INTERVAL_MS=60_000 ✓, HEARTBEAT_STALE_MS=120_000 ✓, GET sync shape {serverDriving,lastSeenAt,registry,runs,vaultLane} ✓ verified LIVE via curl against the dev server, runs take:25 ✓, r138 consume guard header list ✓ (route.ts re-read line-by-line), run-now nextRunAt+enabled:true ✓, TRANSIENT_RE timeout coverage ✓, digest strings ✓ (workflow-run-panel.tsx:148-150), mask format ✓.
+- SHIPPED (docs/LOCAL_AUTOMATION.md): (1) new "heartbeat visibility doctrine" subsection — hidden tabs KEEP heartbeating (liveness claim, deliberately NOT visibility-gated, Chromium throttling ≥1/min satisfies the 120s window) + resync-on-return closing the lane-handback window — the r144/r145 semantics that were only in-code until now; (2) GET sync row now documents the r141 poll mirror (pause hidden + refetch on return); (3) file path corrected to src/components/praison/workflows/automation-bridge.tsx; (4) footer fact-check stamp as-of r149 with the full verified-claims list + blast-radius warning (per the r136 drift-risk note).
+- Two self-caught process slips this round, recorded: `rg -r` flag misuse twice (replace-mode swallowed match text — outputs mangled, caught by cross-checking), and a typo introduced by my own doc edit ("stands for down"), caught on read-back and fixed before commit.
+- VERIFIED: docs-only round — no tsc/eslint surface touched; the fact-check IS the verification (each claim traced to a line of code this round, one contract verified live).
+
+Stage Summary:
+- The vault epic's oldest debt item is closed: the automation doc now tells the truth about the two-lane visibility semantics (deliberately OPPOSITE behaviors, both documented) and carries a dated fact-check stamp so future drift is detectable. Debt line "/api/vault/consume needs real auth" downgraded to what r138 actually left it: a documented, deliberate limit.
+
+Round Handoff:
+Round ID: r150
+Task owner: main (platform dev)
+Scope completed: LOCAL_AUTOMATION.md full fact-check + visibility-doctrine documentation; snapshot pushed (7302f0c43).
+User-visible changes: none in-app (docs accuracy); future rounds touching automation endpoints now have an accurate contract to break loudly.
+Verification steps: claim-by-claim code trace (9/9) + live curl of GET /api/automation/sync shape match.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; doc drift CAN recur — the footer stamp makes it detectable; parallel-session divergence watch continues.
+Blockers: none
+Next recommended action: r150 — (b) from r148's handoff, never yet done: agents/workflows surface audit with the r139 lens (aria/keyboard coverage — the last major surfaces never audited), or (a2) if a user reports anything automation-related, root-cause FIRST. Do not touch TTFB constants without live evidence.
