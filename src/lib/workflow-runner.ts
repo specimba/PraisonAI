@@ -608,14 +608,25 @@ export async function executeWorkflowRun(
           useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: 0 } });
         } else if (status === "error" && sched.enabled) {
           const streak = (sched.failStreak ?? 0) + 1;
-          if (streak >= 3) {
+          // r156 (user report: hourly pipeline 0/11 for 19h): a rate-limit
+          // failure is the SHARED gateway saying "back off" — the whole lane
+          // is throttling (repro: 3×429 "Too many requests" → step dies →
+          // stopRemaining → 0-1/11). The old ladder re-fired in 10-30m and
+          // burned more quota against a saturated lane. Now: rate-limit
+          // failures trip the breaker at 2 consecutive (vs 3 for other
+          // kinds) and back off exponentially (2× interval per streak,
+          // capped 6h) so the schedule stops feeding the congestion.
+          const rateLimited = errorInfo?.kind === "rate-limit";
+          if (streak >= (rateLimited ? 2 : 3)) {
             useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: streak, enabled: false } });
-            toast.warning("Schedule auto-paused after 3 consecutive failures", {
+            toast.warning(rateLimited ? "Schedule auto-paused — provider rate-limited twice" : "Schedule auto-paused after 3 consecutive failures", {
               icon: "🛑",
-              description: `${wf.name} — the pipeline keeps failing at "${errorInfo?.stepLabel ?? "a step"}". Fix it, then re-enable the schedule.`,
+              description: `${wf.name} — ${rateLimited ? "the gateway keeps saying 429; hammering it only burns quota. " : ""}The pipeline keeps failing at "${errorInfo?.stepLabel ?? "a step"}". Fix it, then re-enable the schedule.`,
             });
           } else {
-            const retryIn = Math.min(Math.max(60_000, sched.intervalMs), streak === 1 ? 10 * 60_000 : 30 * 60_000);
+            const retryIn = rateLimited
+              ? Math.min(sched.intervalMs * 2 ** streak, 6 * 60 * 60_000)
+              : Math.min(Math.max(60_000, sched.intervalMs), streak === 1 ? 10 * 60_000 : 30 * 60_000);
             useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: streak, nextRunAt: Date.now() + retryIn } });
           }
         }

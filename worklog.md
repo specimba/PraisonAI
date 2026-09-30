@@ -4158,3 +4158,32 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; tsconfig exclusions are documented but a future websocket lane must un-exclude examples/ (or write fresh code); bun-types drift may surface more API removals later (that's the gate working).
 Blockers: none
 Next recommended action: r156 — rotate: (b) perf/error-handling pass on a never-measured surface — radar view mount (radar cards + HF proxy + papers list, never measured like workflows was in r151), or (a2) a user-facing small feature if one surfaces, or (c) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: USER-REPORT-r156
+Agent: main (platform development — hourly dev round)
+Task: USER REPORT (root-cause FIRST): the hourly "Continuous Research, Evaluation, and Opportunity Pipeline" — 12 runs, nearly all ending 0/11 steps done in 204-449s; user pasted the full Workflows view state + a Google Docs link to the task plan.
+
+Work Log:
+- Ground truth hunt: AutomationRun table EMPTY (all runs are browser-lane; server lane never fired — "No server runs yet"). Bridge snapshots confirmed the workflow registered (wf_b2f0beed3389, 9 authored steps, deep depth → 11 RUN steps — "0/11" math checks: deep injects 2 research passes; no step-count bug).
+- dev.log evidence: web_search upstream failing (serper 429/400 via z-ai backend). LIVE curl of /api/tools/execute: web_search primary 429 BUT the r90 ladder auto-fell back to arxiv_search and returned content — search is DEGRADED, NOT the step-killer.
+- REPRO (scripts/cdp-qa-pipeline-zero-steps.mjs, W-series): seeded a fresh CDP browser with 5 agents (model auto) + the user's 9-step pipeline (deep). RUN REPRODUCED THE SIGNATURE: step 1 done (89s) → step 2 "Deep research pass 2" → THREE consecutive 429s (4.9s/25s/70s, self-heal + relay exhausted) → failRun → stopRemaining → 9 steps stopped. Verbatim error: "API request failed with status 429: {error:Too many requests, please try again later}" · kind=rate-limit · llmLabel=Vyce AI · autoRetried=true. Call log also shows a Vyce mid-stream timeout (deepseek-v4.1, 101s) that self-heal absorbed.
+- ROOT CAUSE: the shared free gateway (Vyce AI lane) is rate-limiting globally. The runner's defenses (3 attempts, relay rotation, mid-stream demotion) are all correct but all land on the SAME congested tier; one exhausted step kills the run (stopRemaining), and the hourly schedule re-fired into the wall — burning quota 12×.
+- HISTORY DECODED: the run-history gaps prove the r29 breaker DID trip once (11h gap 15h→4h ago = auto-pause), then runs resumed (re-enable) and continued failing hourly. The 7104s run = a stall during a hidden-tab stretch.
+- SHIPPED FIX (src/lib/workflow-runner.ts finish() scheduled path): rate-limit errors are now first-class in the breaker — trip at 2 consecutive rate-limit failures (vs 3 for other kinds) with an explicit "the gateway keeps saying 429; hammering it only burns quota" toast, and non-tripping rate-limit failures back off exponentially (2× interval per streak, cap 6h) instead of the 10-30m quick-retry that feeds congestion.
+- OPS: the workflow-scheduler mini-service was DEAD in the sandbox (headless lane down — closed-tab fires and "Run on server" were no-ops). Restarted: "[autopilot] headless workflow scheduler up — tick 30s ±20% jitter".
+- VERIFIED: tsc --noEmit 0 errors; eslint clean on workflow-runner.ts; app 200; W-series repro artifact ops/qa/W-repro-final.png; scheduler live.
+
+Stage Summary:
+- The user's 0/11 mystery is solved with verbatim evidence: shared-gateway 429 saturation → step death → run abort → hourly re-hammering. The product now treats rate-limit failures as the distinct animal they are: 2-strike breaker + exponential backoff.
+- Open question for r157: the 4h→2h-ago runs re-armed at FULL interval despite errors — either the user re-enabled each time or something marks 0/11 runs "done" (the ledger's "1 done run" is suspicious). The new breaker will make any remaining hole visible fast.
+
+Round Handoff:
+Round ID: r157
+Task owner: main (platform dev)
+Scope completed: root-cause of the user's 0/11 pipeline runs (reproduced + verbatim) + rate-limit-aware breaker/backoff + scheduler service restart; snapshot pushed.
+User-visible changes: when the shared gateway rate-limits, schedules now back off exponentially and auto-pause after 2 consecutive 429-runs (with a clear toast) instead of re-firing hourly into the wall.
+Verification steps: node scripts/cdp-qa-pipeline-zero-steps.mjs (repro harness, reusable); tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: the gateway congestion itself is external (free tier) — the app can only back off gracefully; a "done" run with 0 steps done would defeat the breaker (unproven suspicion — r157 should verify run status accounting); the user's Google Docs plan link was not fetched (auth-required) — the pipeline task text works without it.
+Blockers: none
+Next recommended action: r157 — (1) audit run-status accounting: confirm no path finalizes a 0-steps-done run as "done" (ledger said 1 done run while history showed 0/11 durations — if found, that's the breaker-hole; the new rate-limit breaker makes it visible), (2) consider surfacing "run died at step N because <kind>" directly in the run-history rows (the user had to paste the whole UI to report this — the error text exists but isn't visible in the history list), (3) root-cause FIRST any user report.
