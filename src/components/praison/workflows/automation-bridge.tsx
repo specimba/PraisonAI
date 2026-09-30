@@ -91,9 +91,23 @@ export function AutomationBridge() {
 
     void sync(); // register immediately on mount
     const t = setInterval(sync, SYNC_INTERVAL_MS);
+    // r144: the hidden-tab heartbeat is INTENTIONALLY kept running — unlike
+    // the r141 autopilot poll, this POST is a liveness claim ("tab alive →
+    // server lane stands down"), and suppressing it while hidden would hand
+    // schedules to the shared built-in gateway the moment the user merely
+    // switches windows. What IS a real gap: on RETURN to a visible tab the
+    // next fresh heartbeat can be up to 60s away, and in that window the
+    // still-stale registration lets the headless lane claim a due run the
+    // tab lane is about to fire itself. Resync the instant the tab becomes
+    // visible again — lane handback lands when the user actually looks.
+    const onVisibility = () => {
+      if (!document.hidden) void sync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       stopped = true;
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisibility);
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, []);
