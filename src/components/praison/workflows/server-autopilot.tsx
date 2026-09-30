@@ -103,10 +103,25 @@ export function ServerAutopilot() {
     }
   }, []);
 
+  // r141: the bare interval used to dial /api/automation/sync every 15s even
+  // while the tab was hidden (user switches window for an hour → ~240 wasted
+  // GETs against the local server), and on return the panel could sit on
+  // up-to-15s stale state until the next tick. Poll only while the tab is
+  // visible; refetch the moment it becomes visible again so the countdowns
+  // and lane badges are fresh on return instead of one tick late.
   React.useEffect(() => {
     void poll();
-    const t = setInterval(poll, POLL_MS);
-    return () => clearInterval(t);
+    const onVisibility = () => {
+      if (!document.hidden) void poll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    const t = setInterval(() => {
+      if (!document.hidden) void poll();
+    }, POLL_MS);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [poll]);
 
   async function runNow(id: string, name: string) {
