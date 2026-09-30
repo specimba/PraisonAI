@@ -4129,3 +4129,32 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; reveal is eyes-only mitigation (documented) — if the app is ever exposed beyond localhost, real auth remains the blocker (r138 note).
 Blockers: none
 Next recommended action: r155 — rotate: (a) green the 6 pre-existing tsc errors in non-app dirs (examples/skills/scripts) so `tsc --noEmit` is fully clean (fix socket.io import, add @types/bun dev-dep, or exclude non-app dirs from tsconfig — decide honestly), or (b) perf/error-handling pass on a never-measured surface (radar view mount?), or (c) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r155
+Agent: main (platform development — hourly dev round)
+Task: r154 handoff — (a) green the 6 pre-existing tsc errors in non-app dirs so `tsc --noEmit` is fully clean.
+
+Work Log:
+- Start-of-round discipline: divergence 0/0, health 200 warm, no user reports → handoff order followed.
+- ERROR TRIAGE (6 errors, 3 groups, per-error honest decision):
+  * examples/websocket ×2 (socket.io / socket.io-client modules absent): the websocket lane was never shipped — the app's real-time needs run on polling lanes (autopilot 15s, tracker 15min, heartbeat). Installing socket.io for an unused example would undo r153's hygiene. → EXCLUDED examples/ from tsconfig (reversible, documented).
+  * skills/ ×2 (image-edit CreateImageEditBody, stock-analysis analyzer): external skill-system assets with their own runtime, not product code; fixing them risks breaking self-contained skill files. → EXCLUDED skills/ from tsconfig.
+  * scripts/hang-server.ts ×2 (Bun globals): an ACTIVE harness (r75 stall-watchdog companion). Honest fix = official types → `bun add -d @types/bun`.
+- REAL BUG UNDER THE TYPES: with @types/bun installed, Bun.serve finally type-checked and exposed that Bun.write's { append: true } option NO LONGER EXISTS in current bun-types — the forensic call log (the file's whole purpose per its v6 comment) would silently truncate on every call. Fixed: logCall now appends via node:fs/promises appendFile (Bun-compatible, identical semantics, .catch(() => {}) keeps fire-and-forget). Comment documents why.
+- LIVE BOOT-PROOF: bun scripts/hang-server.ts 4321 → GET /health = "hanging ok", call log line appended (2026-09-30T22:24:35 GET /health ua=curl/8.14.1 health). Harness survives the API migration.
+- VERIFIED: tsc --noEmit = 0 errors TOTAL (first fully-green run; was 6); eslint 0 errors / 18 baseline warnings; app health 200; hang-server live boot OK.
+
+Stage Summary:
+- `tsc --noEmit` is now an instant whole-repo regression gate: any future error that appears is NEW and belongs to the round that introduced it — no more src/ filtering archaeology (r153's TS6231 workaround becomes unnecessary too).
+- The @types/bun addition caught a real latent harness bug (Bun.write append option removal) — types-as-verification paid for itself immediately.
+
+Round Handoff:
+Round ID: r156
+Task owner: main (platform dev)
+Scope completed: tsc fully green (6 → 0) via per-group triage: @types/bun dev-dep + hang-server appendFile fix (real bug), examples/+skills/ excluded with rationale; snapshot pushed.
+User-visible changes: none in-app (dev-infra quality); future rounds get a trustworthy zero-noise tsc gate.
+Verification steps: tsc --noEmit → 0; bun scripts/hang-server.ts 4321 → /health ok + log appends; bun run lint → 0 errors; curl root → 200.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; tsconfig exclusions are documented but a future websocket lane must un-exclude examples/ (or write fresh code); bun-types drift may surface more API removals later (that's the gate working).
+Blockers: none
+Next recommended action: r156 — rotate: (b) perf/error-handling pass on a never-measured surface — radar view mount (radar cards + HF proxy + papers list, never measured like workflows was in r151), or (a2) a user-facing small feature if one surfaces, or (c) root-cause FIRST any user report. Keep rotating.

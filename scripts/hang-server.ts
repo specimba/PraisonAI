@@ -11,6 +11,10 @@
 // Pair with localStorage "praison-stall-timeout-ms" = 20000 and a custom
 // provider pointed at http://localhost:4319/v1 to watch the runner:
 // stall → watchdog abort → auto-resume 1/3 → stall → … → manual-resume card.
+// r155: call log now appends via node:fs/promises — Bun.write dropped its
+// { append: true } option in current bun-types, and silent truncation would
+// destroy the forensic call log this file exists to keep.
+import { appendFile } from "node:fs/promises";
 const port = Number(process.argv[2] ?? 4319);
 
 // v5 (18:23 round): CORS everywhere — the browser-direct lane fetches this
@@ -34,12 +38,11 @@ Bun.serve({
     // lane fetches carry the browser UA; server relay carries a Node/Bun UA.
     const CALL_LOG = "/home/z/my-project/ops/hang-server-calls.log";
     const logCall = (note: string) =>
-      Bun.write(
+      appendFile(
         CALL_LOG,
         `${new Date().toISOString()} ${req.method} ${new URL(req.url).pathname} ` +
-          `ua=${(req.headers.get("user-agent") ?? "?").slice(0, 80)} ${note}\n`,
-        { append: true }
-      );
+          `ua=${(req.headers.get("user-agent") ?? "?").slice(0, 80)} ${note}\n`
+      ).catch(() => {});
     if (req.method === "OPTIONS") {
       void logCall("preflight");
       return new Response(null, { status: 204, headers: corsHeaders(req) });
