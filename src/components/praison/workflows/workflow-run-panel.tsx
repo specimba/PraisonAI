@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   Ban,
   Check,
   ChevronDown,
@@ -853,6 +854,23 @@ export function WorkflowRunPanel({
                     </span>
                   );
                 })() : null}
+                {r.status === "error" && r.error ? (
+                  // r157 (user report: 12× 0/11 runs, cause invisible in the
+                  // list): the failure reason lived only inside the run view —
+                  // the user had to paste the whole UI to report it. Every
+                  // errored history row now carries a compact WHY chip: which
+                  // step died and the error kind; the tooltip holds the
+                  // verbatim message + the actionable hint.
+                  <span
+                    title={`Failed at "${r.error.stepLabel}" (${r.error.kind})\n${r.error.message}${r.error.hint ? `\n→ ${r.error.hint}` : ""}`}
+                    aria-label={`Run failed at step ${r.error.stepLabel}: ${r.error.kind}`}
+                    className="flex min-w-0 shrink items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400"
+                  >
+                    <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                    <span className="max-w-[9rem] truncate">{r.error.stepLabel}</span>
+                    <span className="hidden shrink-0 opacity-75 sm:inline">· {r.error.kind}</span>
+                  </span>
+                ) : null}
                 {r.status === "done" && r.novelty != null && (
                   <span
                     title={`Evolution novelty vs recent runs: ${r.novelty}%${r.novelty < 35 ? " — stall signal (near-duplicate output)" : ""}`}
