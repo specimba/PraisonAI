@@ -3812,3 +3812,29 @@ Verification result: PASS
 Open risks: the real validation is the next scheduled fire of the 11-step pipeline (watch the run history — expect step 2 to progress or, if it still fails, a Timeout-classified card instead of Unknown); a genuinely dead-but-silent provider now burns 60s before relay fallback (accepted: dead providers fail fast via connection errors per r68 doctrine); run rows already marked errored from before the fix stay as-is (resume manually if wanted).
 Blockers: none
 Next recommended action: r143 — (a) verify the fix against reality: check the latest run of "Continuous Research..." (did step 2 pass? is the card Timeout-classified?) and only then rotate to (b) Chat composer/message-item polish or (c) the scheduler-bridge 60s sync visibility audit (2-min check). Do not re-touch the timeout constants without new live evidence.
+---
+Task ID: 424432 — r143
+Agent: main (platform development — hourly dev round)
+Task: r142 handoff — (a) verify the timeout fix against reality before rotating.
+
+Work Log:
+- Reality check: health 200; server lane (DB via /api/automation/sync) shows NO runs since ~6.5h ago (all 429 shared-lane, serverDriving=false) — the user's tab drives schedules in-tab, so the pipeline's run history lives in THEIR browser and is not observable from here. Honest fallback: verify the fix MECHANISM against the live engine instead of waiting for the user's next fire.
+- SHIPPED (scripts/verify-first-token-budget.ts, bun-run TS): drives the REAL runRelayedCustom (the exact code path both lanes share) against a local OpenAI-compatible mock upstream:
+  · Case 1 (previously fatal): headers immediately, 25s silence, then SSE deltas → engine COMPLETES in ~25s with the mock content. Pre-r142 (12s budget) this died with "no first token within 12s" — the exact step-2 killer.
+  · Case 2 (budget must still bound): headers then silence forever → budget-firing status lands at ~60s with value 60s (asserted on the retry status event; the final throw would take ~180s through the 3x pre-stream retry, which is not what we're testing).
+- VERDICT: 2/2 PASS — "upstream deadline: no first token within 60s" armed, slow-TTFB deep passes survive, bounding intact.
+- Harness notes: tsc gate (src/ = 0, new script clean after one import fix — EngineToolIO comes from tools-defs, not re-exported by agent-engine); budget armed at fetch START per r25 (covers header-delay phase too); deadline errors join the 3x pre-stream retry by design.
+
+Stage Summary:
+- r142's fix is no longer just code-reviewed — it is proven against the live engine with a controlled slow-TTFB upstream: the precise failure mode that killed 12 hourly runs at step 2 now completes, and the new 60s bound still fires. The user's next scheduled fire is expected to progress past step 2; if anything still fails, the card will honestly read "Timeout".
+
+Round Handoff:
+Round ID: r144
+Task owner: main (platform dev)
+Scope completed: mock-upstream engine verification (2/2) + verification script committed; snapshot pushed.
+User-visible changes: none this round (verification of r142); expected downstream effect — scheduled deep-research pipelines stop dying at step 2 TTFB.
+Verification steps: bun scripts/verify-first-token-budget.ts → 2/2; tsc src 0.
+Verification result: PASS
+Open risks: the mock covers the TTFB phase only; mid-stream buffering was already covered by r68's 180s idle budget (also engine-level, same path). If the user's next run still fails at step 2, look at the provider's ACTUAL behavior (Vyce AI lane) via the run's LLM-call log before touching constants again.
+Blockers: none
+Next recommended action: r144 — rotate: (a) Chat composer/message-item polish (untouched surface), or (b) the 2-min scheduler-bridge 60s sync visibility audit, or (c) if the user reports another live paste, root-cause THAT first. Keep rotating; do not re-touch timeout constants or radar/vault without live evidence.
