@@ -125,20 +125,36 @@ export function ModelTicker() {
     }
   }, []);
 
+  const failsRef = React.useRef(0);
+  const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRef = React.useRef<() => void>(() => {});
+
   const refresh = React.useCallback(
     async (announce: boolean) => {
       try {
         const res = await fetch("/api/tracker", { cache: "no-store" });
-        if (!res.ok) return;
+        if (!res.ok) throw new Error(`tracker HTTP ${res.status}`);
         const fresh = (await res.json()) as TrackerData;
+        failsRef.current = 0;
         apply(fresh, announce);
         if (fresh.status.stale) void syncNowRef.current();
       } catch {
-        /* offline — the cache keeps painting */
+        // r151: a failed fetch used to strand the ticker DARK — with no
+        // localStorage cache the strip renders null entirely, and the next
+        // attempt was a full 15-min poll away. Dev servers restart
+        // constantly; recover in seconds instead. Short backoff (5s / 15s /
+        // 60s), then the normal cadence takes over via POLL_MS. The cached
+        // strip keeps painting meanwhile — this path only matters when there
+        // is nothing to paint yet, or the cache has gone stale.
+        const delay = [5_000, 15_000, 60_000][Math.min(failsRef.current, 2)];
+        failsRef.current += 1;
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(() => refreshRef.current(), delay);
       }
     },
     [apply]
   );
+  refreshRef.current = () => void refresh(true);
 
   const syncNow = React.useCallback(
     async (announce = true) => {
@@ -180,6 +196,7 @@ export function ModelTicker() {
     return () => {
       clearInterval(iv);
       document.removeEventListener("visibilitychange", onVis);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, [refresh]);
 
