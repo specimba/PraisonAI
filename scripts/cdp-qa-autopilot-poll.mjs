@@ -170,7 +170,11 @@ async function main() {
   if (!mounted) throw new Error("ServerAutopilot panel never mounted");
   await new Promise((r) => setTimeout(r, 1200));
 
-  // I1 — mount poll fired at least once
+  // I1 — mount poll fired at least once. Note: headless tabs opened via
+  // /json/new can start life "hidden" — and since r141 a hidden tab
+  // deliberately SKIPS the mount poll (that's the feature). Force visible
+  // first so I1 measures the visible path deterministically.
+  await evalJs(ws, setHidden(false));
   const c1 = await evalJs(ws, getSyncCount);
   check("I1 mount poll fired", c1 >= 1, `sync GETs after mount = ${c1}`);
 

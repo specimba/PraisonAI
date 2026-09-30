@@ -128,6 +128,16 @@ export function isAbort(err: unknown): boolean {
 //   • FIRST TOKEN — headers arrived → first byte (ANY byte counts, including
 //     keep-alive comments). OrcaRouter gets a looser budget: it fails over
 //     1-5 upstreams internally before the first byte shows up.
+//     r141: 12s base killed legitimate big-context deep passes at TTFB — a
+//     step whose prompt carries the previous step's full synthesis needs
+//     prompt processing + queue time before ANY byte (live evidence
+//     2026-09-30: a scheduled 11-step research pipeline lost EVERY run at
+//     step 2 — direct died at 12s TTFB, the relay fallback then died on the
+//     client's 20s connect deadline, ×4 attempts ×12 hourly runs). The same
+//     disease was already fixed mid-stream (r68: idle 15s→90s→180s for
+//     buffered reasoning); TTFB gets the same doctrine. Providers that are
+//     truly dead fail fast via connection errors — TTFB silence means
+//     thinking.
 //   • INTER-CHUNK — once bytes flow, any gap larger than this fails the call.
 // Deadline aborts throw UpstreamDeadlineError so retry/relay classification
 // can tell them apart from user aborts (which keep their original semantics).
@@ -138,9 +148,9 @@ export class UpstreamDeadlineError extends Error {
   }
 }
 
-export const FIRST_TOKEN_TIMEOUT_MS = 12_000;
+export const FIRST_TOKEN_TIMEOUT_MS = 60_000;
 /** OrcaRouter internally fails over 1-5 upstreams before the first byte. */
-export const FIRST_TOKEN_TIMEOUT_ORCA_MS = 25_000;
+export const FIRST_TOKEN_TIMEOUT_ORCA_MS = 90_000;
 /**
  * Mid-stream silence budget. Sized for BUFFERED REASONING, not for the
  * browser-facing path: the /api/chat route sends `: ping` SSE comments every

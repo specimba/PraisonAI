@@ -86,8 +86,18 @@ interface DonePayload {
   iterations: number;
 }
 
-/** Headers budget for the /api/chat fetch (r25 watchdog). */
-const CONNECT_TIMEOUT_MS = 20_000;
+/**
+ * Headers budget for the /api/chat fetch (r25 watchdog). r141: 20s killed the
+ * relay lane whenever the dev server started slowly — cold route compile or
+ * event-loop congestion under the scheduled pipelines' own tool traffic —
+ * surfacing as "server did not respond in 20s" on every scheduled run
+ * (live: 12 hourly runs, all dead at the same step). That is slow-start, not
+ * a wedged server: headers flush immediately once the handler runs
+ * (route sends a start frame synchronously). 60s still bounds a genuinely
+ * wedged server while tolerating slow starts; the 90s stream stall watchdog
+ * takes over the moment headers arrive.
+ */
+const CONNECT_TIMEOUT_MS = 60_000;
 /** Max byte gap tolerated on the /api/chat SSE stream (r25 watchdog). */
 const SERVER_STALL_TIMEOUT_MS = 90_000;
 

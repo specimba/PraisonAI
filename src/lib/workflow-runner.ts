@@ -248,7 +248,7 @@ const ERROR_PATTERNS: { kind: RunErrorKind; re: RegExp }[] = [
   },
   { kind: "auth", re: /\b(401|403)\b|unauthorized|invalid.{0,12}(api )?key|invalid.?key|forbidden|permission denied/i },
   { kind: "model", re: /\b404\b|no such model|model.?not.?found|model (.{0,40} )?does not exist|model_not_found|endpoint not found|decommissioned|does not exist or is not supported/i },
-  { kind: "timeout", re: /timeout|timed? ?out|etimedout|deadline/i },
+  { kind: "timeout", re: /timeout|timed? ?out|etimedout|deadline|did not respond|no first token|upstream deadline|stream stalled/i },
   {
     kind: "network",
     re: /network|fetch failed|failed to fetch|could not reach|socket|econn|enotfound|eai_again|dns|connection (refused|reset|closed|error)|load failed|premature close|stream ended without|upstream|http 5\d\d|bad gateway|service unavailable/i,
