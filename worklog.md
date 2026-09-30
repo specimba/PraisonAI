@@ -3671,3 +3671,31 @@ Verification result: PASS
 Open risks: while browser-driving, a workflow synced to the registry but with NO local nextRunAt (e.g. armed before this build) falls back to the stale registry value — acceptable (row tooltip/chip label still say what they mean); E-series leaves one disabled "QA Lane-True Pipeline" registry row (inert, by design).
 Blockers: none
 Next recommended action: r138 — the r136-documented candidate: enforce the consume endpoint's localhost-only guard (reject non-local Host or forwarding headers) so docs/LOCAL_AUTOMATION.md's trust model is enforced, not just assumed; add a negative-case check to the D-series. Alternatively rotate to perf or UI polish elsewhere.
+---
+Task ID: 424432 — r138
+Agent: main (platform development — hourly dev round)
+Task: r137 handoff — enforce the consume endpoint's localhost-only guard so docs/LOCAL_AUTOMATION.md's trust model is enforced, not just assumed.
+
+Work Log:
+- Survey: POST /api/vault/consume served the raw key with zero host checks; only two callers exist (browser Test key = relative fetch, external scheduler = dials localhost) — both pass a localhost-Host guard by construction; rg confirmed sync/route.ts mentions consume only in a comment.
+- SHIPPED (src/app/api/vault/consume/route.ts):
+  1. localGuard(): rejects 403 BEFORE any key lookup when Host is not localhost/127.0.0.1/[::1]/*.localhost (port-tolerant parsing, bracket-form IPv6), or when the request arrives proxied — non-local x-forwarded-host, non-loopback x-forwarded-for / x-real-ip, or any RFC 7239 `forwarded` header. Local-loopback values in forwarded headers do NOT trip the guard (tolerates framework auto-injection; only off-machine signals reject).
+  2. 403 body: { ok: false, error: "consume is localhost-only (<reason>)" } — remote callers get no key, no 404 existence oracle, and a self-explaining error (surfaces verbatim in the Test key toast if the app is ever browsed non-locally).
+  3. Header comment now documents the enforced model + honest limit: header guard is defense-in-depth, not auth — a LAN client can spoof Host, so deliberate exposure must add real auth (docs warning retained).
+- docs/LOCAL_AUTOMATION.md: consume row updated — guard semantics (what triggers 403), "enforced since r138", defense-in-depth-not-auth caveat.
+- QA (scripts/cdp-qa-vault-guard.mjs, new F-series, 11 checks): raw-header negatives via node:http (fetch can't override Host) with socket pinned to 127.0.0.1 — F1a store; F1b/c Host localhost & 127.0.0.1 → 200 key intact; F2–F7 public Host / LAN Host / x-forwarded-for / x-forwarded-host / forwarded / x-real-ip → 403 "localhost-only"; F8 browser Test key still passes the guard (verified toast, masked qa-r••••7xyz); F9 vault left empty.
+- VERIFIED: 11/11 F-series PASS on first run; tsc src/ = 0; eslint 0; screenshot ops/qa/F-guard-toast.png reviewed (verified toast over Settings, no UI regression).
+
+Stage Summary:
+- The vault handoff's documented trust model is now code-enforced: accidental exposure (tunnel, reverse proxy, LAN browsing) fails closed for the only raw-key endpoint. Docs, route comment, and QA all state the same boundary, including its honest limits.
+
+Round Handoff:
+Round ID: r139
+Task owner: main (platform dev)
+Scope completed: consume 403 localhost-guard + F-series QA (11/11) + docs row; snapshot pushed.
+User-visible changes: none in normal local use (both legit callers dial localhost); if the app is ever browsed via a non-local origin, Test key now fails LOUDLY with "consume is localhost-only (…)" instead of silently handing the key to a remote origin.
+Verification steps: 11/11 DOM/API assertions + screenshot; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: guard is header-based — cannot stop a same-LAN client with a spoofed Host (documented; real exposure needs auth, e.g. a shared-secret header checked against an env var); browser Test key from a non-localhost origin now errors by design — acceptable per trust model.
+Blockers: none
+Next recommended action: r139 — rotate away from vault (guard closes the epic's last documented gap): (a) perf — measure the two recurring client fetches (ServerAutopilot 15s poll, vault GET on mount) before touching anything; (b) UI polish on a fresh surface (Chat/Agents/Radar untouched for many rounds); or (c) small a11y/keyboard pass on the settings cards. Do NOT re-touch vault files unless a live bug surfaces.

@@ -54,7 +54,7 @@ closed-tab runs dial with your quota instead of the shared lane.
 | `POST /api/vault` | Settings UI | Upsert `{ provider, key, label }` → masked ack. |
 | `GET /api/vault` | Settings UI | Masked slots only — raw key never leaves the DB except through `consume`. |
 | `DELETE /api/vault?provider=…` | Settings UI | Removes the slot; headless runs fall back to the shared lane automatically. |
-| `POST /api/vault/consume` | external scheduler (and the Test key button) | `{ provider }` → `{ key, updatedAt }` — the raw key. **Trust model:** the key is already plaintext in this machine's SQLite DB, so localhost HTTP adds no exposure while giving the service a stable, DB-agnostic contract. Never logged, never telemetered. If this app is ever exposed beyond localhost, this endpoint **must** gain auth first. |
+| `POST /api/vault/consume` | external scheduler (and the Test key button) | `{ provider }` → `{ key, updatedAt }` — the raw key. **Localhost-only guard (enforced since r138):** non-local `Host`, non-local `x-forwarded-host`, non-loopback `x-forwarded-for` / `x-real-ip`, or any `forwarded` header ⇒ `403` before any key lookup — both legit callers dial localhost, so both pass. **Trust model:** the key is already plaintext in this machine's SQLite DB, so localhost HTTP adds no exposure while giving the service a stable, DB-agnostic contract. Never logged, never telemetered. The header guard is defense-in-depth, not auth — a LAN client can still spoof `Host`, so if this app is ever deliberately exposed beyond localhost, it **must** gain real auth first. |
 
 ## Reliability notes
 

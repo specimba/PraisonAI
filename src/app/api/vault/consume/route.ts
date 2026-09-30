@@ -10,20 +10,80 @@ export const dynamic = "force-dynamic";
 // closed-tab runs use the user's own quota instead of the congested shared
 // lane. This endpoint is that handoff: POST { provider } → { key }.
 //
-// Trust model: the key already lives in this machine's SQLite DB in plain
-// text — any same-host process can read it directly. Serving it over
-// localhost HTTP adds no new exposure and gives the service a stable,
-// DB-agnostic contract (it never touches Prisma/SQLite paths). The key is
-// NEVER logged, never telemetered, and never returned by GET /api/vault
-// (that stays masked-only).
+// Trust model (r138: ENFORCED, no longer just assumed): the key already
+// lives in this machine's SQLite DB in plain text — any same-host process
+// can read it directly. Serving it over localhost HTTP adds no new exposure
+// and gives the service a stable, DB-agnostic contract (it never touches
+// Prisma/SQLite paths). This endpoint is therefore LOCALHOST-ONLY: requests
+// whose Host is not localhost/127.0.0.1/::1, or that arrive through a proxy
+// (non-local x-forwarded-host / x-forwarded-for / x-real-ip, or any
+// `forwarded` header), are rejected 403 BEFORE any key lookup. Guard limits
+// (honest): a same-LAN client can still spoof `Host` — this is
+// defense-in-depth against accidental remote exposure, not auth; deliberate
+// exposure beyond localhost must add real auth. The key is NEVER logged,
+// never telemetered, and never returned by GET /api/vault (masked-only).
 //
 // Response shapes:
 //   200 { ok: true, provider, key, updatedAt }
-//   404 { ok: false, error: "no vault key stored for this provider" }
 //   400 { ok: false, error: "provider required" }
+//   403 { ok: false, error: "consume is localhost-only (<reason>)" }
+//   404 { ok: false, error: "no vault key stored for this provider" }
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+// "localhost:3000" → "localhost"; "[::1]:9222" → "[::1]"; bare → as-is.
+function hostWithoutPort(header: string): string {
+  const v = header.trim().toLowerCase();
+  if (v.startsWith("[")) {
+    const end = v.indexOf("]");
+    return end === -1 ? v : v.slice(0, end + 1);
+  }
+  const colon = v.indexOf(":");
+  return colon === -1 ? v : v.slice(0, colon);
+}
+
+function isLocalHost(header: string | null): boolean {
+  if (!header) return false;
+  const host = hostWithoutPort(header);
+  return LOCAL_HOSTS.has(host) || host.endsWith(".localhost");
+}
+
+function isLoopbackIp(header: string): boolean {
+  const first = header.split(",")[0]?.trim().toLowerCase() ?? "";
+  return first === "127.0.0.1" || first === "::1" || first === "::ffff:127.0.0.1";
+}
+
+function localGuard(req: Request): { ok: true } | { ok: false; reason: string } {
+  if (!isLocalHost(req.headers.get("host"))) {
+    return { ok: false, reason: `non-local host "${req.headers.get("host") ?? ""}"` };
+  }
+  const fwdHost = req.headers.get("x-forwarded-host");
+  if (fwdHost && !isLocalHost(fwdHost.split(",")[0])) {
+    return { ok: false, reason: `proxied (x-forwarded-host: ${fwdHost})` };
+  }
+  const ffor = req.headers.get("x-forwarded-for");
+  if (ffor && !isLoopbackIp(ffor)) {
+    return { ok: false, reason: `proxied (x-forwarded-for: ${ffor})` };
+  }
+  if (req.headers.get("forwarded")) {
+    return { ok: false, reason: "proxied (forwarded header)" };
+  }
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp && !isLoopbackIp(realIp)) {
+    return { ok: false, reason: `proxied (x-real-ip: ${realIp})` };
+  }
+  return { ok: true };
+}
 
 export async function POST(req: Request) {
   try {
+    const guard = localGuard(req);
+    if (!guard.ok) {
+      return NextResponse.json(
+        { ok: false, error: `consume is localhost-only (${guard.reason})` },
+        { status: 403 }
+      );
+    }
     const body = (await req.json().catch(() => ({}))) as { provider?: string };
     const provider = (body.provider ?? "builtin").trim();
     if (!provider) {
