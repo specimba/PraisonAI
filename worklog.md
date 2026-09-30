@@ -3782,3 +3782,33 @@ Verification result: PASS
 Open risks: other pollers? A quick rg found no other setInterval-fetch client loops (chat streaming is event-driven; scheduler bridge sync is 60s and only runs while its own view lives — same hidden-tab exposure applies there IF it is an interval; worth a 2-minute check next round before touching).
 Blockers: none
 Next recommended action: r142 — rotate surfaces: (a) 2-min audit of the 60s scheduler-bridge sync poll for the same visibility exposure (fix only if it is an unguarded interval-fetch), then (b) Chat composer/message-item polish (last fresh surface), or (c) perf: wrap radar fetches' error paths with the same no-refetch-while-hidden lens. Do NOT touch radar/vault internals without a live bug.
+---
+Task ID: 424432 — r142
+Agent: main (platform development — hourly dev round)
+Task: USER-REPORTED (live paste): every hourly run of the 11-step "Continuous Research" pipeline dies at step 2 with "server did not respond in 20s" → "error we couldn't classify" → resumed ×3 → auto-paused. 12 runs dead at the same step. Focus properly on THIS.
+
+Work Log:
+- Root-caused the failure chain (evidence in the user's paste: step 1 succeeded in 102.6s; 4/5 LLM calls failed; run history = 12 hourly failures):
+  1. Browser-direct lane: FIRST_TOKEN_TIMEOUT_MS = 12s — a deep-research step whose prompt carries the previous step's full synthesis legitimately needs >12s to FIRST byte (thinking ≠ dead). Died as "upstream deadline: no first token within 12s".
+  2. Relay fallback lane: chat-client CONNECT_TIMEOUT_MS = 20s header deadline — dev server under cold-compile/event-loop congestion (partly caused by the pipelines' own tool traffic) misses 20s → "server did not respond in 20s". (Route flushes headers immediately when warm — measured 0.246s end-to-end.)
+  3. workflow-runner ERROR_PATTERNS: the timeout regex matched NEITHER message → kind "unknown" → "couldn't classify" card → timeout NOT in self-heal for it → auto-resume loop churned 2-3.5 HOURS per failed run (7104s/12531s runs at 0-1/11 steps).
+- SHIPPED (same doctrine as r68's idle-budget raise 15s→90s→180s, now at the TTFB phase):
+  1. agent-engine.ts: FIRST_TOKEN_TIMEOUT_MS 12s→60s; FIRST_TOKEN_TIMEOUT_ORCA_MS 25s→90s (Orca fails over 1-5 upstreams internally). Truly dead providers still fail fast via connection errors; TTFB silence means thinking.
+  2. chat-client.ts: CONNECT_TIMEOUT_MS 20s→60s — slow-start (cold compile, congestion) is not a wedged server; 60s still bounds a genuinely wedged one, 90s stream stall watchdog takes over after headers.
+  3. workflow-runner.ts: timeout regex += "did not respond|no first token|upstream deadline|stream stalled" → the exact pasted errors now classify as Timeout → SELF_HEAL engages (one automatic step retry) + the recovery card says "Timeout — retry usually helps" instead of "couldn't classify".
+- VERIFIED: tsc src/ = 0; eslint clean on all 3 files; classifier unit check (node) — all 6 cases classify correctly incl. both pasted errors; live POST /api/chat streams (start→iteration→status→[429 rate-limit, classified]) in 0.246s proving warm-header flush; I-series browser regression 5/5 (harness note: I1 initially "failed" because fresh CDP tabs start HIDDEN and since r141 hidden tabs skip the mount poll — the feature working; script now forces visible before mounting. Second lesson: headless binary path = ~/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell, harness needed a clean restart after a wedged run).
+- Screenshot ops/qa/I-autopilot-visibility-poll.png refreshed (Workflows view renders clean with the new constants in the bundle).
+
+Stage Summary:
+- The scheduled-pipeline kill chain is broken at all three links: direct lane no longer murders slow-TTFB deep passes (the phase r68 already fixed mid-stream), the relay lane tolerates slow server starts, and whatever still times out is now honestly classified as Timeout, self-heals once, and shows an actionable recovery card instead of "couldn't classify". Next hourly fire is the real-world integration test.
+
+Round Handoff:
+Round ID: r143
+Task owner: main (platform dev)
+Scope completed: 3-file timeout/classification fix (agent-engine, chat-client, workflow-runner) + classifier unit check + I-series 5/5 + harness fixes; snapshot pushed.
+User-visible changes: deep-research steps with huge prompts stop dying at TTFB; scheduled runs stop failing with "server did not respond in 20s" under dev-server load; any residual timeout surfaces as an honest "Timeout" card with self-heal, not "error we couldn't classify".
+Verification steps: classifier cases + live /api/chat stream timing + I-series 5/5; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: the real validation is the next scheduled fire of the 11-step pipeline (watch the run history — expect step 2 to progress or, if it still fails, a Timeout-classified card instead of Unknown); a genuinely dead-but-silent provider now burns 60s before relay fallback (accepted: dead providers fail fast via connection errors per r68 doctrine); run rows already marked errored from before the fix stay as-is (resume manually if wanted).
+Blockers: none
+Next recommended action: r143 — (a) verify the fix against reality: check the latest run of "Continuous Research..." (did step 2 pass? is the card Timeout-classified?) and only then rotate to (b) Chat composer/message-item polish or (c) the scheduler-bridge 60s sync visibility audit (2-min check). Do not re-touch the timeout constants without new live evidence.
