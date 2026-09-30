@@ -3540,3 +3540,29 @@ Verification result: PASS
 Open risks: B-series depends on card text "Run"/seed name — UI copy changes can break it (assertions are explicit, failures will be loud, not silent); headless profile accumulates the seed workflow (idempotent overwrite, no user impact — throwaway profile).
 Blockers: none
 Next recommended action: r133 — back to product, vault epic prerequisite: wire the ACTUAL headless-lane consumer for the AutomationVault key (server-side scheduler dials with the stored key instead of the shared lane) — this unblocks the descoped "Test key" verify button; alternatively rotate to error handling / docs / performance.
+---
+Task ID: 424432 — r133
+Agent: main (platform development — hourly dev round)
+Task: r132 handoff — wire the vault-key consumer for the headless lane (vault epic prerequisite).
+
+Work Log:
+- Architecture established (4 probes): (1) /api/automation/sync = registry+heartbeat only; (2) /api/automation/run-now just queues via nextRunAt; (3) the "scheduler mini-service" that claims due workflows and writes automationRun rows is EXTERNAL to this repo (nothing in src/ or scripts/ writes automationRun); (4) the builtin engine lane is ZAI.create() — environment-credentialed, takes NO config, so the SDK lane cannot accept a vault key directly.
+- Conclusion: the correct in-repo consumer contract for the external driver is an HTTP handoff, not an SDK injection.
+- SHIPPED (2 files):
+  1. src/app/api/vault/consume/route.ts — POST {provider:"builtin"} → {ok, key, updatedAt}; 404 when absent. Trust model documented in-file: the key is already plaintext in the local SQLite DB, so localhost HTTP adds no exposure while giving the external service a stable DB-agnostic contract; never logged/telemetered; GET /api/vault stays masked-only.
+  2. src/app/api/automation/sync/route.ts GET — now reports vaultLane {hasKey, maskedKey, updatedAt} so the ServerAutopilot panel and any driver know whether closed-tab runs dial with the user's key or the shared lane (masked only; raw key lives exclusively at /api/vault/consume).
+- VERIFIED LIVE (full loop on the running server): sync.before hasKey=false → POST /api/vault store "test-key…" (masked "test••••6789") → sync reports hasKey=true + mask → POST /api/vault/consume returns the raw key → consume with unknown provider = 404 → DELETE cleanup → sync reports hasKey=false again. Vault left EMPTY as found (no fake-key residue that headless runs could dial). tsc src/ = 0; eslint both files clean; committed 640da898f, pushed.
+
+Stage Summary:
+- The vault epic's loop is now closed at the contract level: store (Settings UI) → status (sync GET vaultLane) → consume (handoff endpoint for the external scheduler). The descoped r132 "Test key" verify button remains UI-side future work; the external mini-service should be taught to call /api/vault/consume when claiming due workflows.
+
+Round Handoff:
+Round ID: r134
+Task owner: main (platform dev)
+Scope completed: vault consumer handoff endpoint + lane-status in automation sync; push 640da898f.
+User-visible changes: ServerAutopilot data now carries vaultLane state (UI chip not yet rendered — next round can surface "headless lane: your key sk-1••••abcd" vs "shared lane" in the panel).
+Verification steps: live 5-state curl loop; tsc src 0; eslint 0; selective add (2 files).
+Verification result: PASS (contract verified live; external service integration pending)
+Open risks: consume endpoint returns the raw key to any localhost caller — same trust domain as the DB itself, but if the app ever gains a remote-exposed deployment this endpoint MUST gain auth first; external scheduler does not call consume yet (integration unknown).
+Blockers: none
+Next recommended action: r134 — (a) surface vaultLane in the ServerAutopilot panel UI (small chip: "headless lane: your key" vs "shared lane", deep-linking to #vault); (b) then/alternatively the r132-descoped "Test key" verify affordance, or rotate surfaces entirely (error handling / docs / perf).
