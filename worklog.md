@@ -3699,3 +3699,30 @@ Verification result: PASS
 Open risks: guard is header-based — cannot stop a same-LAN client with a spoofed Host (documented; real exposure needs auth, e.g. a shared-secret header checked against an env var); browser Test key from a non-localhost origin now errors by design — acceptable per trust model.
 Blockers: none
 Next recommended action: r139 — rotate away from vault (guard closes the epic's last documented gap): (a) perf — measure the two recurring client fetches (ServerAutopilot 15s poll, vault GET on mount) before touching anything; (b) UI polish on a fresh surface (Chat/Agents/Radar untouched for many rounds); or (c) small a11y/keyboard pass on the settings cards. Do NOT re-touch vault files unless a live bug surfaces.
+---
+Task ID: 424432 — r139
+Agent: main (platform development — hourly dev round)
+Task: r138 handoff (rotate away from vault) — fresh surface: Trend Radar. Shipped: /api/radar/hf proxy — the LAST radar source to leave the browser.
+
+Work Log:
+- Survey (radar-view.tsx full read): GitHub Stars → /api/radar/github proxy, Paper Radar → /api/radar/papers proxy, but HF Trending called huggingface.co DIRECTLY from the client — inconsistent and the first thing to silently break behind strict egress/CSP, with no server-side error classification. Other radar quality (single-flight guards, ErrorBox classification, aria) already solid; fmtRel already clamps negatives.
+- SHIPPED:
+  1. src/app/api/radar/hf/route.ts (new): GET ?kind=models|datasets|spaces&limit=N — kind allow-list (400 otherwise), limit clamped 1–50, upstream HF Hub trending fetch (15s timeout, PraisonAgent UA), field-trimmed items (id/likes/downloads/pipeline_tag/library_name), same { error } shape + status taxonomy as the other radar proxies (429 rate-limit copy, 502 upstream, 504 timeout/unreachable).
+  2. radar-view.tsx fetchTrending: three parallel fetches now dial /api/radar/hf?kind=…&limit=30 (HF_LIMIT) instead of huggingface.co; error text reads the proxy's { error } first. HF_KINDS path lookup in the fetcher dropped (still used by the segmented control).
+- QA (scripts/cdp-qa-radar-hf-proxy.mjs, new G-series, 7 checks): G1–G3 proxy happy path for all three kinds (200 {kind,count,items}, string ids); G4 bogus kind → 400 "Unknown Hub section"; G5 limit=999 clamped (count=50); G6a browser e2e — HF Trending tab selected (aria-selected verified); G6b Refresh via the real button → "cached just now" stamp + cards render + NO ErrorBox. Screenshot ops/qa/G-hf-proxy.png reviewed (tab active, fresh stamp, 30 cards, no layout regression).
+- HARNESS LESSON (cost 3 QA iterations, worth it): Radix TabsTrigger activates on MOUSEDOWN — HTMLElement.click() dispatches click only, so the r132-era clickByText pattern silently no-ops on Radix primitives while the script believes it clicked. Fixed with a full pointerdown/mousedown/pointerup/click dispatch sequence (emitClick) + aria-selected verification instead of click-and-pray + disabled-aware button clicking. Future QA suites should use emitClick for any Radix surface.
+- VERIFIED: 7/7 G-series PASS; tsc src/ = 0; eslint 0 on both touched files.
+
+Stage Summary:
+- All three remote radar sources now take the same server-proxied path with consistent error classification — the radar is now fully egress/CSP-resilient and the client never calls a third-party API directly. One real harness lesson banked for all future browser QA.
+
+Round Handoff:
+Round ID: r140
+Task owner: main (platform dev)
+Scope completed: /api/radar/hf proxy + fetchTrending reroute + G-series QA (7/7) + screenshot; snapshot pushed.
+User-visible changes: HF Trending now works behind egress restrictions/CSP where the direct call silently failed; HF errors surface with friendly classified messages (rate limit/timeout/upstream) instead of raw HTTP text.
+Verification steps: 7/7 API+DOM assertions + screenshot review; tsc src 0; eslint 0.
+Verification result: PASS
+Open risks: proxy adds one server hop to HF fetches (negligible: ~0.3s measured); localStorage caches written by the OLD direct-fetch build remain compatible (same HfCache shape); G-series leaves a HF cache in the QA browser profile (inert).
+Blockers: none
+Next recommended action: r140 — rotate again: (a) Chat/Agents surface polish (still untouched for many rounds — e.g. audit empty/error/loading states there with the same lens); (b) perf: measure the two recurring client fetches (ServerAutopilot 15s poll, vault GET on mount) before touching; (c) small a11y pass on settings cards. Avoid touching radar/vault again unless a live bug surfaces.

@@ -585,15 +585,25 @@ function HfTrendingTab() {
       const kinds: HfKind[] = ["models", "datasets", "spaces"];
       const lists = await Promise.all(
         kinds.map(async (k) => {
-          const path = HF_KINDS.find((x) => x.id === k)!.path;
-          const res = await fetch(
-            `https://huggingface.co/api/${path}?sort=trendingScore&direction=-1&limit=${HF_LIMIT}`,
-            { signal: AbortSignal.timeout(20_000) }
-          );
-          if (!res.ok) throw new Error(`Hugging Face API (${k}) returned HTTP ${res.status}.`);
-          const items = (await res.json()) as HfItem[];
-          if (!Array.isArray(items)) throw new Error(`Unexpected Hugging Face response for ${k}.`);
-          return [k, items] as const;
+          // r139: routed through our own /api/radar/hf proxy — the last of
+          // the three radar sources to leave the browser (GitHub Stars and
+          // Paper Radar already hop through the server). Same egress path,
+          // same { error } classification, no silent CSP/egress surprises.
+          const res = await fetch(`/api/radar/hf?kind=${k}&limit=${HF_LIMIT}`, {
+            signal: AbortSignal.timeout(25_000),
+          });
+          const data = (await res.json().catch(() => null)) as
+            | { items?: HfItem[]; error?: string }
+            | null;
+          if (!res.ok) {
+            throw new Error(
+              data?.error ?? `Hugging Face API (${k}) returned HTTP ${res.status}.`
+            );
+          }
+          if (!data || !Array.isArray(data.items)) {
+            throw new Error(`Unexpected Hugging Face response for ${k}.`);
+          }
+          return [k, data.items] as const;
         })
       );
       const next: HfCache = { fetchedAt: Date.now(), models: [], datasets: [], spaces: [] };
