@@ -4554,3 +4554,27 @@ Verification result: PASS at product level; harness 7/12 with a named shared roo
 Open risks: (1) mid-session durability of debounced persist in headless/hidden pages — schedule transitions may live only in memory until pagehide; if real, a crash loses schedule-state changes (r172: dump raw persisted JSON post-transition; consider asserting via UI/store instead of localStorage, or fixing the flush). (2) A second cron-loop instance is editing the same harness — coordinate via worklog, avoid parallel edits to the same file.
 Blockers: none
 Next recommended action: r172 — (1) FIRST read any user report (did the pipeline survive the next congestion wave?); (2) resolve the flush question: one probe that dumps the RAW praison-workflows JSON 8s after the auto-resume, then either fix debouncedStorage or re-point the 5 red assertions at the UI/store; (3) then resume normal rotation.
+---
+Task ID: 424432 — r171 (reconciliation addendum from the SECOND parallel session)
+Agent: main (platform development — hourly dev round, continued-from-summary session)
+Task: The user report: "still getting too many request errors and the job stopping itself — optimize for continuous, smarter, rotation-wise strategies." Root-cause the r156 breaker + build the congestion survival stack.
+
+Work Log:
+- ROOT CAUSE (user report, pulse-crossed: 10×429/24h, last within minutes): the failure cascade was step ladder (3×~65s cooldowns, all inside one 90s saturation window) → r158 parks (5/10/20m) → r156 breaker disabling the schedule at 2 rate-limit failures with enabled:false and NO self-recovery — congestion treated as breakage, the pipeline silently lost until a human noticed (their paste: RSIinFIELD "auto-paused · click to resume" for a day).
+- SHIPPED (src): (1) congestion auto-resume — a rate-limit breaker trip now parks the schedule with a SELF-HEALING backoff (45m→1.5h→3h→6h, streak-exponential, ±20% jitter, capped 6h; trip counter on the schedule type); the scheduler tick re-arms it automatically, preserving the streak so a still-saturated gateway re-trips LONGER; after 5 consecutive trips (≈17h coverage) it degrades to the honest manual pause. Success resets streak+trips. Non-rate-limit trips keep the manual pause (real breakage deserves a human). (2) parks extended 3→4, cap 20m→30m (5+10+20+30=65m — first time outliving a full hourly wave), each delay jittered. (3) step cooldown now outlives the shared 90s quiet window (max(ladder, quietUntil−now), jittered) — no more burning all 3 attempts inside one wave. (4) UI: amber "backoff · auto-resume {in}" chip for self-healing state vs the red manual-pause chip (condition fixed to ≥2 without flag); manual resume clears the stale flags. (5) honesty fix: the failure toast read real nextRunAt/autoResumeAt instead of hardcoded "~10m".
+- QA: G-series pure-logic ladder tests (scripts/qa-rl-backoff.ts, bun) 11/11; H-series browser harness (scripts/cdp-qa-rl-auto-resume.mjs) — product behavior proven LIVE (auto-resume toast fires, only-elapsed fixture fires, chips lane correctly, manual resume + flag clearing). Harness state reads remain environment-sensitive (7/12 → variance between runs) — see the other r171 addendum: the 5 reds trace to a debounced-flush coalescing artifact (a post-resume seeding set() carrying a stale snapshot overwrites the resumed pending write — QA-fixture-only race), NOT product behavior.
+- CONCURRENCY NOTE: two parallel instances worked r171 (this session + cron 8c605c27). Their addendum, harness repairs (one-shot init-script seeding, steps-default fixture fix, pageerror listener) and dbg probes are the prior art here; both implementations coexist coherently in src (verified: parks 4/30m, autoResumeAt wiring, scheduler tick). One shared worklog discipline held.
+
+Stage Summary:
+- The pipeline no longer stops itself: a rate-limited schedule now rides out congestion waves (auto-backoff + auto-resume + jittered re-fires + 65m park coverage) and only a genuine day-scale outage requires a human.
+
+Round Handoff:
+Round ID: r172
+Task owner: main (platform dev)
+Scope completed: r171 congestion survival stack (both sessions) merged + verified; snapshot 99bfef5d3 pushed.
+User-visible changes: schedules tripped by 429s self-heal (amber backoff chip with countdown); failure toasts report real re-arm times; parks survive a full hourly wave.
+Verification steps: npx tsc --noEmit → 0; bun run lint → 0 errors; bun run scripts/qa-rl-backoff.ts → 11/11; node scripts/cdp-qa-rl-auto-resume.mjs → product checks green (see open risk); curl root → 200.
+Verification result: PASS (product level; harness state-read reds attributed — see above).
+Open risks: (1) debounced-flush coalescing under a stale snapshot (QA-only today; if ever user-facing, make the post-hydration seeding set() use a fresh store snapshot); (2) real-world confirmation pending — did the Deep pipeline survive the NEXT congestion wave? Check pulse + run history first thing in r172.
+Blockers: none
+Next recommended action: r172 — (1) FIRST read any user report cross-evidenced against /api/gateway/pulse and the Deep run history (the whole point of this fix is that the pipeline survives unattended); (2) only then rotate to the next surface (chat view audit or the r169-deferred import-confirmation dialog). Keep rotating.
