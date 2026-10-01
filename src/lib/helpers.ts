@@ -217,6 +217,21 @@ export function roleMatchesAgent(role: string, agentName: string): boolean {
   return r === a || a.includes(r) || r.includes(a);
 }
 
+/** r182 (directive item (a) completion): the step's EFFECTIVE role signal.
+ * An explicit step.roleId — now authorable in the workflow editor — is the
+ * honest home and wins outright; the parsed "[Tag]" label prefix is only the
+ * legacy fallback (old workflows keep their amber-chip coverage). `source`
+ * lets callers phrase the chip honestly ("role" vs legacy "tag"). */
+export function resolveStepRole(
+  roleId: string | null | undefined,
+  label: string
+): { role: string | null; source: "explicit" | "parsed" | null } {
+  const explicit = (roleId ?? "").trim();
+  if (explicit) return { role: explicit, source: "explicit" };
+  const parsed = parseRolePrefix(label ?? "").role;
+  return parsed ? { role: parsed, source: "parsed" } : { role: null, source: null };
+}
+
 /** Rough token estimate for the NEXT chat turn (4 chars ≈ 1 token). */
 export function estimateNextTurnTokens(
   messages: ChatMessage[],

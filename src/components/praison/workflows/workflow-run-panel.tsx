@@ -60,6 +60,7 @@ import {
   fmtMs,
   fmtRel,
   parseRolePrefix,
+  resolveStepRole,
   roleMatchesAgent,
   runDiagnostics,
   runReportFileName,
@@ -1214,13 +1215,15 @@ export function WorkflowRunPanel({
               })() : null}
               {viewedRun.steps.map((step, i) => {
                 const agent = agents.find((a) => a.id === step.agentId);
-                // r180 role-tag honesty: a label's "[Role]" prefix never routes —
-                // agentId does. When the tag disagrees with the actual worker,
-                // say so on the row (the directive's failed-run finding).
+                // r180/r182 role honesty: routing is agentId, never the title.
+                // The EFFECTIVE role signal prefers an explicit step.roleId
+                // (authorable since r182); the parsed "[Tag]" prefix is the
+                // legacy fallback. Mismatch → amber chip, phrased by source.
+                const roleInfo = resolveStepRole(step.roleId, step.label);
                 const roleTag = parseRolePrefix(step.label);
                 const roleMismatch =
-                  roleTag.role != null &&
-                  !roleMatchesAgent(roleTag.role, agent?.name ?? step.agentName);
+                  roleInfo.role != null &&
+                  !roleMatchesAgent(roleInfo.role, agent?.name ?? step.agentName);
                 return (
                   <Card
                     key={`${viewedRun.id}-${step.stepId}-${i}`}
@@ -1250,9 +1253,13 @@ export function WorkflowRunPanel({
                         {roleMismatch ? (
                           <span
                             className="ml-1.5 shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1 py-px align-middle text-[10px] font-medium text-amber-600 dark:text-amber-400"
-                            title={`The label carries a "[${roleTag.role}]" role tag, but the actual worker is "${step.agentName}" — routing is decided by the assigned agent, never by the title.`}
+                            title={
+                              roleInfo.source === "explicit"
+                                ? `The step's explicit role is "${roleInfo.role}", but the actual worker is "${step.agentName}" — routing is decided by the assigned agent, never by the role field.`
+                                : `The label carries a "[${roleTag.role}]" role tag, but the actual worker is "${step.agentName}" — routing is decided by the assigned agent, never by the title.`
+                            }
                           >
-                            tag [{roleTag.role}] ≠ worker
+                            {roleInfo.source === "explicit" ? "role" : "tag"} [{roleInfo.role}] ≠ worker
                           </span>
                         ) : null}
                       </div>

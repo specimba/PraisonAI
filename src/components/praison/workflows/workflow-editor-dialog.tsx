@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AUTO_PLAN_SYSTEM } from "@/lib/constants";
-import { extractJsonArray, uid } from "@/lib/helpers";
+import { extractJsonArray, roleMatchesAgent, uid } from "@/lib/helpers";
 import {
   useAgentsStore,
   useSettingsStore,
@@ -255,6 +255,9 @@ export function WorkflowEditorDialog({
         ...s,
         label: s.label.trim() || `Step ${i + 1}`,
         instruction: s.instruction?.trim() ? s.instruction.trim() : undefined,
+        // r182: normalize the explicit role — whitespace-only collapses to
+        // absent so the parsed-label fallback stays the live signal.
+        roleId: s.roleId?.trim() ? s.roleId.trim() : undefined,
       }));
     if (validSteps.length === 0) {
       toast.error("Add at least one step with an agent");
@@ -569,7 +572,33 @@ export function WorkflowEditorDialog({
                         Produces output for the next step
                       </span>
                     )}
+
+                    {/* r182 (directive item (a) completion): the explicit role
+                        field — the honest home the directive asked for. Empty =
+                        legacy "[Tag]" label prefixes keep working; anything
+                        typed here WINS over the label prefix. Routing still
+                        follows the selected agent, visibly. */}
+                    <Input
+                      value={step.roleId ?? ""}
+                      onChange={(e) => patchStep(step.id, { roleId: e.target.value })}
+                      placeholder="Role tag (optional)"
+                      aria-label={`Role tag for step ${i + 1} — explicit role identity; routing still follows the selected agent`}
+                      className="ml-auto h-8 w-full text-xs sm:w-44"
+                    />
                   </div>
+
+                  {/* r182: authoring-time honesty — an explicit role that
+                      disagrees with the worker says so NOW, not after a run. */}
+                  {(() => {
+                    const explicit = (step.roleId ?? "").trim();
+                    if (!explicit || !agent) return null;
+                    if (roleMatchesAgent(explicit, agent.name)) return null;
+                    return (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                        ⚠ Role “{explicit}” doesn’t match worker “{agent.name}” — routing follows the worker.
+                      </p>
+                    );
+                  })()}
 
                   <Collapsible>
                     <CollapsibleTrigger asChild>

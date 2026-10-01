@@ -224,6 +224,9 @@ export interface WorkflowRunStep {
   agentName: string;
   agentEmoji: string;
   label: string;
+  /** r182: materialized from WorkflowStep.roleId so run rows can prefer the
+   * explicit role signal over the parsed "[Tag]" label prefix. */
+  roleId?: string;
   output: string;
   toolCalls: ToolCallInfo[];
   /** "pending" = materialized but not yet reached by the engine loop (r80:

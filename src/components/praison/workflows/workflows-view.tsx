@@ -64,7 +64,7 @@ import {
 import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
 import { buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { useSettingsStore } from "@/lib/stores";
-import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, parseRolePrefix, roleMatchesAgent, uid } from "@/lib/helpers";
+import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, resolveStepRole, roleMatchesAgent, uid } from "@/lib/helpers";
 import { resolveLlm } from "@/lib/llm-config";
 import { isWorkflowRunning } from "@/lib/workflow-runner";
 import { readScheduleSkips } from "@/lib/schedule-skips";
@@ -1342,13 +1342,14 @@ export function WorkflowsView() {
                     {wf.steps.map((step, i) => {
                       const agent = agentById.get(step.agentId);
                       const isReview = (step.kind ?? "generate") === "review";
-                      // r180 role-tag honesty: flag "[Role]" labels that disagree
-                      // with the assigned worker (card chip = authored state).
-                      const roleTag = parseRolePrefix(step.label || "");
+                      // r180/r182 role honesty (card chip = authored state):
+                      // effective role prefers explicit step.roleId; the parsed
+                      // "[Tag]" prefix is the legacy fallback.
+                      const roleInfo = resolveStepRole(step.roleId, step.label || "");
                       const roleMismatch =
-                        roleTag.role != null &&
+                        roleInfo.role != null &&
                         agent?.name != null &&
-                        !roleMatchesAgent(roleTag.role, agent.name);
+                        !roleMatchesAgent(roleInfo.role, agent.name);
                       return (
                         <React.Fragment key={step.id}>
                           {i > 0 ? (
@@ -1360,7 +1361,7 @@ export function WorkflowsView() {
                           <span
                             title={
                               roleMismatch
-                                ? `${step.label || agent?.name} — ⚠ role tag "${roleTag.role}" ≠ worker "${agent?.name}" (routing follows the assigned agent)`
+                                ? `${step.label || agent?.name} — ⚠ ${roleInfo.source === "explicit" ? "role" : "role tag"} "${roleInfo.role}" ≠ worker "${agent?.name}" (routing follows the assigned agent)`
                                 : step.label || agent?.name
                             }
                             className={cn(

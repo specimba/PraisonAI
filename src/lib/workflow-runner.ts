@@ -471,6 +471,9 @@ export function materializeRunSteps(wf: Workflow, agentsNow: Agent[]): WorkflowR
       agentName: agent?.name ?? "Unknown agent",
       agentEmoji: agent?.emoji ?? "🤖",
       label: s.label || "Untitled step",
+      // r182: explicit role travels with the run so run rows prefer it over
+      // the parsed "[Tag]" label prefix (directive item (a) completion).
+      roleId: s.roleId,
       output: "",
       toolCalls: [],
       // r80: honest queue state — the engine loop flips the executing step to
@@ -502,6 +505,9 @@ export function materializeRunSteps(wf: Workflow, agentsNow: Agent[]): WorkflowR
       agentName: firstAgent?.name ?? first.agentName,
       agentEmoji: firstAgent?.emoji ?? first.agentEmoji,
       label,
+      // r182: deep passes clone the first step's worker — its explicit role
+      // travels too, so the clone rows stay honest about who is working.
+      roleId: first.roleId,
       output: "",
       toolCalls: [],
       status: "pending" as const,

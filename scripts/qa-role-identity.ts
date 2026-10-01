@@ -57,5 +57,61 @@ const round2 = parseRolePrefix(planner.cleanLabel);
 check("clean label re-parse yields no second tag",
   round2.role === null && round2.cleanLabel === planner.cleanLabel);
 
+// ── 4. r182: effective-role preference (explicit roleId wins) ────────────────
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { resolveStepRole } from "../src/lib/helpers";
+
+check("explicit roleId wins over a disagreeing label prefix",
+  (() => {
+    const r = resolveStepRole("Research Scout", "[Strategic Planner] Establish tracks");
+    return r.role === "Research Scout" && r.source === "explicit";
+  })());
+check("parsed prefix is the fallback when roleId absent",
+  (() => {
+    const r = resolveStepRole(undefined, "[Code Smith] Inventory context");
+    return r.role === "Code Smith" && r.source === "parsed";
+  })());
+check("whitespace-only roleId collapses to the parsed fallback",
+  (() => {
+    const r = resolveStepRole("   ", "[Code Smith] Inventory context");
+    return r.role === "Code Smith" && r.source === "parsed";
+  })());
+check("both signals absent → null (no chip)",
+  (() => {
+    const r = resolveStepRole("", "Review & refine");
+    return r.role === null && r.source === null;
+  })());
+check("explicit roleId beats label prefix even when the prefix agrees too",
+  (() => {
+    const r = resolveStepRole("Tech Writer", "[Tech Writer] Publish");
+    return r.role === "Tech Writer" && r.source === "explicit";
+  })());
+
+// ── 5. r182 integration: editor writes it, surfaces prefer it, runs carry it ─
+const root = process.cwd();
+const read = (p: string) => fs.readFileSync(path.join(root, p), "utf8");
+const editorSrc = read("src/components/praison/workflows/workflow-editor-dialog.tsx");
+const panelSrc = read("src/components/praison/workflows/workflow-run-panel.tsx");
+const viewSrc2 = read("src/components/praison/workflows/workflows-view.tsx");
+const runnerSrc = read("src/lib/workflow-runner.ts");
+const typesSrc = read("src/lib/types.ts");
+
+check("editor has the Role tag input writing step.roleId",
+  editorSrc.includes("patchStep(step.id, { roleId: e.target.value })"));
+check("editor shows an authoring-time mismatch warning for explicit roles",
+  editorSrc.includes("routing follows the worker") && editorSrc.includes("roleMatchesAgent(explicit, agent.name)"));
+check("editor save normalizes whitespace-only roleId to absent",
+  editorSrc.includes("roleId: s.roleId?.trim() ? s.roleId.trim() : undefined"));
+check("run panel prefers resolveStepRole and phrases the chip by source",
+  panelSrc.includes("resolveStepRole(step.roleId, step.label)") &&
+    panelSrc.includes('roleInfo.source === "explicit" ? "role" : "tag"'));
+check("card chips prefer resolveStepRole too",
+  viewSrc2.includes("resolveStepRole(step.roleId, step.label || \"\")"));
+check("runner materializes roleId into run steps (base + deep clones)",
+  runnerSrc.includes("roleId: s.roleId,") && runnerSrc.includes("roleId: first.roleId,"));
+check("WorkflowRunStep carries the optional roleId field",
+  typesSrc.includes("roleId?: string;"));
+
 console.log(`\nK-series (role-identity): ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
