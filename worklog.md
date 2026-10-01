@@ -4458,3 +4458,27 @@ Verification result: PASS
 Open risks: relayOrder full-permutation writes (19 keys) go stale when the arena catalog changes — buildRelayChain already handles stale orders gracefully (listed keys by index, rest default, demoted always sink — r25 doctrine); QA touches only client-side localStorage seeds, no live server data.
 Blockers: none
 Next recommended action: r169 — rotate: (1) FIRST read any user report cross-evidenced against /api/gateway/pulse (8 real events now on record, all auto-lane), or (2) continue the settings audit — settings-view.tsx (677 lines) is the largest unaudited surface, then local-models.tsx (930), or (3) root-cause FIRST anything the user brings. Keep rotating.
+---
+Task ID: 424432 — r169
+Agent: main (platform development — hourly dev round)
+Task: settings audit rotation → settings-view.tsx (677 lines, largest unaudited surface). No user report attached this round; pulse unchanged (8 events, last 08:02Z).
+
+Work Log:
+- Audited the full Your Data card against the r165 import doctrine and found two real defects: (1) full-data import wrote bundle.agents/conversations/workflows straight into localStorage with ZERO per-entry validation — malformed entries became live store state after reload, crash-recoverable only by wiping everything; (2) "Clear all data" claimed "permanently delete everything stored in this browser" but removed only 5 hardcoded keys — relay health, live catalog, intro flags and the stall override survived.
+- SHIPPED (settings-view.tsx): per-entry import sanitizers (sanitizeAgent/Conversation/Message/Workflow — identity + load-bearing fields required; id-less but real messages get a synthesized id instead of being dropped; workflow junk steps filtered; runs defaulted), honest skipped count in the import toast (with a 1.8s hold before reload so the count is actually readable), a guard that replaces non-object settings payloads with defaults (a string settings payload would previously spread as numeric index keys over DEFAULT_SETTINGS), and a prefix-complete clear-all (every praison-* key).
+- QA (CD-series, scripts/cdp-qa-settings-data.mjs): 10/10 — D1 malformed bundle → only valid entries land, baseline replaced (no merge), junk message dropped, id-less message synthesized, junk steps filtered, toast states "4 malformed entries skipped"; D2 string-settings poison blocked, vault preseed intact; D3 clear-all removal log (removeItem instrumentation — the wipe+reload run in one synchronous task, no poller can observe the interim state) caught 11 praison-* keys INCLUDING praison-tracker-lastseen and praison-tracker-cache, two keys beyond my own inventory; foreign keys survive.
+- tsc 0 (one TS narrowing lesson: property narrowing doesn't survive into closures — capture to locals); eslint 0; root 200.
+
+Stage Summary:
+- The Your Data card now honors the same doctrine as the vault restore: junk in, honest count out, never junk into live state — and "Clear all data" finally matches its own copy (prefix wipe caught keys I didn't know existed).
+
+Round Handoff:
+Round ID: r170
+Task owner: main (platform dev)
+Scope completed: settings-view import sanitization + honest skipped counts + settings-poison guard + prefix-complete clear-all; CD-series 10/10; snapshot pushed.
+User-visible changes: importing a partial/hand-edited export no longer risks a post-reload crash and now says exactly what it skipped; clearing all data truly wipes everything the app stores (tracker cache, relay health, intro flags included).
+Verification steps: node scripts/cdp-qa-settings-data.mjs → 10/10; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: import still replaces silently (no pre-import confirmation dialog — the r164 dirty-guard doctrine suggests one, deferred as scope for this round); workflow step deep-shape is only guarded at the object level (runner-level tolerance unverified).
+Blockers: none
+Next recommended action: r170 — rotate: (1) FIRST read any user report cross-evidenced against /api/gateway/pulse, or (2) continue the settings audit — local-models.tsx (930 lines, last unaudited settings surface), or (3) consider the import-confirmation dialog (r164 dirty-guard parity) if user reports touch data loss. Keep rotating.

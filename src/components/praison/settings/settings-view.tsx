@@ -60,16 +60,68 @@ import {
   useUiStore,
   useWorkflowsStore,
 } from "@/lib/stores";
-import type { Conversation, Framework } from "@/lib/types";
+import type {
+  Agent,
+  ChatMessage,
+  Conversation,
+  Framework,
+  Workflow,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEYS = [
-  "praison-agents",
-  "praison-conversations",
-  "praison-workflows",
-  "praison-settings",
-  "praison-ui",
-] as const;
+// ── r169 import doctrine (parity with the r165 vault restore) ──────────────
+// Every imported entry is sanitized INDIVIDUALLY: junk is skipped and counted
+// honestly instead of becoming live store state that can crash the app after
+// reload (recoverable only by wiping everything). Identity + the load-bearing
+// fields must hold; optional fields are kept untouched — the stores already
+// tolerate their absence via defaults.
+let importSeq = 0;
+
+function sanitizeAgent(raw: unknown): Agent | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const a = raw as Record<string, unknown>;
+  if (typeof a.id !== "string" || !a.id.trim()) return null;
+  if (typeof a.name !== "string" || typeof a.instructions !== "string") return null;
+  return a as unknown as Agent;
+}
+
+function sanitizeMessage(raw: unknown, convId: string): ChatMessage | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const m = raw as Record<string, unknown>;
+  if (m.role !== "user" && m.role !== "assistant") return null;
+  if (typeof m.content !== "string") return null;
+  if (typeof m.id !== "string" || !m.id.trim()) {
+    // Real content with a missing id — synthesize one rather than drop it.
+    importSeq += 1;
+    m.id = `${convId}-imp-${Date.now().toString(36)}-${importSeq}`;
+  }
+  return m as unknown as ChatMessage;
+}
+
+function sanitizeConversation(raw: unknown): Conversation | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const c = raw as Record<string, unknown>;
+  if (typeof c.id !== "string" || !c.id.trim() || !Array.isArray(c.messages)) return null;
+  const convId = c.id; // property narrowing doesn't survive into closures
+  const messages = (c.messages as unknown[])
+    .map((m) => sanitizeMessage(m, convId))
+    .filter((m): m is ChatMessage => m !== null);
+  return { ...(c as unknown as Conversation), messages };
+}
+
+function sanitizeWorkflow(raw: unknown): Workflow | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const w = raw as Record<string, unknown>;
+  if (typeof w.id !== "string" || !w.id.trim()) return null;
+  if (typeof w.name !== "string" || !Array.isArray(w.steps)) return null;
+  // Non-object step slots are junk that would crash the runner's maps.
+  const steps = w.steps.filter((s) => typeof s === "object" && s !== null);
+  return {
+    ...(w as unknown as Workflow),
+    steps,
+    runs: Array.isArray(w.runs) ? (w.runs as Workflow["runs"]) : [],
+  };
+}
 
 /** Sticky section-nav — ids must match the wrapper elements below. */
 const SETTINGS_SECTIONS = [
@@ -189,38 +241,66 @@ export function SettingsView() {
         });
         return;
       }
-      const conversations = bundle.conversations as Conversation[];
+      // Per-entry sanitization with an honest skipped count (r165 doctrine).
+      const agentsRaw = bundle.agents as unknown[];
+      const conversationsRaw = bundle.conversations as unknown[];
+      const workflowsRaw = bundle.workflows as unknown[];
+      const cleanAgents = agentsRaw
+        .map(sanitizeAgent)
+        .filter((a): a is Agent => a !== null);
+      const cleanConversations = conversationsRaw
+        .map(sanitizeConversation)
+        .filter((c): c is Conversation => c !== null);
+      const cleanWorkflows = workflowsRaw
+        .map(sanitizeWorkflow)
+        .filter((w): w is Workflow => w !== null);
+      const skipped =
+        agentsRaw.length - cleanAgents.length +
+        (conversationsRaw.length - cleanConversations.length) +
+        (workflowsRaw.length - cleanWorkflows.length);
+      // A malformed settings payload must not poison the store — merge only
+      // real objects over the defaults.
+      const importedSettings =
+        bundle.settings && typeof bundle.settings === "object" && !Array.isArray(bundle.settings)
+          ? { ...DEFAULT_SETTINGS, ...(bundle.settings as object), seeded: true }
+          : { ...DEFAULT_SETTINGS, seeded: true };
       try {
         localStorage.setItem(
           "praison-agents",
-          JSON.stringify({ state: { agents: bundle.agents }, version: 0 })
+          JSON.stringify({ state: { agents: cleanAgents }, version: 0 })
         );
         localStorage.setItem(
           "praison-conversations",
           JSON.stringify({
-            state: { conversations, activeId: conversations[0]?.id ?? null },
+            state: {
+              conversations: cleanConversations,
+              activeId: cleanConversations[0]?.id ?? null,
+            },
             version: 0,
           })
         );
         localStorage.setItem(
           "praison-workflows",
-          JSON.stringify({ state: { workflows: bundle.workflows }, version: 0 })
+          JSON.stringify({ state: { workflows: cleanWorkflows }, version: 0 })
         );
         localStorage.setItem(
           "praison-settings",
-          JSON.stringify({
-            state: {
-              settings: { ...DEFAULT_SETTINGS, ...(bundle.settings ?? {}), seeded: true },
-            },
-            version: 0,
-          })
+          JSON.stringify({ state: { settings: importedSettings }, version: 0 })
         );
       } catch {
         toast.error("Import failed — could not write to localStorage.");
         return;
       }
-      toast.success("Data imported — reloading…");
-      location.reload();
+      toast.success("Data imported — reloading…", {
+        description: `${cleanAgents.length} agents · ${cleanConversations.length} conversations · ${cleanWorkflows.length} workflows${
+          skipped > 0
+            ? ` · ${skipped} malformed ${skipped === 1 ? "entry" : "entries"} skipped`
+            : ""
+        }`,
+      });
+      // Reload almost immediately — but when entries were skipped, hold long
+      // enough for the honest count to be readable before the toast dies.
+      setTimeout(() => location.reload(), skipped > 0 ? 1800 : 250);
     };
     reader.onerror = () => toast.error("Import failed — could not read the selected file.");
     reader.readAsText(file);
@@ -228,7 +308,15 @@ export function SettingsView() {
 
   function handleClearAll() {
     try {
-      for (const key of STORAGE_KEYS) localStorage.removeItem(key);
+      // Wipe EVERYTHING the app stores, not a hardcoded key list — the copy
+      // promises "everything stored in this browser" (r169: relay health,
+      // live catalogs, intro flags and the stall override used to survive).
+      const doomed: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("praison-")) doomed.push(k);
+      }
+      for (const k of doomed) localStorage.removeItem(k);
     } catch {
       /* ignore */
     }
