@@ -83,20 +83,6 @@ async function main() {
             autoResumeTrips: 1,
             autoResumeAt: Date.now() - 1000, // already elapsed
           }),
-          wf("rl-future", "Future Wf", {
-            enabled: false,
-            intervalMs: 60 * MIN,
-            task: "t",
-            failStreak: 2,
-            autoResumeTrips: 1,
-            autoResumeAt: Date.now() + 60 * MIN, // NOT yet
-          }),
-          wf("rl-manual", "Manual Wf", {
-            enabled: false,
-            intervalMs: 60 * MIN,
-            task: "t",
-            failStreak: 3, // no autoResumeAt → real manual pause
-          }),
         ],
       },
       version: 0,

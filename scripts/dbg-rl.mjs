@@ -4,31 +4,33 @@ const browser = await chromium.launch({
   args: ["--no-sandbox"],
 });
 const page = await (await browser.newContext()).newPage();
-page.on("console", (m) => { if (m.type() === "error") console.log(`[console.error]`, m.text().slice(0, 300)); });
-page.on("pageerror", (e) => console.log("[pageerror]", String(e).slice(0, 400)));
-await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" }).catch(() => {});
-await page.evaluate(() => {
-  const wf = (id, schedule) => ({ id, name: id, description: "d", steps: [], runs: [], createdAt: 1, updatedAt: 1, ...(schedule ? { schedule } : {}) });
-  localStorage.setItem("praison-workflows", JSON.stringify({ state: { workflows: [
-    wf("rl-backoff", { enabled: false, intervalMs: 3600000, task: "t", failStreak: 2, autoResumeTrips: 1, autoResumeAt: Date.now() - 1000 }),
-    wf("rl-future", { enabled: false, intervalMs: 3600000, task: "t", failStreak: 2, autoResumeTrips: 1, autoResumeAt: Date.now() + 3600000 }),
-    wf("rl-manual", { enabled: false, intervalMs: 3600000, task: "t", failStreak: 3 }),
-  ] }, version: 0 }));
-});
+page.on("pageerror", (e) => console.log("[pageerror]", String(e).slice(0, 300)));
+const MIN = 60_000;
+function wf(id, name, schedule, steps) {
+  return { id, name, description: `fixture ${id}`, steps, runs: [], createdAt: 1, updatedAt: 1, ...(schedule ? { schedule } : {}) };
+}
+const oneStep = [{ id: "s1", agentId: "a1", label: "Only step" }];
+const seed = { state: { workflows: [
+  wf("rl-backoff", "Backoff Wf", { enabled: false, intervalMs: 60 * MIN, task: "t", failStreak: 2, autoResumeTrips: 1, autoResumeAt: Date.now() - 1000 }),
+  wf("rl-future", "Future Wf", { enabled: false, intervalMs: 60 * MIN, task: "t", failStreak: 2, autoResumeTrips: 1, autoResumeAt: Date.now() + 60 * MIN }),
+  wf("rl-manual", "Manual Wf", { enabled: false, intervalMs: 60 * MIN, task: "t", failStreak: 3 }, oneStep),
+] }, version: 0 };
+await page.addInitScript((s) => {
+  if (sessionStorage.getItem("__dbg") === "1") return;
+  sessionStorage.setItem("__dbg", "1");
+  localStorage.clear();
+  localStorage.setItem("praison-workflows", JSON.stringify(s));
+}, seed);
 await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
-for (let s = 1; s <= 12; s++) {
+for (let s = 1; s <= 10; s++) {
   await page.waitForTimeout(1000);
-  const d = await page.evaluate(() => {
-    const wfs = JSON.parse(localStorage.getItem("praison-workflows") ?? "{}")?.state?.workflows ?? [];
-    const b = wfs.find((w) => w.id === "rl-backoff")?.schedule;
-    return {
-      n: wfs.length, en: b?.enabled,
-      scheds: wfs.map((w) => `${w.id}:${w.schedule ? (w.schedule.enabled ? "on" : "off") + "@" + (w.schedule.nextRunAt ?? "null") : "-"}:steps${w.steps.length}`).join(" | ").slice(0, 300),
-      toasts: [...document.querySelectorAll("[data-sonner-toast]")].map((t) => (t.textContent ?? "").slice(0, 70)),
-    };
+  const raw = await page.evaluate(() => {
+    const v = JSON.parse(localStorage.getItem("praison-workflows") ?? "{}");
+    const b = v?.state?.workflows?.find((w) => w.id === "rl-backoff")?.schedule;
+    return { en: b?.enabled, n: v?.state?.workflows?.length,
+      toasts: [...document.querySelectorAll("[data-sonner-toast]")].map((t) => (t.textContent ?? "").slice(0, 50)) };
   });
-  console.log(`t=${s}s en=${d.en} n=${d.n}`, d.scheds);
-  console.log("   toasts:", JSON.stringify(d.toasts));
-  if (d.en === true) break;
+  console.log(`t=${s}s`, JSON.stringify(raw));
+  if (raw.en === true) { console.log("FLIPPED"); break; }
 }
 await browser.close();
