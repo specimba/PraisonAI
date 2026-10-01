@@ -4677,3 +4677,28 @@ Verification result: PASS
 Open risks: the dedup is per-page-load (the ref resets on reload; localStorage continuity preserves correctness across reloads); the tracker panel itself was audited read-only — its server route (/api/tracker) dedup of tracked rows is unverified (rows keyed by providerId::modelId — assumed unique upstream).
 Blockers: none
 Next recommended action: r176 — (1) FIRST read any user report (two small waves now: 12:11–12:21 and ~15:40 UTC — survival-stack behavior still awaiting user-side confirmation); (2) the chat-view audit is now the largest unaudited surface (chat-view.tsx 1173 lines — do it in two passes if needed); (3) rollback guard: one git log line before starting work. Keep rotating.
+---
+Task ID: 424432 — r176
+Agent: main (platform development — hourly dev round)
+Task: No user report attached. Pulse re-check first per handoff: 15 events/24h, count1h=1 — small scattered waves continue, survival stack pulse-consistent, nothing to cross-check against a user report. Rotation: the chat-view audit (chat-view.tsx, 1173 lines — the largest unaudited surface; r175's Model Tracker probe was already closed by the parallel instance, commit 472533392).
+
+Work Log:
+- Rollback guard clean (HEAD 472533392 ≥ 6239e067b, no repeat of r174); root 200.
+- AUDIT (full read of chat-view.tsx): (1) re-entry inconsistency — send() guards with the synchronous streamingRef, but regenerate / editAndResend / answerAs guarded on the `streaming` state only, leaving a pre-rerender double-activation window into runTurn. (2) The real find: the queued follow-up (async steering) auto-flushed on EVERY settle outcome except "stopped" — INCLUDING "error". With the free-catalog browser-direct rotation, ONE errored turn burns ~19 provider calls (measured live in QA); the old auto-flush immediately launched a SECOND full rotation into the same failing window — the exact r170 "too many request errors" complaint, straight against the r171 congestion doctrine.
+- SHIPPED (chat-view.tsx): (1) settle contract — on "error" the queue is now HELD: the composer keeps the pending chip ("Send now" or the next successful turn flushes it) and an honest toast explains why it was not auto-sent; "done" auto-flush and "stopped"-drops-queue are unchanged. (2) streamingRef guards added to regenerate / editAndResend / answerAs (parity with send).
+- QA (F-series, scripts/cdp-qa-chat-guard.mjs, new): transport-agnostic fetch stub — relay SSE for /api/chat, OpenAI-style SSE for any external host, mode flipped via sessionStorage, every chat-bound fetch counted in window.__qaHits — staging a real chat: F1a queue accepted while streaming (chip shows); F1b errored turn leaves hit-count STABLE post-settle (19→19; the old code auto-fired a second rotation here); F1c chip retained; F1d honest toast text; F2a follow-up queued during the success turn; F2b successful settle auto-flushes (exactly 2 hits); F2c chip cleared; F3 same-task double-activated Regenerate enters runTurn exactly once. 8/8.
+- Harness lessons (recorded for future chat QA): buildRelayChain grounds hops against the user's live /models roster — fixture providerKeys alone do NOT force the relay transport, so real errored turns ride the free-catalog browser-direct rotation; ARENA_CATALOG members observed live: vyce, aihubmix. Settle-signal timing matters: submit-while-streaming must wait for the "thinking…" indicator, not a fixed sleep.
+
+Stage Summary:
+- A failed reply no longer weaponizes the user's own queued follow-up against a saturated gateway: the queue waits, the chip says so, and one toast explains it — while the success path keeps its auto-flush convenience. runTurn re-entry is closed from all four entry points.
+
+Round Handoff:
+Round ID: r177
+Task owner: main (platform dev)
+Scope completed: chat-view audit + error-holds-queue contract + regenerate/edit/answerAs re-entry hardening; F-series 8/8; rollback guard clean; snapshot pushed (b12c58d20).
+User-visible changes: when a reply errors, a queued follow-up is no longer auto-sent into the same failure — it stays pending (chip + toast) until the user sends it or the next turn succeeds.
+Verification steps: node scripts/cdp-qa-chat-guard.mjs → 8/8; bunx eslint src/components/praison/chat/chat-view.tsx → 0; npx tsc --noEmit src-scoped → 0 errors; curl root → 200.
+Verification result: PASS
+Open risks: (1) repo-root `npx tsc --noEmit` reports a pre-existing error in scripts/hang-server.ts (missing Bun global types) — src is clean; r175 still reported tsc 0, so that file appeared very recently (parallel-session artifact?) — one git log line will attribute it. (2) The queued message still lives only in memory — a reload drops it (pre-existing, consistent with "stopped drops queue", but worth a look someday). (3) composer.tsx (1124 lines) is now the second-largest unaudited chat surface.
+Blockers: none
+Next recommended action: r177 — (1) FIRST read any user report; (2) rollback guard (one git log line); (3) rotation: composer.tsx audit (1124 lines) or scripts/hang-server.ts provenance check + tsc hygiene (one git log line — if a parallel session added it, coordinate via worklog). Keep rotating.
