@@ -321,6 +321,11 @@ export interface WorkflowRun {
   error?: RunErrorInfo;
   /** How many times this run was resumed after a failure/stop. */
   resumeCount?: number;
+  /**
+   * r158: how many rate-limit parks this run used (separate budget from
+   * resumeCount — stalls and manual resumes spend that one; parks spend this).
+   */
+  parkCount?: number;
   /** Chronological log of LLM calls made during this run (capped, oldest-dropped). */
   callLog?: RunCallLogEntry[];
   /** Evolution Layer (r68): novelty % vs this workflow's recent done runs (0-100; <35 = stall). */

@@ -4,7 +4,7 @@
 
 import { toast } from "sonner";
 import { runText, scoreNovelty } from "@/lib/evolution";
-import { noteGateway429 } from "@/lib/gateway-cadence";
+import { gatewayQuietUntil, noteGateway429 } from "@/lib/gateway-cadence";
 import { maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveLlm } from "@/lib/llm-config";
@@ -76,6 +76,30 @@ function stallTimeoutLabel(): string {
 import { clearWorkerInterval, setWorkerInterval, setWorkerTimeout } from "@/lib/worker-timer";
 
 const MAX_AUTO_RESUMES = 3;
+
+// ─── r158 (user report, 2nd occurrence): rate-limit PARK-AND-RESUME ─────────
+// Live evidence: the user's hourly Continuous Research pipeline died at step
+// 1/11 AGAIN with kind=rate-limit — 3 LLM calls, 3 failed. The self-heal
+// ladder's cooldowns (20s + 45s ≈ 65s of waiting) are far shorter than the
+// minutes-long saturation window of the shared free gateway, so every attempt
+// lands inside the same 429 window and the step — then the whole run — dies.
+// Schedule-level backoff (r156) only helps scheduled runs; a manual run just
+// burns into the wall. Doctrine shift: a rate-limit-dead STEP no longer kills
+// the RUN while park budget remains — the run finalizes honestly ("error",
+// recovery card, r157 history chip, breaker) and then AUTO-RESUMES after a
+// long, escalating wait (5m → 10m → 20m) that outlives the quota window.
+// Completed steps are preserved by the normal resume path. Budget is a
+// dedicated parkCount (NOT resumeCount — stalls and manual resumes share that
+// one; a flaky-gateway deep run could plausibly need both). Parks are live
+// only while the app tab is open (worker timers die with the tab) — the
+// headless lane keeps its own independent backoff, so nothing is lost.
+const MAX_RATE_LIMIT_PARKS = 3;
+const PARK_BASE_MS = 5 * 60_000;
+const PARK_CAP_MS = 20 * 60_000;
+const PARK_REARM_MS = 60_000;
+const MAX_PARK_REARMS = 5;
+const parkDelayMs = (parkIndex: number) =>
+  Math.min(PARK_BASE_MS * 2 ** parkIndex, PARK_CAP_MS);
 const STALL_CHECK_MS = 15_000;
 const STALL_WATCHDOG_KEY = "praison-stall-watchdog";
 let stallWatchdog: ReturnType<typeof setInterval> | null = null;
@@ -175,6 +199,100 @@ function scheduleAutoResume(
   // which stretched the 1.2s re-entry into minutes right after a stall abort.
   if (!setWorkerTimeout(`auto-resume-${runId}`, 1200, fireAutoResume)) {
     setTimeout(fireAutoResume, 1200);
+  }
+}
+
+/**
+ * r158: long-delay sibling of scheduleAutoResume for rate-limit parks.
+ * Re-enters the run through the normal resume path after parkDelayMs(parkIndex)
+ * — 5m → 10m → 20m — long enough to outlive the gateway's quota window that
+ * the 65s self-heal ladder cannot. Differences from the stall path, per the
+ * adversarial design review:
+ *  - guards run BEFORE any toast (a park whose run row was evicted/deleted
+ *    must die silently, never announce a resume that can't happen);
+ *  - busy/gateway-quiet collisions RE-ARM (+60s, bounded) instead of silently
+ *    dropping the park — at 5-minute scale the schedule firing a fresh run
+ *    into the lane during the wait is LIKELY, and a silent drop would strand
+ *    the parked run forever;
+ *  - only an "error" row is resumed — a row the user stopped (or already
+ *    resumed) is theirs now;
+ *  - originSource is passed through: a manual run's parks stay manual, so a
+ *    manual fire into a saturated gateway can never trip the r156 schedule
+ *    breaker (2-strike auto-pause) on the schedule lane's behalf;
+ *  - on a done settle, an overdue schedule is re-armed from now (+jitter) —
+ *    without this, the scheduler's r77 deferral fires a fresh duplicate
+ *    full-pipeline run minutes after the parked one completes.
+ * HMR caveat: dev reloads drop pending worker timers (same class as the stall
+ * timer) — a dev-only park loss, accepted.
+ */
+function scheduleRateLimitResume(
+  workflowId: string,
+  runId: string,
+  fromStepIndex: number,
+  parkIndex: number,
+  originSource: "manual" | "scheduled",
+  rearms = 0
+): void {
+  const reArm = (extraDelay: number, nextRearms: number) => {
+    if (!setWorkerTimeout(`park-resume-${runId}`, extraDelay, () =>
+      scheduleRateLimitResume(workflowId, runId, fromStepIndex, parkIndex, originSource, nextRearms)
+    )) {
+      setTimeout(
+        () => scheduleRateLimitResume(workflowId, runId, fromStepIndex, parkIndex, originSource, nextRearms),
+        extraDelay
+      );
+    }
+  };
+  const fire = () => {
+    const wf = useWorkflowsStore
+      .getState()
+      .workflows.find((w) => w.id === workflowId);
+    const run = wf?.runs.find((r) => r.id === runId);
+    if (!wf || !run) return; // deleted / evicted (runs 12-cap) — drop silently
+    if (run.status !== "error") return; // user resumed/stopped it — theirs now
+    if (activeRuns.has(workflowId) || Date.now() < gatewayQuietUntil()) {
+      // Engine busy (e.g. the schedule fired a fresh run during the wait) or
+      // other workflows are still eating 429s — re-arm, never silent-drop.
+      if (rearms < MAX_PARK_REARMS) reArm(PARK_REARM_MS, rearms + 1);
+      return;
+    }
+    toast("Gateway recovered — resuming parked run", {
+      icon: "⏳",
+      description: `"${run.steps[fromStepIndex]?.label ?? "Failed step"}" was parked on a 429 — resuming "${wf.name}" from there (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS}, completed steps preserved).`,
+    });
+    const resumed = executeWorkflowRun({
+      workflow: wf,
+      task: run.task,
+      resume: { runId, fromStepIndex },
+      source: originSource,
+      onSettled: (_settledId, status) => {
+        if (status !== "done") return;
+        // Companion fix: a parked-then-completed run must not trigger the
+        // scheduler's r77 deferral into a duplicate full-pipeline fire.
+        try {
+          const st = useWorkflowsStore.getState();
+          const sched = st.workflows.find((w) => w.id === workflowId)?.schedule;
+          if (sched?.enabled && (sched.nextRunAt == null || sched.nextRunAt <= Date.now())) {
+            const interval = Math.max(60_000, sched.intervalMs);
+            st.update(workflowId, {
+              schedule: {
+                ...sched,
+                nextRunAt: Date.now() + Math.round(interval * (0.9 + Math.random() * 0.2)),
+              },
+            });
+          }
+        } catch {
+          /* cadence restore is best-effort */
+        }
+      },
+    });
+    resumed
+      ?.catch((err) => {
+        console.error("[workflow-runner] park-resume failed", err);
+      });
+  };
+  if (!setWorkerTimeout(`park-resume-${runId}`, parkDelayMs(parkIndex), fire)) {
+    setTimeout(fire, parkDelayMs(parkIndex));
   }
 }
 
@@ -435,7 +553,7 @@ export async function executeWorkflowRun(
     // resumed-from step to "running" at its start-of-step patch.
     steps = run.steps.map((s, i) =>
       i >= startIndex
-        ? { ...s, output: "", toolCalls: [], status: "pending" as const, ms: undefined, verdict: undefined, reworked: undefined }
+        ? { ...s, output: "", toolCalls: [], status: "pending" as const, ms: undefined, verdict: undefined, reworked: undefined, backoffUntil: undefined, backoffKind: undefined }
         : s
     );
     store.patchRun(wf.id, runId, {
@@ -677,8 +795,35 @@ export async function executeWorkflowRun(
       attempts: attempts + 1,
       autoRetried: meta.autoRetried === true || undefined,
     };
+    // r158 park-and-resume: a rate-limit death is congestion, not breakage.
+    // While park budget remains, annotate + park instead of terminally failing:
+    // the run still finalizes "error" (honest state, recovery card, r157
+    // history chip, schedule breaker), but a long-delay auto-resume brings it
+    // back once the quota window has passed. NOTE the ordering: the park note
+    // must be appended to info BEFORE finish() — finish copies the object into
+    // the store row, so later edits never reach the UI.
+    let parkIndex: number | null = null;
+    if (kind === "rate-limit") {
+      const liveRun = useWorkflowsStore
+        .getState()
+        .workflows.find((w) => w.id === wf.id)
+        ?.runs.find((r) => r.id === runId);
+      const parks = liveRun?.parkCount ?? 0;
+      if (parks < MAX_RATE_LIMIT_PARKS) parkIndex = parks;
+    }
+    if (parkIndex !== null) {
+      const waitMs = parkDelayMs(parkIndex);
+      info.message += ` — parked: gateway saturated, auto-resume in ~${Math.max(1, Math.round(waitMs / 60_000))}m (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS})`;
+      patchRun({ parkCount: parkIndex + 1 });
+      // Live countdown on the failed step row — reuses the r128 "⏳ Cooldown"
+      // chip machinery so the park wait is visible, not a silent hang.
+      patchRunStep(step.stepId, { backoffUntil: Date.now() + waitMs, backoffKind: "cooldown" });
+    }
     stopRemaining(failedIndex);
     finish("error", `Step "${step.label}" failed`, info);
+    if (parkIndex !== null) {
+      scheduleRateLimitResume(wf.id, runId, failedIndex, parkIndex, source);
+    }
   };
 
   // r126 run-scoped sick memory: a mid-stream drop on the primary marks it
