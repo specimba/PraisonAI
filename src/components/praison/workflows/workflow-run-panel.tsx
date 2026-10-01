@@ -1039,7 +1039,10 @@ export function WorkflowRunPanel({
           <SheetTitle className="truncate">{liveWorkflow?.name ?? "Workflow"}</SheetTitle>
           <div className="flex items-center gap-2">
             <SheetDescription>Pipeline run</SheetDescription>
-            <DepthChip depth={liveWorkflow?.depth} />
+            {/* r186: the chip shows the depth this run ACTUALLY materialized
+                with (stamped by the runner) — a degraded fire reads "Standard"
+                here instead of lying with the workflow's authored "Deep". */}
+            <DepthChip depth={viewedRun?.depth ?? liveWorkflow?.depth} />
             {scheduleEnabled && (
               <span
                 title={`Recurring schedule · next ${fmtIn(schedule?.nextRunAt)}`}

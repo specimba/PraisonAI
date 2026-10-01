@@ -611,7 +611,20 @@ export async function executeWorkflowRun(
     task = options.task.trim();
     // r26 depth control: quick = as authored · standard = + verification pass ·
     // deep = + 2 research passes + verification. Resume (above) is untouched.
-    steps = materializeRunSteps(wf, agentsNow, options.depthOverride);
+    // r186 (user report: "same !" — a fresh scheduled fire still materialized
+    // deep): the r185 scheduler-side computation is kept for its toast + audit
+    // disclosure, but ENFORCEMENT now lives here, at the single choke point
+    // every fire path shares. A scheduled fire of a Deep workflow whose
+    // failStreak ≥ 2 degrades to Standard no matter which call site launched
+    // it (stale-tab bundles, future paths). Manual runs keep the authored
+    // depth — the user chooses their own risk. The effective depth is stamped
+    // on the run row so history is self-diagnosing.
+    const runnerDegraded =
+      options.depthOverride === undefined &&
+      source === "scheduled" &&
+      (wf.depth ?? "standard") === "deep" &&
+      (wf.schedule?.failStreak ?? 0) >= 2;
+    steps = materializeRunSteps(wf, agentsNow, runnerDegraded ? "standard" : options.depthOverride);
     store.addRun(wf.id, {
       id: runId,
       workflowId: wf.id,
@@ -619,6 +632,7 @@ export async function executeWorkflowRun(
       task,
       status: "running",
       startedAt: Date.now(),
+      depth: runnerDegraded ? "standard" : (options.depthOverride ?? wf.depth),
       steps,
     });
   }
@@ -935,11 +949,33 @@ export async function executeWorkflowRun(
       patchRunStep(step.stepId, { backoffUntil: Date.now() + waitMs, backoffKind: "cooldown" });
     }
     stopRemaining(failedIndex);
+    // r186 (user report: "same !" — the paste shows an all-429 death rendered
+    // as red "Failed"): the park ladder is FINITE (r178). Once exhausted,
+    // resolvePark returns null and the run used to fall through to "error" —
+    // a congestion death indistinguishable from a genuine pipeline defect.
+    // r183's doctrine: blocked by an external condition ≠ failed on its
+    // merits. A congestion-class death with no park budget left finalizes
+    // "blocked" with an honest note; the schedule-level r171 auto-resume
+    // (which counts blocked runs too) still owns the retry, so breaker
+    // behavior, streaks and recovery cards are unchanged.
+    const congestionExhausted =
+      parkKind === null &&
+      !opts?.stallOwned &&
+      (kind === "rate-limit" || kind === "network" || kind === "timeout");
+    if (congestionExhausted) {
+      info.message +=
+        " — park ladder exhausted: the gateway/network condition persisted past all parks; " +
+        "the schedule's congestion backoff owns the retry (auto-resume pending)";
+    }
     // r183 (directive item b): a parked run did not fail on its own merits —
     // an external condition (gateway saturation / network) blocked it and it
     // will auto-resume. Give it "blocked", not "error". The r171 streak gate
     // below counts blocked runs too, so the congestion breaker still trips.
-    finish(parkKind !== null ? "blocked" : "error", `Step "${step.label}" failed`, info);
+    finish(
+      parkKind !== null || congestionExhausted ? "blocked" : "error",
+      `Step "${step.label}" failed`,
+      info
+    );
     if (parkKind !== null) {
       scheduleParkResume(wf.id, runId, failedIndex, parkKind === "network" ? (liveRun?.netParkCount ?? 0) : (liveRun?.parkCount ?? 0), source, parkKind);
     }

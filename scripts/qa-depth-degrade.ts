@@ -47,7 +47,9 @@ ok(/closeScheduleDeferral\(wf\.id, now\);\s*\n\s*\}\s*\n\s*\n?\s*toast\(`Schedul
 console.log("K4 — runner plumbing");
 const runner = src("src/lib/workflow-runner.ts");
 ok(/depthOverride\?: PipelineDepth;/.test(runner), "ExecuteRunOptions.depthOverride declared");
-ok(/materializeRunSteps\(wf, agentsNow, options\.depthOverride\)/.test(runner), "executeWorkflowRun forwards the override to materialization");
+ok(/materializeRunSteps\(wf, agentsNow, runnerDegraded \? "standard" : options\.depthOverride\)/.test(runner), "executeWorkflowRun forwards the effective depth to materialization");
+ok(/const runnerDegraded =\s*options\.depthOverride === undefined &&\s*source === "scheduled" &&/.test(runner), "r186: runner itself degrades scheduled fires of stuck deep workflows (choke point, scheduler bypass-proof)");
+ok(/depth: runnerDegraded \? "standard" : \(options\.depthOverride \?\? wf\.depth\)/.test(runner), "run row stamps the effective depth (self-diagnosing history)");
 ok(/export function materializeRunSteps\(wf: Workflow, agentsNow: Agent\[\], depthOverride\?: PipelineDepth\)/.test(runner), "materializeRunSteps accepts the override");
 ok(/const depth: PipelineDepth = depthOverride \?\? wf\.depth \?\? "standard";/.test(runner), "override wins over authored depth; authored wins over default");
 

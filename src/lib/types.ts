@@ -335,6 +335,12 @@ export interface WorkflowRun {
   startedAt: number;
   finishedAt?: number;
   steps: WorkflowRunStep[];
+  /** r186: the depth this run ACTUALLY materialized with. Stamped by the
+   * runner so a degraded fire (deep workflow, failStreak ≥ 2, scheduled —
+   * r185/r186) is visible in the run row itself, not only in the audit
+   * trail. Absent on pre-r186 runs — panels fall back to the workflow's
+   * authored depth. */
+  depth?: PipelineDepth;
   /** Populated when status = "error" or "blocked" — powers the recovery card. */
   error?: RunErrorInfo;
   /** How many times this run was resumed after a failure/stop. */
