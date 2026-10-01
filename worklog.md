@@ -4336,3 +4336,27 @@ Verification result: PASS
 Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (pulse record empty as of round start — check /api/gateway/pulse first next round); usage derives from client-side stores only (headless autopilot runs recorded there are included only if the tab that ran them persisted them).
 Blockers: none
 Next recommended action: r163 — rotate: (1) if /api/gateway/pulse shows real 429s, verify the chip's live appearance against the record and read the user's next report cross-evidenced (park-chain + r142), or (2) fresh surface: settings/providers UX or the test-agent-dialog error honesty (does the playground surface rate-limit kinds as honestly as chat does?), or (3) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r163
+Agent: main (platform development — hourly dev round)
+Task: r162 handoff — pulse record still empty at round start (no real 429s; park-chain/r142 remain gated on the user's runs). Rotated to the test-agent playground: it dropped the engine's structured error kind and dead-ended on failure (composer already cleared, no retry — the user had to retype).
+
+Work Log:
+- SHIPPED (test-agent-dialog.tsx): (1) errored turns now carry a KindChip — the structured kind from the SSE error event (chat-client already attaches it to thrown errors; the playground just dropped it) — amber for rate-limit with a tooltip pointing at the gateway pulse + park-and-resume context, neutral for other kinds; (2) one-click Retry on the last errored turn: re-runs the SAME user message, replacing the errored turn (send/runTurn refactored so retry reuses the exact engine path); (3) no retry on done turns, nothing while streaming (chat's last-message rule).
+- QA (W-series, scripts/cdp-qa-test-playground.mjs, 7/7 PASS): wire-mocked at the BROWSER level only — chat-client's real SSE parser and the real dialog logic run on top. W1 rate-limit error → prose + amber chip + Retry; W2 retry over a recovered stream completes, chip/button gone, user message NOT duplicated; W3 network kind → neutral (non-amber) chip, proving kind-specific styling. Screenshot ops/qa/W-test-playground-error.png. tsc 0; eslint 0; root 200.
+- HARNESS LESSONS (banked in-code): (a) the default settings ride the PRE-SEEDED Groq key on the BROWSER-DIRECT lane — /api/chat is never dialed from a fresh profile; forcing the relay lane requires seeding settings {provider:"auto"} into praison-settings (version 0, deep-merged — safe); (b) playwright evaluate arg destructuring bug: `([x])` with arg `[OBJ]` unwraps to the OBJECT itself — my seed wrote praison-agents as an object and crashed boot ("get(...).agents.find is not a function" from ensureSeeded at module eval) — a single-element arg must be passed as the array itself; (c) groq host-abort via page.route did NOT intercept the browser-direct dial (why — unresolved, the settings seed made it moot); future harnesses should force the lane via settings, not host routing.
+- Honest scope: the W-series mocks the WIRE only; the SSE→throw-with-kind link it relies on is live-proven (r161 P1: a real relayed 404 surfaced kind="model" through the same path).
+
+Stage Summary:
+- The test playground now fails honestly and recoverably: the kind chip names WHY (amber + congestion context for rate-limits), and Retry re-runs the turn in one click instead of dead-ending.
+
+Round Handoff:
+Round ID: r164
+Task owner: main (platform dev)
+Scope completed: playground honesty pass (kind chip + retry); W-series 7/7; snapshot pushed (9cf8a6835).
+User-visible changes: errored playground turns show the engine's error kind (amber for rate-limit, with gateway-pulse context) and a Retry button — no more retyping after a failure.
+Verification steps: node scripts/cdp-qa-test-playground.mjs → 7/7; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (check /api/gateway/pulse first next round); playground retry shares the composer's send path but the stopped-turn state deliberately has NO retry (matches chat); the groq-route non-interception is unexplained (moot for this harness).
+Blockers: none
+Next recommended action: r164 — rotate: (1) if /api/gateway/pulse shows real 429s, read the user's next report cross-evidenced (park-chain + r142 confirmation), or (2) fresh surface: settings/providers UX audit, or the agent-form-dialog (temperature/maxIterations affordances), or (3) root-cause FIRST any user report. Keep rotating.
