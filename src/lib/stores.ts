@@ -47,6 +47,15 @@ function debouncedStorage(delay = 500): StateStorage {
     // Durability: write pending debounced updates before the page goes away
     window.addEventListener("pagehide", flushAll);
     window.addEventListener("beforeunload", flushAll);
+    // r172: pagehide never fires when a tab is merely HIDDEN — yet hidden is
+    // exactly when scheduled pipelines run (r71), and browsers throttle timers
+    // there, so the 450ms trailing debounce can hold schedule transitions
+    // (park, breaker trip, auto-resume) for minutes. A hidden-tab crash or
+    // process kill then reverts persisted schedule state silently (the app
+    // rehydrates a stale workflow list). Flush on every visibility change —
+    // flushAll is idempotent (pending map) — so those transitions land the
+    // moment the tab state changes, in both directions.
+    document.addEventListener("visibilitychange", flushAll);
   }
   return {
     getItem: (name) => {

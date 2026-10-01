@@ -4578,3 +4578,29 @@ Verification result: PASS (product level; harness state-read reds attributed —
 Open risks: (1) debounced-flush coalescing under a stale snapshot (QA-only today; if ever user-facing, make the post-hydration seeding set() use a fresh store snapshot); (2) real-world confirmation pending — did the Deep pipeline survive the NEXT congestion wave? Check pulse + run history first thing in r172.
 Blockers: none
 Next recommended action: r172 — (1) FIRST read any user report cross-evidenced against /api/gateway/pulse and the Deep run history (the whole point of this fix is that the pipeline survives unattended); (2) only then rotate to the next surface (chat view audit or the r169-deferred import-confirmation dialog). Keep rotating.
+---
+Task ID: 424432 — r172
+Agent: main (platform development — hourly dev round)
+Task: Both r171 handoffs' default: (1) pulse re-check — did the pipeline survive the first post-fix wave? (2) resolve the debounced-flush question behind the 5 red H-series assertions (fix debouncedStorage or re-point the assertions at the UI/store).
+
+Work Log:
+- Pulse cross-evidence: a fresh 429 wave hit 12:11–12:21 UTC (4 events, all auto lane) — the first since the r171 fix shipped. Shape is new: attempts spread over ~10 minutes (pairs ~49s and ~46s apart, 8m gap between) instead of the old single-90s-window burnout, and count1h=0 for the 62 minutes since — pulse-consistent with park-resume + step-cooldown spreading and a later attempt succeeding; run history lives in the user's browser, so user-confirmation still pending.
+- Root-caused the 5 red H-series assertions into three named causes — no product bug among them: (1) the harness file was internally inconsistent (two concurrent r171 sessions edited it: 3-fixture checks survived over a 1-fixture seed → H2a read states["rl-future"] of a fixture that was never seeded; H3a-d depended on an absent rl-manual); (2) H1b/c/e, H3c/d read localStorage ~100ms after the in-memory transition — inside the 450ms debounced-flush window — measuring the debounce, not the product; (3) the historical "11.5s stale" dbg-rl3 reading is explained by HMR reloads re-seeding stale fixtures mid-run during that hour's concurrent edits (the exactly-once sessionStorage guard now prevents it).
+- Grep proof there is NO product-side stale writer: the only raw setState on the workflows store is the zombie-run marker (stores.ts:664) and it is functional/fresh; no direct localStorage writes to praison-workflows anywhere in src.
+- SHIPPED (product, stores.ts debouncedStorage): flushAll now also fires on visibilitychange. pagehide never fires when a tab is merely HIDDEN — yet hidden is exactly when scheduled pipelines run (r71) and browsers throttle timers, so the 450ms debounce could hold schedule transitions (park, breaker trip, auto-resume) for minutes; a hidden-tab crash/kill silently reverted persisted schedule state. Closes the "mid-session durability" open question both r171 addenda flagged. flushAll is idempotent; fires in both visibility directions.
+- SHIPPED (harness): seed restored to the three fixtures (rl-backoff elapsed / rl-future future / rl-manual manual-pause); persisted-state assertions re-pointed at a bounded poll of the RAW localStorage JSON (persisted(): predicate up to 6s) — asserting the real durability contract a crash-recovery reload experiences, not the 450ms window; header documents the repair.
+- Verification: tsc 0; eslint 0 (stores.ts); H-series harness 12/12 — first fully green run (all product checks + all persisted-transition checks); root 200.
+
+Stage Summary:
+- The flush question is closed with evidence, not assumption: the product's persistence was never broken — the harness measured the debounce window and a concurrently-edited seed. The real gap (hidden-tab crash durability) is now closed at the storage layer, and the durability contract is asserted green.
+
+Round Handoff:
+Round ID: r173
+Task owner: main (platform dev)
+Scope completed: visibilitychange flush (hidden-tab durability); H-series harness reconciled + re-pointed, 12/12; pulse cross-evidence of the first post-fix wave; snapshot pushed.
+User-visible changes: schedule transitions (park/breaker/auto-resume) now survive a hidden-tab crash or process kill; QA gate for the congestion stack is fully green.
+Verification steps: npx tsc --noEmit → 0; bunx eslint src/lib/stores.ts → 0; node scripts/cdp-qa-rl-auto-resume.mjs → 12/12; curl root → 200.
+Verification result: PASS
+Open risks: transitions that happen WHILE the tab stays continuously hidden still wait on the (throttled) 450ms timer until the next visibility change or pagehide — acceptable; r171+r172 survival still awaits user-side confirmation from a real congestion wave.
+Blockers: none
+Next recommended action: r173 — (1) FIRST read any user report (did the pipeline ride out the next wave end-to-end?); (2) rotate surfaces: the r169-deferred import-confirmation dialog, or the next-largest unaudited component (chat view surfaces — check sizes first); (3) keep the settings-audit ban until the cycle restarts. Keep rotating.

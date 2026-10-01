@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ─── r171 QA: congestion auto-resume (H-series) ─────────────────────────────
+// ─── r171 QA: congestion auto-resume (H-series) — repaired r172 ─────────────
 // User report: "still getting too many request errors and the job stopping
 // itself" — the r156 breaker disabled rate-limited schedules FOREVER (manual
 // resume only). The fix makes congestion trips self-heal. This harness proves:
@@ -11,6 +11,18 @@
 //   H3  the red manual-pause chip (no autoResumeAt, streak ≥ 2) still renders,
 //       and clicking it resumes while CLEARING the stale-flag fields — a
 //       manual resume can never be later resurrected by a leftover timestamp
+// r172 repair (two concurrent r171 sessions left this file internally
+// inconsistent — 3-fixture checks over a 1-fixture seed — and the persisted
+// reads raced the 450ms debounced flush):
+//   • Seed restored to THREE fixtures: rl-backoff (elapsed flag), rl-future
+//     (future flag), rl-manual (manual pause, no flag).
+//   • Persisted-state assertions no longer read localStorage once, ~100ms
+//     after the in-memory transition (the debounced flush has not landed yet
+//     — the old reds H1b/c/e, H3c/d measured the debounce window, not the
+//     product). persisted() polls the RAW localStorage JSON until the
+//     predicate holds or 6s pass — asserting the real durability guarantee:
+//     the transition reaches persisted state promptly. In-memory behavior is
+//     separately proven by the toasts + chips.
 // Usage: node scripts/cdp-qa-rl-auto-resume.mjs [baseUrl]
 
 import { chromium } from "playwright";
@@ -70,8 +82,36 @@ async function main() {
     }
   }
 
+  // r172: poll the RAW persisted JSON until `pred` holds (or timeout). Reads
+  // the debounced-storage output the way a crash-recovery reload would —
+  // this is the durability guarantee under test, not the 450ms window.
+  async function persisted(pred, timeout = 6_000, every = 120) {
+    const t0 = Date.now();
+    let snap = null;
+    for (;;) {
+      snap = await page.evaluate(() => {
+        const raw = localStorage.getItem("praison-workflows");
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw).state.workflows.reduce(
+            (acc, w) => ({ ...acc, [w.id]: w.schedule }),
+            {}
+          );
+        } catch {
+          return null;
+        }
+      });
+      if (snap && pred(snap)) return snap;
+      if (Date.now() - t0 > timeout) return snap;
+      await page.waitForTimeout(every);
+    }
+  }
+
   try {
-    const oneStep = [{ id: "s1", agentId: "a1", label: "Only step" }];
+    // THREE fixtures — exactly the states the three lanes assert:
+    //   rl-backoff : rate-limit backoff, autoResumeAt already elapsed → H1
+    //   rl-future  : rate-limit backoff, autoResumeAt in the future → H2
+    //   rl-manual  : manual pause (streak ≥ 2, NO flag) → H3 red chip lane
     const seed = {
       state: {
         workflows: [
@@ -83,6 +123,20 @@ async function main() {
             autoResumeTrips: 1,
             autoResumeAt: Date.now() - 1000, // already elapsed
           }),
+          wf("rl-future", "Future Wf", {
+            enabled: false,
+            intervalMs: 60 * MIN,
+            task: "t",
+            failStreak: 2,
+            autoResumeTrips: 1,
+            autoResumeAt: Date.now() + 30 * MIN, // still parked
+          }),
+          wf("rl-manual", "Manual Wf", {
+            enabled: false,
+            intervalMs: 60 * MIN,
+            task: "t",
+            failStreak: 3, // ≥ 2 → red chip lane, no autoResumeAt
+          }),
         ],
       },
       version: 0,
@@ -92,9 +146,11 @@ async function main() {
     // but the seed must apply only to the FIRST load — an HMR reload mid-run
     // (concurrent dev edits) would otherwise re-seed over the flushed resumed
     // state and the state assertions would read seed values while the toasts
-    // prove the resume happened. The sessionStorage guard makes the seed
-    // exactly-once per tab; beforeunload flushes pending debounced writes, so
-    // a reload rehydrates the RESUMED state, never the seed.
+    // prove the resume happened. (This exact interaction is what produced the
+    // misleading "11.5s stale" dbg-rl3 readings during the concurrent r171
+    // edits.) The sessionStorage guard makes the seed exactly-once per tab;
+    // beforeunload flushes pending debounced writes, so a reload rehydrates
+    // the RESUMED state, never the seed.
     // localStorage.clear() first: the real profile must not leak in (its due
     // schedules would fire REAL LLM runs mid-QA and pollute the assertions).
     await context.addInitScript(
@@ -111,15 +167,13 @@ async function main() {
     // ── H1 + H2: scheduler tick (≤10s) auto-resumes only the elapsed one ──
     check("H1a toast announced the auto-resume", await waitForToast("Gateway backoff elapsed"));
 
-    const states = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("praison-workflows") ?? "{}").state.workflows.reduce(
-        (acc, w) => ({ ...acc, [w.id]: w.schedule }),
-        {}
-      )
+    // Persisted transition must LAND (any time within 6s — the debounce is
+    // free to batch; a crash-recovery reload just needs it to be there).
+    const states = await persisted(
+      (s) => s["rl-backoff"]?.enabled === true && s["rl-backoff"]?.autoResumeAt === undefined
     );
-    const backoff = states["rl-backoff"];
-    const future = states["rl-future"];
-    const manual = states["rl-manual"];
+    const backoff = states?.["rl-backoff"];
+    const future = states?.["rl-future"];
 
     check(
       "H1b Backoff Wf re-enabled",
@@ -172,20 +226,20 @@ async function main() {
 
     await chip.click();
     check("H3c resume toast confirmed", await waitForToast("Schedule resumed"));
-    const after = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("praison-workflows") ?? "{}").state.workflows.find(
-        (w) => w.id === "rl-manual"
-      ).schedule
+    // Persisted manual-resume transition must land (same durability contract).
+    const after = await persisted(
+      (s) => s["rl-manual"]?.enabled === true && s["rl-manual"]?.failStreak === 0
     );
+    const manual = after?.["rl-manual"];
     check(
       "H3c manual resume re-enables + resets streak",
-      after?.enabled === true && after?.failStreak === 0,
-      `enabled=${after?.enabled} failStreak=${after?.failStreak}`
+      manual?.enabled === true && manual?.failStreak === 0,
+      `enabled=${manual?.enabled} failStreak=${manual?.failStreak}`
     );
     check(
       "H3d manual resume clears autoResumeAt/autoResumeTrips (stale-flag safety)",
-      after?.autoResumeAt === undefined && after?.autoResumeTrips === 0,
-      `autoResumeAt=${after?.autoResumeAt} trips=${after?.autoResumeTrips}`
+      manual?.autoResumeAt === undefined && manual?.autoResumeTrips === 0,
+      `autoResumeAt=${manual?.autoResumeAt} trips=${manual?.autoResumeTrips}`
     );
   } catch (err) {
     failed += 1;
