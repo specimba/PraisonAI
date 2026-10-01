@@ -4287,3 +4287,28 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; r158 park-chain still awaits the user's next real 429 run; the pointerdown lesson may apply to OTHER Radix components in future harnesses (dropdowns/dialogs — check before scripting).
 Blockers: none
 Next recommended action: r161 — rotate: (1) confirm the r158 park chain on the user's next real rate-limit run (their report's chips + parkCount narrate it), or (2) apply the stale-affordance pattern elsewhere if a surface hides its own staleness (e.g. tracker strip already shows "synced" — fine), or (3) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r161
+Agent: main (platform development — hourly dev round)
+Task: r160 handoff — rotation away from radar; park-chain confirmation blocked (AutomationRun table has 0 rows — runs live client-side; user's tab IS live via heartbeat but the store is unreadable server-side). Shipped the epic's actual blind spot: the SERVER noticed every upstream 429 and immediately forgot it.
+
+Work Log:
+- Probes first: DB has 0 AutomationRun rows (park state client-side → confirmation gated on user's next real run, same as r142); vault epic already feature-complete at repo boundary; chat view already has honest receipts + retry/edit (no theatre polish invented).
+- SHIPPED "Gateway pulse" — server-side 429 observability: (1) src/lib/server/gateway-pulse.ts — capped ring (64) of {t, model} observed 429s, file IS the source of truth re-synced on every read (external edits/QA reseeds honored; learned the hard way — the first design cached in memory and the T3 QA case caught it before ship), persisted to db/gateway-pulse.json, >48h pruned; (2) hook in /api/chat route catch: kind==="rate-limit" → recordGateway429(body.model) — covers BOTH engine paths; (3) GET /api/gateway/pulse; (4) GatewayPulse chip on workflows view above ServerAutopilot: one-shot fetch per mount + click-to-refresh (egress doctrine), amber <10min ("gateway 429 · last 2m ago · N in 24h"), muted <24h, hidden when clear (silence=healthy, no green noise — r160 CacheStatus parity), tooltip names models + the honest server-seen-only scope.
+- LESSON (banked): agent-engine.ts is NOT server-only — chat-client.ts imports it into the client bundle (browser-direct lane). First hook went inside the engine → node:fs into a client chunk → Turbopack 500 with the trace naming the client import chain. Moved the hook to the route's catch (the true server-only vantage point). Also: Turbopack serves STALE compile errors after a fix — touch files to force recompile before believing a 500.
+- E2E honesty: public 429 simulators (httpbin/postman-echo/httpstat.us) unreachable from sandbox egress → the record→file→read chain proven by a TS-importing unit probe (U-series 4/4: record counts, external-rewrite honored, merge-after-rewrite, 48h prune); the catch→classify link proven LIVE by the probe's real relayed 404 surfacing kind="model" through the same path (P1). Rate-limit classification regex code-read + battle-tested by the user's r157 chips. Synthetic QA seeds wiped after testing — the user's chip starts on truthful empty data.
+- VERIFIED: T-series 7/7 (API shape+counts; amber chip text/aria/tooltip vs seeded 2-min-old 429; empty→chip absent via the chip's own pointerdown refresh); U-series 4/4; tsc 0; eslint 0 on all touched files; curl root 200; screenshots ops/qa/T-gateway-pulse-{fresh,clear}.png; snapshot pushed (9077257d1).
+
+Stage Summary:
+- The gateway dimension is now observable cross-round via curl /api/gateway/pulse — the sandbox blindness that made r156-r158 verification wait on user reports is closed for congestion (not for park state, which stays client-side by design).
+
+Round Handoff:
+Round ID: r162
+Task owner: main (platform dev)
+Scope completed: Gateway pulse (server-side 429 ring + API + workflows-view chip); hook placed at the server-only vantage point after the client-bundle lesson; snapshot pushed (9077257d1).
+User-visible changes: a "gateway 429 · last Xm ago · N in 24h" chip on the workflows view when the server observed congestion in the last 24h (amber if <10min) — ambient WHY context for parked/backed-off runs without pasting the UI.
+Verification steps: node scripts/cdp-qa-gateway-pulse.mjs → 7/7; node scripts/probe-gateway-pulse-unit.mjs → 4/4; tsc 0; eslint 0; curl root 200; record reset to truthful empty post-QA.
+Verification result: PASS
+Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (the pulse now gives server-side congestion context to read alongside their report); pulse counts only server-relayed dials (browser-direct keys invisible — documented in chip tooltip); Turbopack stale-error caching may confuse future rounds (touch-to-recompile).
+Blockers: none
+Next recommended action: r162 — rotate: (1) read the user's next real run report WITH /api/gateway/pulse as cross-evidence (park-chain + r142 confirmation), or (2) if a real 429 lands in the record, verify the chip's live appearance end-to-end against it, or (3) pick a fresh surface (agents view is unmeasured/unaudited in a while; settings/providers UX) or (4) root-cause FIRST any user report. Keep rotating.
