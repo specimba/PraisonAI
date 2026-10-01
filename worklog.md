@@ -4262,3 +4262,28 @@ Verification result: PASS
 Open risks: r142 real-world validation still pending; the user's pipeline park-chain (r158) is unverified until their next real 429 run — the r157 chips + parkCount will narrate it; R5 depends on localStorage caches existing in the QA profile (a wiped profile legitimately refetches once — the gate only asserts RE-activations).
 Blockers: none
 Next recommended action: r160 — rotate: (1) confirm the r158 park chain on the user's next real rate-limit run (read the r157 chips + parkCount off their next report), or (2) pick up a user-facing small feature / error-handling pass (e.g. the papers/GitHub tabs have no stale-cache TTL — a "synced Xm ago · refresh" affordance parity with the tracker strip), or (3) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r160
+Agent: main (platform development — hourly dev round)
+Task: r159 handoff — (2) radar tabs' stale-cache affordance parity. Deviated premise, shipped the real gap.
+
+Work Log:
+- Premise check first: the handoff's "no synced-Xm-ago affordance" was STALE — all three tabs already share a CacheStatus component (cached age + Refresh). The REAL gap inside it: a 6-day-old trending board rendered IDENTICALLY to a 5-minute-old one — no stale signal anywhere.
+- SHIPPED (radar-view.tsx, one shared component, 3 call sites): CacheStatus gained staleAfterMs (per-tab TTL: HF 6h, papers 24h, GitHub 7d) — past TTL the stamp turns amber + "· stale" with a tooltip; a 60s internal tick makes the state appear on its own while the tab sits open. Display-only by design: NO auto-refetch — the R5 cache-first egress gate (r159) is doctrine, not an obstacle.
+- QA (S-series, scripts/cdp-qa-radar-stale.mjs, 3/3 PASS): seeded 2-day-old HF cache → "cached 2d ago · stale" amber; fresh cache → muted, no marker; 8-day-old GitHub cache → stale (its 7d TTL — proving per-tab TTLs, not one global). Screenshots ops/qa/S-radar-stale-*.png. tsc 0; eslint 0.
+- HARNESS BUG FOUND + r159 CORRECTION (the big one): Radix TabsTrigger activates on POINTERDOWN — a synthetic .click() dispatches no pointer events and the tab SILENTLY NEVER SWITCHES. Consequence: r159's R5 "0 refetches" PASS was a false positive (zero switches happened; the gate measured nothing). Fixed the click helper in BOTH radar harnesses (full pointer sequence + focus), added a switches-verified assertion to R5, and re-ran: R5 now passes HONESTLY (0 /api/radar/* refetches across 3 verified re-activations; the marker is scoped to tab proxies because the always-mounted tracker ticker legitimately polls /api/tracker on its own cadence — one such poll was the only "refetch" the blunt filter saw). R2 warm remount re-confirmed (ΔScript 0.103s, 0 longtasks).
+- Two more harness lessons banked in-code: (a) the active VIEW is persisted (zustand persist) — a fresh tab can restore radar, so a "cold mount" measurement must force Chat first; (b) dev rehydration after reload needs wait-with-retry nav helpers, not fixed sleeps.
+
+Stage Summary:
+- Radar tabs now tell the truth about their own freshness (amber stale stamps, per-tab TTLs), and the r159 R5 gate — briefly a false positive — is now honest and re-verified green.
+
+Round Handoff:
+Round ID: r161
+Task owner: main (platform dev)
+Scope completed: stale-cache affordance (shared CacheStatus, 3 TTLs) + S-series 3/3 + R5 false-positive correction and honest re-verification; snapshot pushed (17beb6993).
+User-visible changes: GitHub/HF/Papers tabs show an amber "cached Xd ago · stale" stamp once their cache outlives the tab's freshness window (HF 6h, papers 24h, GitHub 7d) — no more silently-week-old trending boards.
+Verification steps: node scripts/cdp-qa-radar-stale.mjs → 3/3; node scripts/cdp-qa-radar-mount.mjs → 2/2 (R5 honest); tsc 0; eslint 0; curl 200.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; r158 park-chain still awaits the user's next real 429 run; the pointerdown lesson may apply to OTHER Radix components in future harnesses (dropdowns/dialogs — check before scripting).
+Blockers: none
+Next recommended action: r161 — rotate: (1) confirm the r158 park chain on the user's next real rate-limit run (their report's chips + parkCount narrate it), or (2) apply the stale-affordance pattern elsewhere if a surface hides its own staleness (e.g. tracker strip already shows "synced" — fine), or (3) root-cause FIRST any user report. Keep rotating.
