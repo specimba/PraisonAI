@@ -4604,3 +4604,27 @@ Verification result: PASS
 Open risks: transitions that happen WHILE the tab stays continuously hidden still wait on the (throttled) 450ms timer until the next visibility change or pagehide — acceptable; r171+r172 survival still awaits user-side confirmation from a real congestion wave.
 Blockers: none
 Next recommended action: r173 — (1) FIRST read any user report (did the pipeline ride out the next wave end-to-end?); (2) rotate surfaces: the r169-deferred import-confirmation dialog, or the next-largest unaudited component (chat view surfaces — check sizes first); (3) keep the settings-audit ban until the cycle restarts. Keep rotating.
+---
+Task ID: 424432 — r173
+Agent: main (platform development — hourly dev round)
+Task: No user report attached; pulse re-check first (r172 handoff default). Zero new 429s in ~2h — the pipeline rode out the 12:11–12:21 UTC wave on the survival stack (pulse-consistent, user confirmation pending). Then the rotation task: the r169-deferred import-confirmation dialog (r164 dirty-guard parity).
+
+Work Log:
+- Closed r169's open risk: a full-data import used to REPLACE every agent, chat, workflow and setting in the browser silently on file-pick — the destructive-replace had no confirmation, unlike "Clear all data" (which got one in r164's doctrine).
+- SHIPPED (settings-view.tsx): the import flow is now parse → sanitize → CONFIRM → write. Picking a file parses AND sanitizes it immediately (same per-entry doctrine as r169), then a controlled AlertDialog states BOTH sides of the trade before a single byte is written: what this browser currently holds (live counts — N agents · N chats (N messages) · N workflows) vs what the file would install (sanitized counts, with the honest malformed-entries-will-be-skipped note), plus the explicit "nothing is merged or backed up — settings, provider keys and relay order also come from the file". Cancel (or Esc) is a total no-op; "Replace & reload" runs the exact r169 write+reload path. The r169 honest skipped-count toast is unchanged on the confirmed path.
+- QA (CD-series extended, scripts/cdp-qa-settings-data.mjs): 14/14 — D1/D2 now pass THROUGH the confirm dialog (proving the gated flow preserves the sanitize doctrine end-to-end); new D4: D4a dialog opens on pick, D4b states both sides honestly ("currently holds 5 agents · 1 chat (0 messages) · 5 workflows … The file contains 1 agent"), D4c cancel = no write + no reload (window-flag proof) + dialog closes, D4d confirm replaces state with the file's contents.
+- tsc 0; eslint 0 (settings-view.tsx); root 200.
+
+Stage Summary:
+- The most destructive button in the app (after the wipe) now asks first — and the ask itself is informative: you see exactly what you'd lose and exactly what you'd get, sanitized counts included, before anything happens.
+
+Round Handoff:
+Round ID: r174
+Task owner: main (platform dev)
+Scope completed: import confirm-gate dialog with honest two-sided counts; CD-series 14/14; pulse re-check (wave survived); snapshot pushed.
+User-visible changes: importing an export file now shows a confirmation dialog (current vs incoming counts, skipped-entries note) and only replaces data after "Replace & reload"; Cancel/Esc aborts with zero writes.
+Verification steps: node scripts/cdp-qa-settings-data.mjs → 14/14; npx tsc --noEmit → 0; bunx eslint src/components/praison/settings/settings-view.tsx → 0; curl root → 200.
+Verification result: PASS
+Open risks: the vault restore path (automation vault) has its own separate confirmation flow (r165) — not touched this round; the dialog copy counts only sanitized entries, so a file of pure junk reads "0 agents · 0 chats · 0 workflows" (accurate, and the skipped note explains why).
+Blockers: none
+Next recommended action: r174 — (1) FIRST read any user report (still watching for confirmation the pipeline rides out waves end-to-end); (2) rotate surfaces: the next-largest unaudited component (chat view surfaces — check sizes first) or UI polish on the new dialog if user feedback touches it; (3) the Model Tracker duplicate-model-list observation from the user's r170 paste is still unverified — worth one cheap probe if a round has slack. Keep rotating.

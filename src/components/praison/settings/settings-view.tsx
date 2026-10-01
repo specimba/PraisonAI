@@ -200,6 +200,20 @@ export function SettingsView() {
     [conversations]
   );
 
+  // r173: a full-data import replaces every entity in this browser — and it
+  // used to do that silently (the r169 deferred risk; r164 dirty-guard
+  // doctrine says destructive replaces get a confirmation). The file is now
+  // parsed AND sanitized on pick, and a dialog states BOTH sides of the
+  // trade — what the browser holds now vs what the file would install —
+  // before a single byte is written.
+  const [pendingImport, setPendingImport] = React.useState<{
+    cleanAgents: Agent[];
+    cleanConversations: Conversation[];
+    cleanWorkflows: Workflow[];
+    importedSettings: typeof DEFAULT_SETTINGS;
+    skipped: number;
+  } | null>(null);
+
   function handleExport() {
     try {
       downloadJson("praisonai-export.json", {
@@ -264,46 +278,62 @@ export function SettingsView() {
         bundle.settings && typeof bundle.settings === "object" && !Array.isArray(bundle.settings)
           ? { ...DEFAULT_SETTINGS, ...(bundle.settings as object), seeded: true }
           : { ...DEFAULT_SETTINGS, seeded: true };
-      try {
-        localStorage.setItem(
-          "praison-agents",
-          JSON.stringify({ state: { agents: cleanAgents }, version: 0 })
-        );
-        localStorage.setItem(
-          "praison-conversations",
-          JSON.stringify({
-            state: {
-              conversations: cleanConversations,
-              activeId: cleanConversations[0]?.id ?? null,
-            },
-            version: 0,
-          })
-        );
-        localStorage.setItem(
-          "praison-workflows",
-          JSON.stringify({ state: { workflows: cleanWorkflows }, version: 0 })
-        );
-        localStorage.setItem(
-          "praison-settings",
-          JSON.stringify({ state: { settings: importedSettings }, version: 0 })
-        );
-      } catch {
-        toast.error("Import failed — could not write to localStorage.");
-        return;
-      }
-      toast.success("Data imported — reloading…", {
-        description: `${cleanAgents.length} agents · ${cleanConversations.length} conversations · ${cleanWorkflows.length} workflows${
-          skipped > 0
-            ? ` · ${skipped} malformed ${skipped === 1 ? "entry" : "entries"} skipped`
-            : ""
-        }`,
+      // Nothing is written yet — the confirm gate decides (r173).
+      setPendingImport({
+        cleanAgents,
+        cleanConversations,
+        cleanWorkflows,
+        importedSettings,
+        skipped,
       });
-      // Reload almost immediately — but when entries were skipped, hold long
-      // enough for the honest count to be readable before the toast dies.
-      setTimeout(() => location.reload(), skipped > 0 ? 1800 : 250);
     };
     reader.onerror = () => toast.error("Import failed — could not read the selected file.");
     reader.readAsText(file);
+  }
+
+  // r173: runs only after the user confirms the replace dialog.
+  function applyPendingImport() {
+    if (!pendingImport) return;
+    const { cleanAgents, cleanConversations, cleanWorkflows, importedSettings, skipped } =
+      pendingImport;
+    try {
+      localStorage.setItem(
+        "praison-agents",
+        JSON.stringify({ state: { agents: cleanAgents }, version: 0 })
+      );
+      localStorage.setItem(
+        "praison-conversations",
+        JSON.stringify({
+          state: {
+            conversations: cleanConversations,
+            activeId: cleanConversations[0]?.id ?? null,
+          },
+          version: 0,
+        })
+      );
+      localStorage.setItem(
+        "praison-workflows",
+        JSON.stringify({ state: { workflows: cleanWorkflows }, version: 0 })
+      );
+      localStorage.setItem(
+        "praison-settings",
+        JSON.stringify({ state: { settings: importedSettings }, version: 0 })
+      );
+    } catch {
+      toast.error("Import failed — could not write to localStorage.");
+      return;
+    }
+    toast.success("Data imported — reloading…", {
+      description: `${cleanAgents.length} agents · ${cleanConversations.length} conversations · ${cleanWorkflows.length} workflows${
+        skipped > 0
+          ? ` · ${skipped} malformed ${skipped === 1 ? "entry" : "entries"} skipped`
+          : ""
+      }`,
+    });
+    // Reload almost immediately — but when entries were skipped, hold long
+    // enough for the honest count to be readable before the toast dies.
+    setTimeout(() => location.reload(), skipped > 0 ? 1800 : 250);
+    setPendingImport(null);
   }
 
   function handleClearAll() {
@@ -680,6 +710,44 @@ export function SettingsView() {
                   onChange={handleImportFile}
                 />
               </div>
+
+              {/* r173: import confirm gate — states both sides of the trade */}
+              <AlertDialog
+                open={pendingImport !== null}
+                onOpenChange={(o) => {
+                  if (!o) setPendingImport(null);
+                }}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Replace current data with this import?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This browser currently holds {agents.length}{" "}
+                      {agents.length === 1 ? "agent" : "agents"} · {conversations.length}{" "}
+                      {conversations.length === 1 ? "chat" : "chats"} ({messageCount}{" "}
+                      {messageCount === 1 ? "message" : "messages"}) · {workflows.length}{" "}
+                      {workflows.length === 1 ? "workflow" : "workflows"}. The file contains{" "}
+                      {pendingImport?.cleanAgents.length ?? 0}{" "}
+                      {pendingImport?.cleanAgents.length === 1 ? "agent" : "agents"} ·{" "}
+                      {pendingImport?.cleanConversations.length ?? 0} chats ·{" "}
+                      {pendingImport?.cleanWorkflows.length ?? 0} workflows
+                      {pendingImport && pendingImport.skipped > 0
+                        ? ` (${pendingImport.skipped} malformed ${
+                            pendingImport.skipped === 1 ? "entry" : "entries"
+                          } will be skipped)`
+                        : ""}
+                      . Importing replaces all of it — nothing is merged or backed up — and
+                      settings, provider keys and relay order also come from the file.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={applyPendingImport}>
+                      Replace &amp; reload
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
 
               {/* Danger zone */}
               <div className="rounded-lg border border-destructive/40 p-3">

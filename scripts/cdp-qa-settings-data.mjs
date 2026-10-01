@@ -12,6 +12,8 @@
 //   D2  settings:"garbage" (a string spreads as index keys when spread) is
 //       replaced by defaults — no "0"/"1" poison keys, preseed vault intact
 //   D3  clear-all wipes EVERY praison-* key (decoy non-praison key survives)
+//   D4  (r173) import is confirm-gated: pick → a dialog states current-vs-
+//       incoming counts; cancel = no write + no reload; confirm = replace
 // Usage: node scripts/cdp-qa-settings-data.mjs [baseUrl]
 
 import { chromium } from "playwright";
@@ -99,6 +101,8 @@ async function main() {
       ],
       settings: { displayName: "Tester" },
     });
+    // r173: the import no longer applies on pick — confirm the replace dialog.
+    await page.getByRole("button", { name: /Replace & reload/ }).click();
 
     const toast = page.waitForSelector("[data-sonner-toast]", { timeout: 8000 });
     const toastText = (await (await toast).textContent()) ?? "";
@@ -135,6 +139,7 @@ async function main() {
       workflows: [],
       settings: "garbage",
     });
+    await page.getByRole("button", { name: /Replace & reload/ }).click();
     await page.waitForFunction(
       () => {
         const raw = localStorage.getItem("praison-settings");
@@ -192,6 +197,66 @@ async function main() {
     check("D3a every praison-* key removed (incl. non-store keys)", allGone,
       `removed=${JSON.stringify(d3.removed)}`);
     check("D3b non-praison keys survive", d3.decoy === "keep-me", `decoy=${d3.decoy}`);
+
+    // ── D4 (r173): import is confirm-gated — cancel is a total no-op ─────
+    await openSettings(page);
+    const d4Bundle = {
+      exportedAt: new Date().toISOString(),
+      agents: [
+        { id: "qa-d4-agent", name: "D4 Agent", instructions: "confirm-gate", createdAt: 1, updatedAt: 1 },
+      ],
+      conversations: [],
+      workflows: [],
+      settings: { displayName: "D4" },
+    };
+    await importBundle(page, d4Bundle);
+    await page.getByRole("alertdialog").waitFor({ timeout: 8000 });
+    const d4desc = (await page.getByRole("alertdialog").textContent()) ?? "";
+    check(
+      "D4a import opens the replace-confirm dialog",
+      d4desc.includes("Replace current data with this import?"),
+      d4desc.slice(0, 120)
+    );
+    check(
+      "D4b dialog states both sides (current vs incoming)",
+      /currently holds \d+ agents/.test(d4desc) &&
+        /The file contains 1 agent/.test(d4desc) &&
+        /nothing is merged or backed up/.test(d4desc),
+      d4desc.slice(0, 220)
+    );
+    // Cancel → nothing written, no reload (a window flag survives only
+    // when the page is NOT reloaded).
+    await page.evaluate(() => {
+      window.__qaNoReload = true;
+    });
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await page.waitForTimeout(1500);
+    const d4cancel = await page.evaluate(() => ({
+      alive: window.__qaNoReload === true,
+      dialogGone: document.querySelector("[role='alertdialog']") === null,
+      store: localStorage.getItem("praison-agents") ?? "",
+    }));
+    check(
+      "D4c cancel = no write, no reload, dialog closes",
+      d4cancel.alive && d4cancel.dialogGone && !d4cancel.store.includes("qa-d4-agent"),
+      `alive=${d4cancel.alive} gone=${d4cancel.dialogGone}`
+    );
+    // Confirm → replaces and reloads (same file re-picked: the input value
+    // is reset on change, so re-picking fires onChange again).
+    await importBundle(page, d4Bundle);
+    await page.getByRole("button", { name: /Replace & reload/ }).click();
+    await page.waitForFunction(
+      () => (localStorage.getItem("praison-agents") ?? "").includes("qa-d4-agent"),
+      { timeout: 10000 }
+    );
+    const d4done = await page.evaluate(
+      () => JSON.parse(localStorage.getItem("praison-agents"))?.state?.agents
+    );
+    check(
+      "D4d confirm replaces state with the file's contents",
+      d4done?.length === 1 && d4done[0]?.id === "qa-d4-agent",
+      `agents=${JSON.stringify(d4done?.map((a) => a.id))}`
+    );
   } catch (err) {
     failed += 1;
     console.log("FAIL  harness error —", err?.message ?? err);
