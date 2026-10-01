@@ -83,6 +83,26 @@ function fmtRel(ts: number | undefined): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+/**
+ * Per-entry vault sanitization (same doctrine as the agents import): an
+ * entry must carry a string `key`; only known, well-typed fields survive —
+ * a malformed vault must not inject junk into settings that later flows
+ * into apiKey params. Unknown provider ids are kept by the caller (a vault
+ * from a newer build may reference providers this one doesn't know).
+ */
+function sanitizeVaultEntry(v: unknown): ProviderKeyEntry | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const rec = v as Record<string, unknown>;
+  if (typeof rec.key !== "string") return null;
+  const out: ProviderKeyEntry = { key: rec.key };
+  if (typeof rec.model === "string" && rec.model.trim()) out.model = rec.model.trim();
+  if (typeof rec.accountId === "string" && rec.accountId.trim()) out.accountId = rec.accountId.trim();
+  if (typeof rec.validatedAt === "number" && Number.isFinite(rec.validatedAt) && rec.validatedAt > 0) {
+    out.validatedAt = rec.validatedAt;
+  }
+  return out;
+}
+
 // ─── Free Frontier Providers — curated BYOK gallery with setup guides ───────
 export function ProviderGallery() {
   const settings = useSettingsStore((s) => s.settings);
@@ -776,15 +796,46 @@ export function ProviderGallery() {
         });
         return;
       }
-      const incoming = keys as Settings["providerKeys"];
-      const merged = { ...(settings.providerKeys ?? {}), ...incoming };
-      const n = Object.values(incoming ?? {}).filter((k) => k?.key).length;
-      update({ providerKeys: merged });
-      if (typeof bundle.activeProviderId === "string" && merged[bundle.activeProviderId]?.key) {
-        update({ providerKeys: merged, activeProviderId: bundle.activeProviderId });
+      // Per-entry sanitization (same doctrine as the agents import) — shape
+      // only, no blind casts into settings. Unknown provider ids stay (a
+      // vault from a newer build may reference providers this one lacks).
+      const raw = keys as Record<string, unknown>;
+      const merged = { ...(settings.providerKeys ?? {}) };
+      let restored = 0;
+      let skipped = 0;
+      for (const [id, v] of Object.entries(raw)) {
+        const entry = sanitizeVaultEntry(v);
+        if (!entry) {
+          skipped += 1;
+          continue;
+        }
+        merged[id] = entry;
+        if (entry.key.trim()) restored += 1;
       }
-      toast.success(`Vault restored — ${n} provider key${n === 1 ? "" : "s"} merged`, {
-        description: "Existing entries were kept; matching providers were overwritten.",
+      // The export saves provider/defaultModel alongside the keys — restore
+      // them too, so a vault moved to a fresh browser actually reactivates
+      // the provider (the gallery only honors activeProviderId when provider
+      // is "custom") instead of silently leaving the app on "auto".
+      const next: Partial<Settings> = { providerKeys: merged };
+      const wantActive = typeof bundle.activeProviderId === "string" ? bundle.activeProviderId : "";
+      if (wantActive) {
+        const p = FREE_PROVIDERS.find((x) => x.id === wantActive);
+        const usable = !!merged[wantActive]?.key?.trim() || !!p?.noKey;
+        if (usable) {
+          next.activeProviderId = wantActive;
+          if (bundle.provider === "custom" || bundle.provider === undefined) next.provider = "custom";
+        }
+      } else if (bundle.provider === "auto") {
+        next.provider = "auto";
+      }
+      if (typeof bundle.defaultModel === "string" && bundle.defaultModel.trim()) {
+        next.defaultModel = bundle.defaultModel.trim();
+      }
+      update(next);
+      toast.success(`Vault restored — ${restored} provider key${restored === 1 ? "" : "s"} merged`, {
+        description:
+          "Existing entries were kept; matching providers were overwritten." +
+          (skipped > 0 ? ` ${skipped} malformed ${skipped === 1 ? "entry" : "entries"} skipped.` : ""),
       });
     };
     reader.onerror = () => toast.error("Vault import failed — could not read the file.");
