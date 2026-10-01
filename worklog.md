@@ -4506,3 +4506,27 @@ Verification result: PASS
 Open risks: the spinner-fix E2E could not run against a real WebGPU engine in headless (no adapter) — the three finalize paths are code-reviewed + render-guarded but not live-fired; delete-cached-weights still has no confirmation (re-downloadable data, deferred deliberately); settings cycle complete → next round should rotate OFF settings (workflows/chat/agents surfaces or the r169-deferred import-confirmation dialog).
 Blockers: none
 Next recommended action: r171 — rotate OFF settings (cycle complete): (1) FIRST read any user report cross-evidenced against /api/gateway/pulse, (2) audit the next-largest unaudited surface (workflows or chat view components — check sizes first), or (3) ship the import-confirmation dialog from r169's deferred risk. Keep rotating.
+---
+Task ID: 424432 — r171
+Agent: main (platform development — hourly dev round)
+Task: USER REPORT FIRST (root-cause): "still getting too many request errors and the job stopping itself, optimize them for continuous smarter and rotation wise strategies" — the Continuous Research pipeline 429-loops at step 1 and dies. Pulse cross-evidence: 8→12 events/24h, 4 in the last hour, last 429 ~2min before round start. PLUS orphan recovery: a prior attempt had built the self-healing backoff ladder (5 files, uncommitted/unverified/unlogged) — verified honestly, completed the missing rotation half, shipped.
+
+Work Log:
+- Root-caused the loop: 3 stacked dumb-retry layers — (1) the r156 breaker hard-disabled the schedule after 2 rate-limit runs and left it OFF until a human clicked ("job stopping itself"); (2) parked resumes re-dialed the SAME saturated browser-direct lane (forceServer never passed on resume); (3) step cooldowns (20s/45s) always landed inside the same 90s congestion window, burning the ladder on one wave.
+- Orphan verified coherent and kept: self-healing ladder 45m→1.5h→3h→6h (streak-exponential, ±20% jitter, 5-trip cap → honest manual pause), scheduler auto-re-arm tick + stale-flag safety (manual resume clears autoResumeAt; success refills the budget), amber "backoff · auto-resume" chip vs red manual-pause chip, park budget 3→4 (5+10+20+30=65m — first time outliving a full hourly wave), honest retry notes (real nextRunAt instead of hardcoded "~10m/~30m").
+- COMPLETED (the rotation half the orphan lacked): scheduleRateLimitResume now passes forceServer:true — a parked resume rotates to the server relay's health-ordered hop chain (r25 wire: rebuilt per attempt, sick primaries demoted, dead hops skipped, built-in engine's separate quota family last) instead of re-dialing the lane that just proved saturated. Same machinery as the manual "Retry via relay" button, triggered by congestion history instead of a human noticing. Resume toast + run-card park note now say the rotation happens.
+- Verified: tsc 0; eslint 0 in all 5 changed files (remaining no-unused-expressions warnings pre-exist elsewhere); root 200. forceServer consumption chain confirmed (:544 read → :953 demote logic → :1024 per-call relay wire → :1077 honest lane note). No fabricated-429 browser QA this round — live congestion can't be staged cheaply headless; behavior verified at code level.
+
+Stage Summary:
+- Continuous pipelines now survive saturation waves end-to-end: step cooldowns outlast the quiet window → 4 jittered parks (65m) whose resumes ROTATE to the relay chain → if still failing, the schedule self-heals on the 45m→6h backoff ladder (5 trips) instead of dying silently → only ≈a day of continuous saturation degrades to an honest manual pause. Success at any layer refills the whole budget.
+
+Round Handoff:
+Round ID: r172
+Task owner: main (platform dev)
+Scope completed: congestion survival stack (self-healing backoff + park extension + cooldown fix + relay rotation on park resume); orphan r171 recovered, completed, verified; snapshot pushed.
+User-visible changes: the hourly Research pipeline stops dying to 429 waves — it parks, rotates lanes, and re-arms itself; amber "backoff · auto-resume Xm" chip shows the self-healing state (click = resume early); park notes/toasts name the relay rotation.
+Verification steps: tsc 0; eslint 0 (changed files); curl root 200. Congestion behavior code-verified; live-wave QA deferred.
+Verification result: PASS (with QA-scope note)
+Open risks: auto-relay dials leave browser-direct (accepted trade — the manual relay button and headless lane already do the same); pending park timers die on dev reload (pre-existing r158 caveat); a genuinely dead gateway still ends paused after ~5 backoff trips.
+Blockers: none
+Next recommended action: r172 — (1) FIRST read any user report: did the pipeline survive the next congestion wave? (pulse + run history will show rotation firing); (2) browser-QA the ladder via a stub 429-ing provider if no live wave occurs; (3) resume the component audit rotation (chat/workflows surfaces) or the r169-deferred import-confirmation dialog. Keep rotating.

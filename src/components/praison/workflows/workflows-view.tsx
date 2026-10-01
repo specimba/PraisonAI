@@ -967,7 +967,10 @@ export function WorkflowsView() {
   const resumeSchedule = (wf: Workflow) => {
     if (!wf.schedule) return;
     updateWf(wf.id, {
-      schedule: { ...wf.schedule, enabled: true, failStreak: 0, nextRunAt: undefined },
+      // r171: clearing autoResumeAt here is the stale-flag safety half of the
+      // congestion auto-resume — a manual resume must never be later
+      // resurrected by a leftover backoff timestamp.
+      schedule: { ...wf.schedule, enabled: true, failStreak: 0, autoResumeAt: undefined, autoResumeTrips: 0, nextRunAt: undefined },
     });
     toast.success(`Schedule resumed — "${wf.name}" fires on the next tick`, {
       description: "Failure counter reset · the scheduler re-arms from now",
@@ -1563,14 +1566,34 @@ export function WorkflowsView() {
                           </span>
                         );
                        })()}
-                      {wf.schedule && !wf.schedule.enabled && (wf.schedule.failStreak ?? 0) >= 3 && (
+                      {wf.schedule && !wf.schedule.enabled && wf.schedule.autoResumeAt != null && (
+                        // r171: congestion backoff chip — distinct from the red
+                        // manual-pause chip because this state heals itself.
+                        // Click still resumes early (same handler).
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             resumeSchedule(wf);
                           }}
-                          title="Auto-paused after 3 consecutive failed runs. Click to re-enable the schedule and reset the failure counter — it fires on the next 10s tick while the tab is open."
+                          title={`Rate-limit backoff: the schedule parked itself after consecutive 429s and will re-arm automatically ${fmtIn(wf.schedule.autoResumeAt)}. Click to resume now instead.`}
+                          className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+                        >
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-60" />
+                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          </span>
+                          backoff · auto-resume {fmtIn(wf.schedule.autoResumeAt)}
+                        </button>
+                      )}
+                      {wf.schedule && !wf.schedule.enabled && wf.schedule.autoResumeAt == null && (wf.schedule.failStreak ?? 0) >= 2 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            resumeSchedule(wf);
+                          }}
+                          title="Auto-paused after consecutive failed runs. Click to re-enable the schedule and reset the failure counter — it fires on the next 10s tick while the tab is open."
                           className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-500/20 dark:text-red-400"
                         >
                           <RotateCcw className="h-3 w-3" />

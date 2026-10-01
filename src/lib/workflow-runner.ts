@@ -4,7 +4,13 @@
 
 import { toast } from "sonner";
 import { runText, scoreNovelty } from "@/lib/evolution";
-import { gatewayQuietUntil, noteGateway429 } from "@/lib/gateway-cadence";
+import {
+  gatewayQuietUntil,
+  jitteredBackoff,
+  noteGateway429,
+  rateLimitResumeDelayMs,
+  MAX_AUTO_RESUME_TRIPS,
+} from "@/lib/gateway-cadence";
 import { maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveLlm } from "@/lib/llm-config";
@@ -93,13 +99,18 @@ const MAX_AUTO_RESUMES = 3;
 // one; a flaky-gateway deep run could plausibly need both). Parks are live
 // only while the app tab is open (worker timers die with the tab) — the
 // headless lane keeps its own independent backoff, so nothing is lost.
-const MAX_RATE_LIMIT_PARKS = 3;
+// r171: budget extended 3→4 parks, cap 20m→30m — 5+10+20+30 = 65m of parked
+// waiting, which for the first time outlives a FULL hourly congestion wave
+// (pulse-verified: the global free gateway saturates in on-the-hour bursts).
+// Each delay is ±20% jittered so concurrent parked runs don't re-dial in
+// lockstep with the very cron wave they're hiding from.
+const MAX_RATE_LIMIT_PARKS = 4;
 const PARK_BASE_MS = 5 * 60_000;
-const PARK_CAP_MS = 20 * 60_000;
+const PARK_CAP_MS = 30 * 60_000;
 const PARK_REARM_MS = 60_000;
 const MAX_PARK_REARMS = 5;
 const parkDelayMs = (parkIndex: number) =>
-  Math.min(PARK_BASE_MS * 2 ** parkIndex, PARK_CAP_MS);
+  jitteredBackoff(Math.min(PARK_BASE_MS * 2 ** parkIndex, PARK_CAP_MS));
 const STALL_CHECK_MS = 15_000;
 const STALL_WATCHDOG_KEY = "praison-stall-watchdog";
 let stallWatchdog: ReturnType<typeof setInterval> | null = null;
@@ -256,15 +267,24 @@ function scheduleRateLimitResume(
       if (rearms < MAX_PARK_REARMS) reArm(PARK_REARM_MS, rearms + 1);
       return;
     }
-    toast("Gateway recovered — resuming parked run", {
+    // r171 rotation (user report: "rotation wise strategies"): a parked resume
+    // never re-dials the lane that just proved saturated — it rotates to the
+    // server relay (forceServer), whose health-ordered hop chain (r25: wire
+    // rebuilt per attempt, sick primaries demoted, dead hops skipped) ends in
+    // the built-in engine's own quota family. Same machinery as the manual
+    // "Retry via relay" button — triggered by congestion history instead of a
+    // human noticing. If the whole chain is saturated the park ladder simply
+    // continues with its growing waits.
+    toast("Gateway congested — resuming parked run via relay rotation", {
       icon: "⏳",
-      description: `"${run.steps[fromStepIndex]?.label ?? "Failed step"}" was parked on a 429 — resuming "${wf.name}" from there (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS}, completed steps preserved).`,
+      description: `"${run.steps[fromStepIndex]?.label ?? "Failed step"}" was parked on a 429 — resuming "${wf.name}" from there through the model relay lane (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS}, completed steps preserved).`,
     });
     const resumed = executeWorkflowRun({
       workflow: wf,
       task: run.task,
       resume: { runId, fromStepIndex },
       source: originSource,
+      forceServer: true,
       onSettled: (_settledId, status) => {
         if (status !== "done") return;
         // Companion fix: a parked-then-completed run must not trigger the
@@ -722,8 +742,10 @@ export async function executeWorkflowRun(
       const live = useWorkflowsStore.getState().workflows.find((w) => w.id === wf.id);
       const sched = live?.schedule;
       if (sched && (status === "done" || status === "error")) {
-        if (status === "done" && sched.failStreak) {
-          useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: 0 } });
+        if (status === "done" && (sched.failStreak || sched.autoResumeTrips || sched.autoResumeAt != null)) {
+          // r171: success also refills the congestion budget — a healthy
+          // pipeline always keeps its full 5 auto-resumes.
+          useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: 0, autoResumeTrips: 0, autoResumeAt: undefined } });
         } else if (status === "error" && sched.enabled) {
           const streak = (sched.failStreak ?? 0) + 1;
           // r156 (user report: hourly pipeline 0/11 for 19h): a rate-limit
@@ -736,15 +758,47 @@ export async function executeWorkflowRun(
           // capped 6h) so the schedule stops feeding the congestion.
           const rateLimited = errorInfo?.kind === "rate-limit";
           if (streak >= (rateLimited ? 2 : 3)) {
-            useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: streak, enabled: false } });
-            toast.warning(rateLimited ? "Schedule auto-paused — provider rate-limited twice" : "Schedule auto-paused after 3 consecutive failures", {
-              icon: "🛑",
-              description: `${wf.name} — ${rateLimited ? "the gateway keeps saying 429; hammering it only burns quota. " : ""}The pipeline keeps failing at "${errorInfo?.stepLabel ?? "a step"}". Fix it, then re-enable the schedule.`,
-            });
+            // r171 (user report: "job stopping itself"): a rate-limit trip is
+            // congestion, not breakage — the old hard disable silently killed
+            // the pipeline until a human noticed (RSIinFIELD sat auto-paused
+            // for a day). Now the breaker trip parks the schedule with a
+            // SELF-HEALING backoff (45m → 1.5h → 3h → 6h, ±20% jitter) and
+            // the scheduler re-arms it automatically. Only after 5 consecutive
+            // congestion trips (≈ a day of saturation) does it degrade to the
+            // honest manual pause. Non-rate-limit trips (auth/model/etc.) keep
+            // the manual pause — real breakage deserves a human.
+            const trips = rateLimited ? (sched.autoResumeTrips ?? 0) : 0;
+            if (rateLimited && trips < MAX_AUTO_RESUME_TRIPS) {
+              const resumeIn = jitteredBackoff(rateLimitResumeDelayMs(streak));
+              useWorkflowsStore.getState().update(wf.id, {
+                schedule: {
+                  ...sched,
+                  failStreak: streak,
+                  autoResumeTrips: trips + 1,
+                  autoResumeAt: Date.now() + resumeIn,
+                  nextRunAt: Date.now() + resumeIn,
+                  enabled: false,
+                },
+              });
+              toast.warning("Schedule backing off — gateway saturated (auto-resumes)", {
+                icon: "⏳",
+                description: `${wf.name} parked itself after ${streak} rate-limited runs — it re-arms automatically in ~${Math.max(1, Math.round(resumeIn / 60_000))}m (congestion trip ${trips + 1}/${MAX_AUTO_RESUME_TRIPS}). Completed steps of the failed run are preserved.`,
+              });
+            } else {
+              useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: streak, enabled: false, autoResumeAt: undefined } });
+              toast.warning(rateLimited ? "Schedule auto-paused — gateway saturated all day" : "Schedule auto-paused after 3 consecutive failures", {
+                icon: "🛑",
+                description: `${wf.name} — ${rateLimited ? `${MAX_AUTO_RESUME_TRIPS} automatic backoffs all landed in 429s; this looks like a persistent outage, so it stays paused. ` : ""}The pipeline keeps failing at "${errorInfo?.stepLabel ?? "a step"}". Fix it, then re-enable the schedule.`,
+              });
+            }
           } else {
-            const retryIn = rateLimited
-              ? Math.min(sched.intervalMs * 2 ** streak, 6 * 60 * 60_000)
-              : Math.min(Math.max(60_000, sched.intervalMs), streak === 1 ? 10 * 60_000 : 30 * 60_000);
+            // r171: jittered ±20% — an unjittered +2h re-fire stays collinear
+            // with the hourly cron wave that caused the 429 in the first place.
+            const retryIn = jitteredBackoff(
+              rateLimited
+                ? Math.min(sched.intervalMs * 2 ** streak, 6 * 60 * 60_000)
+                : Math.min(Math.max(60_000, sched.intervalMs), streak === 1 ? 10 * 60_000 : 30 * 60_000)
+            );
             useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: streak, nextRunAt: Date.now() + retryIn } });
           }
         }
@@ -752,9 +806,14 @@ export async function executeWorkflowRun(
       if (status === "done") toast.success("Scheduled run finished", { icon: "⏰", description: `${wf.name} · ${steps.length} steps` });
       else if (status === "error") {
         const sched2 = useWorkflowsStore.getState().workflows.find((w) => w.id === wf.id)?.schedule;
-        const retryNote = sched2?.enabled && sched2.failStreak && sched2.failStreak < 3
-          ? ` — auto-retry ${sched2.failStreak === 1 ? "in ~10m" : "in ~30m"}`
-          : "";
+        // r171 honesty fix: the note used to hardcode "~10m/~30m" even when the
+        // rate-limit ladder had armed a 2h backoff — read the real re-arm time.
+        const retryNote =
+          sched2?.enabled && sched2.nextRunAt != null && sched2.nextRunAt > Date.now()
+            ? ` — auto-retry in ~${Math.max(1, Math.round((sched2.nextRunAt - Date.now()) / 60_000))}m`
+            : sched2?.enabled && sched2.autoResumeAt != null
+              ? ` — auto-resume in ~${Math.max(1, Math.round((sched2.autoResumeAt - Date.now()) / 60_000))}m`
+              : "";
         toast.error("Scheduled run failed", { icon: "⏰", description: errorInfo ? `${errorInfo.stepLabel} · ${ERROR_KIND_META[errorInfo.kind].label.toLowerCase()}${retryNote} — open the run to recover` : wf.name });
       }
     } else {
@@ -813,7 +872,7 @@ export async function executeWorkflowRun(
     }
     if (parkIndex !== null) {
       const waitMs = parkDelayMs(parkIndex);
-      info.message += ` — parked: gateway saturated, auto-resume in ~${Math.max(1, Math.round(waitMs / 60_000))}m (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS})`;
+      info.message += ` — parked: gateway saturated, auto-resume in ~${Math.max(1, Math.round(waitMs / 60_000))}m (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS}; resume rotates to the relay lane)`;
       patchRun({ parkCount: parkIndex + 1 });
       // Live countdown on the failed step row — reuses the r128 "⏳ Cooldown"
       // chip machinery so the park wait is visible, not a silent hang.
@@ -1088,7 +1147,14 @@ export async function executeWorkflowRun(
             // step's own retry ladder. Stops pipeline pile-ups from feeding
             // the same quota window.
             noteGateway429();
-            const cooldown = attempt === 1 ? 20_000 : 45_000;
+            // r171: the cooldown now OUTLIVES the shared quiet window — the
+            // old 20s/45s waits always landed inside the same 90s congestion
+            // window (pulse forensics: 3 failed dials back-to-back), burning
+            // the whole ladder on one wave. Jitter desynchronizes concurrent
+            // steps the same way the scheduler desynchronizes starts.
+            const cooldown = jitteredBackoff(
+              Math.max(attempt === 1 ? 20_000 : 45_000, gatewayQuietUntil() - Date.now())
+            );
             // r128: surface the wait in the step row (backoffUntil drives the
             // live "⏳ Cooldown Ns" chip) — waits were toast-only before.
             patchRunStep(runStep.stepId, {

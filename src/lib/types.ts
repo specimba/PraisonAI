@@ -355,6 +355,15 @@ export interface WorkflowSchedule {
    * 1-2 → quick backoff re-arm; ≥3 → breaker auto-pauses the schedule.
    */
   failStreak?: number;
+  /**
+   * r171 congestion auto-resume: epoch ms when a rate-limit-tripped breaker
+   * re-arms itself. Set alongside enabled:false by the runner; the scheduler
+   * clears it and re-enables when it elapses. Absent = a real (manual/breakage)
+   * pause that stays off until the user resumes.
+   */
+  autoResumeAt?: number;
+  /** r171: how many consecutive congestion trips have auto-resumed (cap → honest manual pause). Reset on success. */
+  autoResumeTrips?: number;
   /** Task text used for each scheduled run (falls back to the description). */
   task: string;
   lastRunAt?: number;

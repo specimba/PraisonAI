@@ -19,3 +19,29 @@ export function noteGateway429(): void {
 export function gatewayQuietUntil(): number {
   return quietUntil;
 }
+
+// ─── r171: congestion auto-resume ladder (user report: "job stopping itself") ─
+// The r156 breaker disables a schedule after 2 consecutive rate-limit failures
+// and leaves it OFF until a human clicks resume. For a shared free gateway
+// that saturates in waves (pulse: 10×429 in 24h, all hourly-cron collinear),
+// that converts a transient congestion window into a LOST pipeline. New
+// doctrine: congestion trips a SELF-HEALING backoff — the schedule re-arms
+// itself after 45m → 1.5h → 3h → 6h (streak-exponential, capped). Only after
+// 5 consecutive auto-resumed trips (≈ a full day of saturation) does it fall
+// back to the honest manual pause — a persistent outage deserves a human.
+export const RL_RESUME_BASE_MS = 45 * 60_000;
+export const RL_RESUME_CAP_MS = 6 * 60 * 60_000;
+export const MAX_AUTO_RESUME_TRIPS = 5;
+
+/** Backoff until the auto-resume for a schedule whose breaker just tripped at `failStreak`. */
+export function rateLimitResumeDelayMs(failStreak: number): number {
+  return Math.min(
+    RL_RESUME_BASE_MS * 2 ** Math.max(0, failStreak - 2),
+    RL_RESUME_CAP_MS
+  );
+}
+
+/** ±20% jitter — desynchronizes re-fires from the global on-the-hour cron wave. */
+export function jitteredBackoff(ms: number): number {
+  return Math.round(ms * (0.9 + Math.random() * 0.2));
+}

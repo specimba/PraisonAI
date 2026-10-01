@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useWorkflowsStore } from "@/lib/stores";
 import { executeWorkflowRun, isWorkflowRunning } from "@/lib/workflow-runner";
 import { closeScheduleDeferral, noteScheduleDeferred } from "@/lib/schedule-skips";
-import { gatewayQuietUntil } from "@/lib/gateway-cadence";
+import { gatewayQuietUntil, MAX_AUTO_RESUME_TRIPS } from "@/lib/gateway-cadence";
 
 // ─── In-app workflow scheduler ───────────────────────────────────────────────
 // Ticks every 10s and fires any enabled workflow schedule whose nextRunAt is
@@ -41,6 +41,29 @@ export function WorkflowScheduler() {
       try {
         const now = Date.now();
         const store = useWorkflowsStore.getState();
+
+        // r171: congestion auto-resume — a rate-limit-tripped breaker re-arms
+        // ITSELF once its backoff elapses (the runner sets enabled:false +
+        // autoResumeAt; this tick flips it back on). The failure streak is
+        // deliberately preserved so a still-saturated gateway re-trips into a
+        // LONGER backoff; a successful run resets both counters (runner).
+        // Stale-flag safety: autoResumeAt is cleared on every other
+        // enabled↔disabled transition (manual resume/pause), so a resurrected
+        // schedule can only ever come from the congestion path.
+        for (const wf of store.workflows) {
+          const s = wf.schedule;
+          if (s && !s.enabled && typeof s.autoResumeAt === "number" && s.autoResumeAt <= now) {
+            store.update(wf.id, {
+              schedule: { ...s, enabled: true, autoResumeAt: undefined, nextRunAt: now },
+            });
+            const left = Math.max(0, MAX_AUTO_RESUME_TRIPS - (s.autoResumeTrips ?? 0));
+            toast("Gateway backoff elapsed — schedule auto-resumed", {
+              icon: "⏰",
+              description: `"${wf.name}" was parked by rate-limit backoff and is live again (streak ${s.failStreak ?? 0} preserved · ${left} auto-resume${left === 1 ? "" : "s"} left before a manual pause).`,
+            });
+          }
+        }
+
         const due = store.workflows.filter(
           (w) =>
             w.schedule?.enabled === true &&
