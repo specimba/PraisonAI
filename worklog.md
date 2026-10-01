@@ -4628,3 +4628,27 @@ Verification result: PASS
 Open risks: the vault restore path (automation vault) has its own separate confirmation flow (r165) — not touched this round; the dialog copy counts only sanitized entries, so a file of pure junk reads "0 agents · 0 chats · 0 workflows" (accurate, and the skipped note explains why).
 Blockers: none
 Next recommended action: r174 — (1) FIRST read any user report (still watching for confirmation the pipeline rides out waves end-to-end); (2) rotate surfaces: the next-largest unaudited component (chat view surfaces — check sizes first) or UI polish on the new dialog if user feedback touches it; (3) the Model Tracker duplicate-model-list observation from the user's r170 paste is still unverified — worth one cheap probe if a round has slack. Keep rotating.
+---
+Task ID: 424432 — r174
+Agent: main (platform development — hourly dev round)
+Task: User-report check first (none attached; pulse re-check) — then the round deviated legitimately: the app was visibly broken. /api/gateway/pulse 404'd with HTML, and the entire r166–r173 lineage was missing from the working tree (no gateway-pulse.ts, no import confirm dialog, worklog without pulse mentions) — the sandbox had restored the tree + HEAD to an old point of the history.
+
+Work Log:
+- Diagnosed by evidence, not assumption: pulse 404 + `last429At` absent from src + git log showing a Sep-30-era HEAD (4d35112ad, "cron") while fork/main fast-forwarded 63d906873..58ba0d369 — i.e. HEAD was parked at an OLD commit of the SAME shared lineage, not a divergent branch. `git log fork/main..HEAD` = 0 commits — nothing was ever lost.
+- RECOVERED: pushed a safety branch (backup/rollback-lineage-4d35112ad → fork), then `git reset --hard fork/main` (58ba0d369, the r173 snapshot). Dev server recompiled on the file change; root 200 and pulse JSON restored on the first poll (last429At unchanged — still zero 429s since 12:21 UTC, ~3h).
+- Verified the r173 artifacts are intact post-reset: gateway pulse route + lib present, import confirm dialog present, worklog r172/r173 sections present.
+- No feature work this round — the recovery IS the round's improvement (building new work on a 2-day-old tree would have silently forked the product). Early clean exit by doctrine.
+
+Stage Summary:
+- The product is back at its best verified state (r173: D-series 14/14, H-series 12/12, tsc/eslint 0) after a sandbox rollback silently parked the tree two days in the past; the recovery is documented and the stale point is preserved as a branch.
+
+Round Handoff:
+Round ID: r175
+Task owner: main (platform dev)
+Scope completed: lineage recovery to fork/main 58ba0d369; app healed (root 200, pulse JSON live); r173 artifacts verified; worklog + snapshot pushed.
+User-visible changes: none beyond restoring everything r166–r173 shipped (the tree had silently lost all of it).
+Verification steps: curl root → 200; curl /api/gateway/pulse → JSON (count24h=12, count1h=0); artifacts grep; git log -1 → 58ba0d369.
+Verification result: PASS
+Open risks: if the sandbox rolls the tree back again, the same recovery applies (fetch fork + reset --hard fork/main — the fork is the source of truth); watch for a possible cause (a parallel process checking out old commits) in future rounds.
+Blockers: none
+Next recommended action: r175 — (1) FIRST read any user report; (2) confirm the tree is still at/after 58ba0d369 before starting work (one git log line — cheap guard against a repeat rollback); (3) then the normal rotation: chat-view audit or the Model Tracker duplicate-list probe from the user's r170 paste. Keep rotating.
