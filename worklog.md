@@ -4213,3 +4213,27 @@ Verification result: PASS
 Open risks: chip live-render unverified in-browser (data-driven; will be exercised by the next real errored run); r142 real-world validation still pending; gateway congestion remains external — the app can only fail gracefully and visibly now.
 Blockers: none
 Next recommended action: r158 — rotate: (b) the never-measured radar view mount perf pass (last handoff item still open), or (a) if the user's pipeline errored again, read the new WHY chips off the history and treat any NON-rate-limit kind as the next root-cause target, or (c) root-cause FIRST any new user report. Keep rotating.
+---
+Task ID: 424432 — r158
+Agent: main (platform development — hourly dev round)
+Task: USER REPORT #2 (root-cause FIRST, expert-team review): the Continuous Research pipeline STILL dies at step 1/11 with rate-limit — 3 LLM calls, 3 failed; schedule showing "next in 2m" despite r156's backoff.
+
+Work Log:
+- GROUND TRUTH: r156's schedule backoff is schedule-lane-only and works (RSIinFIELD shows "auto-paused" = breaker tripped). The user's fresh failing run was MANUALLY fired (run count still 12) — manual runs bypass the schedule breaker by design, so the schedule independently re-armed into the same saturated window. The REAL killer is step-level: the self-heal ladder waits 20s+45s (~65s) while the shared free gateway's 429 window lasts minutes — every attempt lands inside it, the step dies, the run dies 0/11.
+- DESIGN: dispatched a Plan-agent adversarial review of my park-and-resume proposal; verdict SHIP-WITH-CHANGES with 6 corrections, all adopted: (1) dedicated parkCount budget (not resumeCount — stalls + manual resumes share that one; a flaky-gateway deep run could need both); (2) park note appended to errorInfo.message BEFORE finish() (finish copies by reference — later edits never reach the row/r157 chip); (3) busy/gateway-quiet collisions RE-ARM +60s (bounded 5) instead of silently dropping the park — at 5-minute scale a collision with a schedule-fired run is LIKELY; (4) originSource passthrough — a manual run's parks stay manual, so a manual fire can never trip the r156 schedule breaker on the schedule lane's behalf; (5) resume step-reset now clears backoffUntil/backoffKind (leak: a manual resume mid-park showed a phantom countdown); (6) companion: parked-run done → overdue schedule re-armed from now (+jitter) — kills the r77-deferral duplicate full-pipeline fire.
+- SHIPPED (workflow-runner.ts + types.ts): rate-limit step deaths no longer kill the run while park budget (3) remains — the run finalizes "error" honestly (recovery card, r157 history chip, breaker) and auto-resumes after 5m → 10m → 20m (escalating, outlives the quota window; worst chain 35m < the 60m interval). Parked run shows a live "⏳ Cooldown" countdown on the failed step (reuses r128 chip machinery; render condition is backoffUntil-based, no status gate). Distinct worker-timer key park-resume-<runId>; guards before toast; only "error" rows resumed (user-stopped/resumed rows are theirs); parks are tab-live only (worker timers die with the tab — headless lane keeps its own backoff, documented in-code).
+- VERIFIED: tsc --noEmit → 0 repo-wide; eslint on both touched files → clean; app 200; snapshot pushed (9c8fb2380). Live E2E of a full park→resume cycle needs a real 429 window (~5m) — not staged this round; the user's next run against the saturated gateway IS the live test, and the r157 history chips + parkCount in the recovery card will show exactly what happened.
+
+Stage Summary:
+- Doctrine shift shipped: rate-limit is now a WAITABLE condition, not a terminal one. The user's hourly pipeline can ride out gateway saturation across up to 3 escalating parks and still complete — the difference between "report died at step 1" and "report delivered 5 minutes late".
+
+Round Handoff:
+Round ID: r159
+Task owner: main (platform dev)
+Scope completed: rate-limit park-and-resume (dedicated budget, re-arm-on-collision, origin-source passthrough, cadence-restore companion, countdown chip); Plan-agent adversarial review adopted 6/6; snapshot pushed.
+User-visible changes: a 429-killed run now shows "— parked: gateway saturated, auto-resume in ~5m (park 1/3)" in its error card + history chip, a live countdown on the failed step, and COMPLETES on its own when the gateway recovers.
+Verification steps: tsc 0; eslint 0; curl 200.
+Verification result: PASS
+Open risks: park→resume E2E unverified against a live 429 (next real failure is the test — check history chips + parkCount); parks die with the tab (documented; headless lane unaffected); gateway congestion remains external.
+Blockers: none
+Next recommended action: r159 — (1) if the user's pipeline ran again, read the new WHY chips + parkCount and confirm the park chain actually completes a run (if a parked resume re-fails with a NON-rate-limit kind, root-cause that); (2) else rotate to the never-measured radar view mount perf pass; (3) root-cause FIRST any new user report. Keep rotating.
