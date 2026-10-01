@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Loader2, SendHorizontal, Square, X } from "lucide-react";
+import { Check, Loader2, RotateCcw, SendHorizontal, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,10 @@ interface TestMessage {
   toolCalls: ToolCallInfo[];
   status: "streaming" | "done" | "error" | "stopped";
   error?: string;
+  /** r163: structured upstream error kind from the SSE error event (the
+   *  same classification chat and the workflow runner already get) — the
+   *  playground previously dropped it, rendering bare prose. */
+  kind?: string;
 }
 
 function TypingDots() {
@@ -59,6 +63,30 @@ function ToolChip({ call }: { call: ToolCallInfo }) {
       {call.ok != null && call.ms != null ? (
         <span className="shrink-0 tabular-nums">{fmtMs(call.ms)}</span>
       ) : null}
+    </span>
+  );
+}
+
+/** r163: structured-kind chip for errored turns. rate-limit gets the amber
+ *  congestion treatment (pipelines park-and-resume on the same failure —
+ *  r158); other kinds stay neutral — the kind name is the honest signal. */
+function KindChip({ kind }: { kind: string }) {
+  const rateLimited = kind === "rate-limit";
+  return (
+    <span
+      title={
+        rateLimited
+          ? "The shared gateway is congested — scheduled pipelines park and auto-resume on this same failure. See the workflows view for the live gateway pulse."
+          : `Upstream error kind reported by the engine: ${kind}`
+      }
+      className={cn(
+        "mt-1.5 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        rateLimited
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+          : "border-border bg-muted/40 text-muted-foreground"
+      )}
+    >
+      {kind}
     </span>
   );
 }
@@ -115,44 +143,17 @@ export function TestAgentDialog({
 
   const stop = () => abortRef.current?.abort();
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || running || !agent) return;
-
-    const userMsg: TestMessage = {
-      id: uid("tmsg"),
-      role: "user",
-      content: text,
-      toolCalls: [],
-      status: "done",
-    };
-    const assistantId = uid("tmsg");
-    const base = [...messages, userMsg];
-    const assistantMsg: TestMessage = {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      toolCalls: [],
-      status: "streaming",
-    };
-    setMessages([...base, assistantMsg]);
-    setInput("");
-    setRunning(true);
-    setStatusText("Thinking…");
-
-    const history = base
-      .filter((m) => m.role === "user" || m.content.trim().length > 0)
-      .slice(-12)
-      .map((m) => ({ role: m.role, content: m.content }));
-
-    const settings = useSettingsStore.getState().settings;
-    const controller = new AbortController();
-    abortRef.current = controller;
-
+  /** The engine call + turn patching, shared by send and retry (r163). */
+  const runTurn = async (
+    history: { role: "user" | "assistant"; content: string }[],
+    assistantId: string,
+    controller: AbortController
+  ) => {
+    if (!agent) return;
     const patchAssistant = (patch: Partial<TestMessage>) =>
       setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, ...patch } : m)));
-
     try {
+      const settings = useSettingsStore.getState().settings;
       const llm = resolveLlm(settings, agent.model);
       const result = await runAgentChat(
         {
@@ -214,6 +215,7 @@ export function TestAgentDialog({
         patchAssistant({
           status: "error",
           error: err instanceof Error ? err.message : "Something went wrong.",
+          kind: (err as Error & { kind?: string })?.kind,
         });
       }
     } finally {
@@ -221,6 +223,67 @@ export function TestAgentDialog({
       setRunning(false);
       setStatusText("");
     }
+  };
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || running || !agent) return;
+
+    const userMsg: TestMessage = {
+      id: uid("tmsg"),
+      role: "user",
+      content: text,
+      toolCalls: [],
+      status: "done",
+    };
+    const assistantId = uid("tmsg");
+    const base = [...messages, userMsg];
+    const assistantMsg: TestMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      toolCalls: [],
+      status: "streaming",
+    };
+    setMessages([...base, assistantMsg]);
+    setInput("");
+    setRunning(true);
+    setStatusText("Thinking…");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    await runTurn(base.filter((m) => m.role === "user" || m.content.trim().length > 0).slice(-12), assistantId, controller);
+  };
+
+  /** r163: one-click retry of an errored turn — the playground previously
+   *  dead-ended (composer already cleared; the user had to retype). Re-runs
+   *  the SAME user message, replacing the errored assistant turn. */
+  const retry = async () => {
+    if (running || !agent) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant" || last.status !== "error") return;
+    const lastUser = [...messages]
+      .slice(0, -1)
+      .reverse()
+      .find((m) => m.role === "user");
+    if (!lastUser) return;
+
+    const base = messages.slice(0, -1); // drop the errored assistant turn
+    const assistantId = uid("tmsg");
+    const assistantMsg: TestMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      toolCalls: [],
+      status: "streaming",
+    };
+    setMessages([...base, assistantMsg]);
+    setRunning(true);
+    setStatusText("Thinking…");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    await runTurn(base.filter((m) => m.role === "user" || m.content.trim().length > 0).slice(-12), assistantId, controller);
   };
 
   return (
@@ -252,8 +315,9 @@ export function TestAgentDialog({
               </p>
             </div>
           ) : (
-            messages.map((m) =>
-              m.role === "user" ? (
+            messages.map((m, i) => {
+              const isLast = i === messages.length - 1;
+              return m.role === "user" ? (
                 <div
                   key={m.id}
                   className="ml-auto max-w-[80%] whitespace-pre-wrap break-words rounded-2xl bg-primary px-3.5 py-2 text-sm text-primary-foreground"
@@ -291,14 +355,28 @@ export function TestAgentDialog({
                       </p>
                     ) : null}
                     {m.status === "error" && m.error ? (
-                      <p className={cn("text-xs text-red-500", m.content ? "mt-1.5" : "")}>
-                        {m.error}
-                      </p>
+                      <div className={m.content ? "mt-1.5" : ""}>
+                        <p className="text-xs text-red-500">{m.error}</p>
+                        {m.kind ? <KindChip kind={m.kind} /> : null}
+                        {!running && isLast ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void retry()}
+                            aria-label="Retry this message"
+                            className="mt-1.5 h-7 gap-1.5 px-2 text-[11px]"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            Retry
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 </div>
-              )
-            )
+              );
+            })
           )}
         </div>
 
