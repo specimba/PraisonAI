@@ -4383,3 +4383,27 @@ Verification result: PASS
 Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (pulse record empty at r164 start — check /api/gateway/pulse first); dirty guard compares a JSON snapshot (tool toggle order changes read as dirty — honest, if occasionally over-eager).
 Blockers: none
 Next recommended action: r165 — rotate: (1) if /api/gateway/pulse shows real 429s, read the user's next report cross-evidenced (park-chain + r142), or (2) fresh surface: settings/providers UX audit (the other handoff candidate — provider-gallery is the largest unaudited file), or (3) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r165
+Agent: main (platform development — hourly dev round)
+Task: r164 handoff — pulse record still empty (no real 429s), no user report. Rotated to the settings/providers UX audit per handoff; provider-gallery.tsx (892 lines, largest unaudited file) read in full. Found a real data-integrity gap in the vault restore path.
+
+Work Log:
+- AUDIT finding (handleVaultImportFile): (1) imported entries were cast blind to Settings["providerKeys"] and merged — no per-entry sanitization (the agents import was built with sanitize+skip doctrine; vault was not), so malformed entries could inject junk that later flows into apiKey params; (2) the export saves FOUR fields (providerKeys, activeProviderId, provider, defaultModel) but import read only TWO — a vault moved to a fresh browser restored the key yet left provider="auto", and since the gallery only honors activeProviderId when provider==="custom", the restored provider never activated; (3) noKey providers could never be restored as active (guard required a key); (4) double update() call; (5) toast counted raw entries, not sanitized ones.
+- SHIPPED (provider-gallery.tsx): sanitizeVaultEntry() module helper (entry must carry a string key; only model/accountId/validatedAt survive, well-typed; unknown provider ids KEPT for forward-compat — a vault from a newer build must not lose keys); restore now completes the export contract: provider:"custom"+usable active → both restored (noKey providers usable without a key — registry-dormant today, no provider sets noKey), provider:"auto" restored, defaultModel restored; ONE update() call; honest toast counts non-empty sanitized keys and reports skipped malformed entries.
+- QA (Y-series, scripts/cdp-qa-vault-restore.mjs, 15/15 PASS): Y1a-e sanitization (2 valid merged with only known fields, 3 malformed skipped with honest count, unknown id kept); Y2a-e THE regression — fresh browser on "auto" + vault{provider:custom,activeProviderId:groq,defaultModel} → store flips AND groq card shows the active ring + "Active provider" (collapsed-ring + expanded-button both checked); Y4a-b unusable active (no key) restores nothing; Y5a-c auto vault restores auto. tsc 0; eslint 0; root 200. Throwaway profile — no cleanup needed.
+- HARNESS LESSONS (probe banked in scripts/probe-y2d-locator.mjs): provider cards only render their actions row when EXPANDED — a global count of "Active provider" buttons is vacuously 0 on a collapsed roster; assert the card's active-ring class (border-violet-500/60) when collapsed and expand before asserting button text. Also: settings page has TWO sr-only file inputs (#providers, #data) — scope file-input locators.
+
+Stage Summary:
+- Vault restore now honors everything the vault export saves: malformed entries can't poison settings, and a vault moved to a fresh browser actually reactivates the provider instead of silently leaving the app on auto.
+
+Round Handoff:
+Round ID: r166
+Task owner: main (platform dev)
+Scope completed: providers audit + vault restore hardening (per-entry sanitization, export-contract completion, honest counts); Y-series 15/15; snapshot pushed.
+User-visible changes: restoring a provider vault into a fresh browser reactivates the exported provider and default model; malformed vault files are skipped with an honest count instead of merging junk.
+Verification steps: node scripts/cdp-qa-vault-restore.mjs → 15/15; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (pulse record empty at r165 start — check /api/gateway/pulse first); the noKey-restore branch is registry-dormant (no provider sets noKey today) — first untested-against-registry code path; rest of the settings surface (settings-view 677, local-models 930, model-relay 331) still unaudited.
+Blockers: none
+Next recommended action: r166 — rotate: (1) if /api/gateway/pulse shows real 429s, read the user's next report cross-evidenced (park-chain + r142), or (2) continue the settings audit (model-relay.tsx — the fallback rotation UX — is the natural next target), or (3) root-cause FIRST any user report. Keep rotating.
