@@ -88,6 +88,15 @@ export function ModelTicker() {
   const vyceKey = useSettingsStore((s) => s.settings.providerKeys?.vyce?.key ?? "");
 
   const syncNowRef = React.useRef<() => Promise<void>>(async () => {});
+  // r175: the last-seen watermark lives in a ref, not just localStorage —
+  // apply() is read-modify-write, and two overlapping refreshes (StrictMode
+  // boot double-fire, a retry timer colliding with the 15-min poll, rapid
+  // visibilitychange bursts) both read the SAME stale localStorage value,
+  // computed identical "unseen" lists and toasted duplicate
+  // "New model spotted" announcements. The ref is read and updated
+  // synchronously inside apply(), so the second apply always sees the
+  // first's write and finds nothing left to announce.
+  const lastSeenRef = React.useRef<number>(0);
 
   // Merge fetched data + fire unseen-event toasts.
   const apply = React.useCallback((fresh: TrackerData, announce: boolean) => {
@@ -95,7 +104,8 @@ export function ModelTicker() {
     saveCache(fresh);
     if (announce) {
       try {
-        const lastSeen = Number(localStorage.getItem(TRACKER_LAST_SEEN_KEY) ?? 0);
+        const lastSeen =
+          lastSeenRef.current || Number(localStorage.getItem(TRACKER_LAST_SEEN_KEY) ?? 0);
         const unseen = lastSeen
           ? fresh.events.filter((e) => e.type === "new" && new Date(e.createdAt).getTime() > lastSeen).slice(0, 3)
           : []; // first-ever paint: don't toast the history
@@ -118,6 +128,7 @@ export function ModelTicker() {
           });
         }
         const newest = fresh.events.reduce((acc, e) => Math.max(acc, new Date(e.createdAt).getTime()), lastSeen || Date.now());
+        lastSeenRef.current = newest;
         localStorage.setItem(TRACKER_LAST_SEEN_KEY, String(newest));
       } catch {
         /* best-effort announcements */

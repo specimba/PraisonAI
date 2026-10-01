@@ -4652,3 +4652,28 @@ Verification result: PASS
 Open risks: if the sandbox rolls the tree back again, the same recovery applies (fetch fork + reset --hard fork/main — the fork is the source of truth); watch for a possible cause (a parallel process checking out old commits) in future rounds.
 Blockers: none
 Next recommended action: r175 — (1) FIRST read any user report; (2) confirm the tree is still at/after 58ba0d369 before starting work (one git log line — cheap guard against a repeat rollback); (3) then the normal rotation: chat-view audit or the Model Tracker duplicate-list probe from the user's r170 paste. Keep rotating.
+---
+Task ID: 424432 — r175
+Agent: main (platform development — hourly dev round)
+Task: No user report attached. Rollback guard first (HEAD still 6239e067b — no repeat of the r174 rollback). Pulse: 2 fresh 429s at ~15:40 UTC (count24h 12→14) — another small wave, no user report to cross-check. Rotation: the Model Tracker duplicate-list observation from the user's r170 paste (deferred twice), then the chat-view audit if slack remains.
+
+Work Log:
+- AUDIT VERDICT on the user's r170 paste ("model list appears twice in the tracker"): NOT a bug — the marquee strip renders its feed twice by design ([0,1].map(dup), the documented seamless-loop duplication, r148-measured as pure compositor animation with a "do not fix without new evidence" note). A text paste of the strip naturally captures both copies; the popover panel renders its list exactly once. Observation closed as paste-artifact-of-design.
+- The audit DID find a real race in model-ticker.tsx: apply() is a read-modify-write of the last-seen watermark in localStorage — two overlapping refreshes (StrictMode boot double-fire, a retry timer colliding with the 15-min poll, rapid visibilitychange bursts) both read the SAME stale value, computed identical "unseen" lists, and toasted DUPLICATE "New model spotted" announcements.
+- SHIPPED (model-ticker.tsx): the watermark now lives in a ref read+updated synchronously inside apply() — the second of two racing applies always sees the first's write and finds nothing left to announce. localStorage write retained for cross-session continuity.
+- QA (E-series, scripts/cdp-qa-tracker-dedup.mjs): 4/4 — stubbed GET /api/tracker with a delayed Response reading a mutable event: E1 strip paints from the stub; E2 boot refresh with no unseen events toasts nothing (control); E3 TWO overlapping refreshes carrying the SAME new event toast EXACTLY ONCE (the fix's contract — 2 before); E4 watermark advanced past the announced event.
+- tsc 0; eslint 0 (model-ticker.tsx); root 200.
+
+Stage Summary:
+- The user observation is answered honestly (marquee design, not a bug), and the one real defect the audit surfaced — duplicate announcement toasts under racing refreshes — is fixed and proven live at exactly-once.
+
+Round Handoff:
+Round ID: r176
+Task owner: main (platform dev)
+Scope completed: model-ticker audit + watermark race fix; E-series 4/4; r170 Model Tracker observation closed; rollback guard clean; snapshot pushed.
+User-visible changes: returning to the tab or racing refreshes can no longer produce doubled "New model spotted" toasts; one announcement per new model, ever.
+Verification steps: node scripts/cdp-qa-tracker-dedup.mjs → 4/4; npx tsc --noEmit → 0; bunx eslint src/components/praison/tracker/model-ticker.tsx → 0; curl root → 200.
+Verification result: PASS
+Open risks: the dedup is per-page-load (the ref resets on reload; localStorage continuity preserves correctness across reloads); the tracker panel itself was audited read-only — its server route (/api/tracker) dedup of tracked rows is unverified (rows keyed by providerId::modelId — assumed unique upstream).
+Blockers: none
+Next recommended action: r176 — (1) FIRST read any user report (two small waves now: 12:11–12:21 and ~15:40 UTC — survival-stack behavior still awaiting user-side confirmation); (2) the chat-view audit is now the largest unaudited surface (chat-view.tsx 1173 lines — do it in two passes if needed); (3) rollback guard: one git log line before starting work. Keep rotating.
