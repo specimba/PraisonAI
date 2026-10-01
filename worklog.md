@@ -4847,3 +4847,28 @@ Blockers: none
 Next recommended action: r180 — (1) FIRST read any user report. (2) Rollback guard + health. (3) Backlog: directive item (a) — explicit role_id/agent_id fields on workflow steps (stop encoding routing in "[Role]" label prefixes; display worker honestly) — the directive's highest-severity finding, matches the user's own workflow JSON. Or item (b) PARTIAL/BLOCKED statuses if (a) proves too wide for one round. Keep rotating surfaces.
 
 - r179 addendum: first push attempt was rejected by repo rules (GitHub push protection — the provider-vault JSON carries a live key; rule evaluates whole push range, so even scrub-later commits stay rejected). Vault + artifacts kept LOCAL-ONLY (tag r179-local-artifacts-backup); remote gets scrubbed record. Directive credential warning verified live.
+---
+Task ID: 424432 — r180 (backlog round: directive item (a) — role-tag honesty)
+Agent: main (platform development — hourly dev round)
+Task: r179 handoff — implement the user directive's highest-severity finding: role/agent identity must be explicit and honest, never encoded in "[Role]" label prefixes (the failed-run evidence: "[Strategic Planner]" title shown under Research Scout, nobody flagged it).
+
+Work Log:
+- Guards clean (HEAD db3faea3a = r179; root 200; no parallel instance; no new user report).
+- Code reading (3 rounds): routing was NEVER label-driven — step.agentId owns routing everywhere. The dishonesty was display-only: labels carry "[Role]" prefixes that look like routing, and no surface compared the tag against the assigned worker. So the fix is display honesty + an explicit type field, not an engine change (zero run-behavior risk).
+- SHIPPED: (1) helpers.ts: parseRolePrefix() (extract leading "[…]" tag, tolerant of whitespace/unclosed brackets/emoji) + roleMatchesAgent() (normalized identity comparison, substring both ways — "Code Smith" tag on "Code Smith" agent agrees, "Strategic Planner" on "Research Scout" does not). (2) types.ts: WorkflowStep.roleId?: string — the explicit home for role identity going forward (export/import round-trips free via step serialization). (3) workflow-run-panel.tsx step rows: render the CLEAN label (tag stripped) + amber "tag [X] ≠ worker" chip with honest tooltip when the tag disagrees with the actual worker; matching tags render silently (zero noise). (4) workflows-view.tsx card chips: amber tint + dot + tooltip on authored tag-vs-agent mismatch (authoring-time honesty — you see the disagreement BEFORE running). (5) scripts/qa-role-identity.ts (K-series NEW, 14/14): real labels from the user's exported workflow JSON (the exact failed-run strings) + tolerance cases + doctrine check (clean label re-parses to no second tag).
+- Deliberately NOT done (scope discipline): no editor field for roleId yet (next increment), no label mutation (authoring freedom preserved; parse is display-only), workflows-view line-151 body hash untouched (cache stability).
+- Verification: K-series 14/14; F-series browser regression 8/8; tsc src-scoped 0; eslint 0 (4 changed files); root 200; snapshot pushed f40ad5eb0.
+
+Stage Summary:
+- The directive's top finding is live: a workflow step titled "[Strategic Planner] …" that actually runs Research Scout now shows the clean title under Research Scout's name with an explicit amber "tag [Strategic Planner] ≠ worker" marker in the run panel and an amber-tinted chip on the workflow card. Role identity has an honest home (WorkflowStep.roleId); routing remains agentId, visibly.
+
+Round Handoff:
+Round ID: r181
+Task owner: main (platform dev)
+Scope completed: role-tag honesty (parser + matcher + 2 UI surfaces + type field + 14/14 QA); snapshot pushed.
+User-visible changes: run-panel step rows show clean labels + amber tag≠worker chips; workflow card chips flag tag mismatches at authoring time.
+Verification steps: bun run scripts/qa-role-identity.ts → 14/14; node scripts/cdp-qa-chat-guard.mjs → 8/8; tsc src-scoped → 0; bunx eslint (4 files) → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) substring matcher may miss paraphrased tags ("Planner" vs "Strategic Planner") — fails toward amber noise, never toward silence. (2) roleId field is defined but no editor input writes it yet — parse-from-label remains the live signal until then. (3) Existing runs keep old labels (mismatch chips appear on already-failed runs too — correct, but expect amber on the user's Continuous-Research workflow).
+Blockers: none
+Next recommended action: r181 — (1) FIRST read any user report. (2) Rollback guard + health. (3) Directive item (a) completion: editor "Role tag" input writing step.roleId (+ matcher prefers explicit roleId over parsed label tag), OR directive item (b) PARTIAL/BLOCKED statuses for runs that finish with independent skipped branches. Check the user's next Continuous-Research run for the new amber chips + r178 park behavior first. Keep rotating.
