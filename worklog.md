@@ -5022,3 +5022,29 @@ Verification result: PASS
 Open risks: (1) The engine is client-side — the user's long-lived tab must pick up the new bundle (dev HMR delivers it; a hard reload guarantees it) before the new behavior is visible. (2) Pre-r186 run rows carry no depth stamp — panel falls back to authored depth (display-only). (3) Wave-gate solo-offender blindness remains by design; if Standard fires also die at streak ≥ 2, the r171 breaker escalates to manual pause — honest, and the next lever is a per-workflow dial-outcome memory feeding the saturation predicate.
 Blockers: none
 Next recommended action: r187 — (1) FIRST read any user report — check the next scheduled fires: run panel "Standard" chip, amber blocked rows instead of red failed, and whether any run reaches done (restores deep). (2) Rollback guard + health. (3) If Standard fires still die: implement per-workflow dial-outcome memory (feed the saturation predicate). (4) Backlog: directive item (d) event-ID scheduler health or (e) credential scrubbing. Keep rotating surfaces.
+
+---
+Task ID: 424432 — r186 (user report: "same !" — board unchanged after r185)
+Agent: main (platform development — hourly dev round)
+Task: User replied "same !" with an identical board paste: the latest Continuous Research fire (5m prior) STILL materialized the 7-step deep shape and died at step 1 (timeout → 429 → 429, 3 calls, 175.7s). Worklog handoff said "read user report first" — done: the report is that r185's fix wasn't visible.
+
+Work Log:
+- DIAGNOSIS (why "same"): r185's degradation was computed in the in-tab scheduler's fire path only. Two gaps: (1) the user's open tab still ran the pre-r185 client bundle (Next dev HMR doesn't guarantee a long-idle tab picks up new scheduler code), so its fires bypassed the new logic entirely; (2) any non-scheduler fire path (headless/bridge) had no override plumbing. Root cause pattern: enforcement placed at ONE call site instead of the shared choke point.
+- SHIPPED — runner-side enforcement (choke point): executeWorkflowRun now independently computes runnerDegraded (scheduled source + authored deep + failStreak ≥ 2 + no explicit depthOverride) and materializes Standard regardless of which caller launched the fire — stale-tab bundles, headless, future paths all funnel through this one function. The r185 scheduler-side computation stays for its toast/audit disclosure (belt and braces). Manual runs keep authored depth.
+- SHIPPED — self-diagnosing history: WorkflowRun.depth (optional) stamped by the runner at fire time; run panel's depth chip reads viewedRun?.depth ?? authored — a degraded fire shows "Standard" in the run row instead of lying with the workflow's authored "Deep". Pre-r186 runs have no stamp and fall back harmlessly.
+- Verification: qa-depth-degrade 22/22 (incl. new choke-point + stamp assertions); qa-run-statuses 33/33; qa-evidence-ledger 36/36; tsc src-scoped clean (only pre-existing scripts/hang-server.ts Bun-types error); eslint 0; NEW scripts/qa-r186-smoke.mjs browser smoke 5/5 (board renders via Workflows nav button, depth vocabulary present, 0 page errors). NOTE: nav items are <button>s in shell.tsx, not <a>s — smoke scripts must target buttons.
+- Snapshot pushed → fork/main (dcba1c66d).
+
+Stage Summary:
+- The degradation is now enforcement-grade, not advisory: no fire path can materialize deep for a stuck scheduled workflow, and the run row itself records the effective depth. Combined with r185's disclosure (toast + audit line), the next scheduled fire of Continuous Research/RSIinFIELD should materialize the 5-step Standard shape even if the user's tab never re-hydrates.
+
+Round Handoff:
+Round ID: r187
+Task owner: main (platform dev)
+Scope completed: runner-side depth degradation choke point + WorkflowRun.depth stamp + panel chip fallback; browser smoke script added.
+User-visible changes: next scheduled fire of a failing Deep pipeline materializes Standard from ANY lane; run panel depth chip tells the truth about what the run actually ran.
+Verification steps: bun run scripts/qa-depth-degrade.ts → 22/22; bun run scripts/qa-run-statuses.ts → 33/33; bun run scripts/qa-evidence-ledger.ts → 36/36; node scripts/qa-r186-smoke.mjs → 5/5; tsc src clean; bunx eslint (3 files) → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) USER ACTION NEEDED: refresh the browser tab once — the running page still holds the pre-r185 bundle; after refresh the scheduler's toast/audit disclosure re-appears (the runner-side enforcement works even without it). (2) Degradation cannot conjure capacity: if the shared lane 429s even Standard step 1 (as in the user's latest fire), the r171 breaker still escalates to manual pause after its trips — that is the designed floor. (3) failStreak lives in the schedule store; the user's paste shows 12 failed runs, so streak ≥ 2 holds for both Deep pipelines — first scheduled fire after tab refresh should read "standard depth (deep passes paused — lane unstable)".
+Blockers: none
+Next recommended action: r187 — (1) FIRST read any user report: did the next fire materialize Standard (run row chip "Standard", ~5 steps, no "Deep research pass" rows)? If a Standard run completed, verify deep restored on the following fire (failStreak reset, 11 steps). (2) If the lane 429s even Standard step 1 repeatedly, consider surfacing a "lane degraded — schedules auto-paused after N attempts" banner instead of silently burning trips (visibility beats a paused board the user can't explain). (3) Backlog: event-ID scheduler health (directive d), credential scrubbing from exports (directive e). Rotate surfaces.
