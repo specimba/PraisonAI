@@ -15,6 +15,7 @@ import {
   KeyRound,
   LifeBuoy,
   Lightbulb,
+  Link2,
   Loader2,
   Minus,
   Play,
@@ -26,6 +27,7 @@ import {
   Server,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { buildEvidenceLedger } from "@/lib/evidence-ledger";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -621,6 +623,8 @@ export function WorkflowRunPanel({
   const [compareRunId, setCompareRunId] = React.useState<string | null>(null);
   // r131: which history row's call-log expander is open (one at a time).
   const [callsOpenRunId, setCallsOpenRunId] = React.useState<string | null>(null);
+  // r184 (directive item c): per-history-row evidence ledger toggle.
+  const [evidenceOpenRunId, setEvidenceOpenRunId] = React.useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [, scheduleTick] = React.useReducer((n: number) => n + 1, 0);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -941,12 +945,77 @@ export function WorkflowRunPanel({
                   {r.callLog.length}
                 </Button>
               ) : null}
+              {(() => {
+                // r184: claim-to-source evidence ledger — cite count chip.
+                const n = buildEvidenceLedger(r.steps).length;
+                if (n === 0) return null;
+                return (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`${n} cited source${n === 1 ? "" : "s"} — toggle evidence ledger`}
+                    aria-expanded={evidenceOpenRunId === r.id}
+                    title={`${n} distinct source${n === 1 ? "" : "s"} referenced by this run's outputs and tool calls — click to inspect`}
+                    onClick={() => setEvidenceOpenRunId((id) => (id === r.id ? null : r.id))}
+                    className={cn(
+                      "h-7 shrink-0 gap-1 rounded-lg px-2 font-mono text-[11px] tabular-nums text-muted-foreground transition-colors hover:text-violet-400",
+                      evidenceOpenRunId === r.id && "text-violet-400"
+                    )}
+                  >
+                    <Link2 className="h-3.5 w-3.5" aria-hidden />
+                    {n}
+                  </Button>
+                );
+              })()}
             </div>
             {callsOpenRunId === r.id && r.callLog && r.callLog.length > 0 ? (
               <div className="rounded-lg border bg-background/60 p-2.5">
                 <CallLogList log={r.callLog} />
               </div>
             ) : null}
+            {evidenceOpenRunId === r.id
+              ? (() => {
+                  const ledger = buildEvidenceLedger(r.steps);
+                  return (
+                    <div className="rounded-lg border border-violet-500/25 bg-violet-500/[0.03] p-2.5">
+                      <p className="mb-1.5 text-[11px] font-medium">
+                        Evidence ledger · {ledger.length} distinct source{ledger.length === 1 ? "" : "s"}
+                      </p>
+                      {ledger.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          No external sources referenced in this run's outputs or tool calls.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {ledger.map((e) => (
+                            <li key={e.url} className="min-w-0 text-[11px] leading-relaxed">
+                              <span className="font-medium">{e.domain}</span>
+                              {" "}
+                              <a
+                                href={e.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="break-all text-violet-400 hover:underline"
+                              >
+                                {e.url}
+                              </a>
+                              <span className="block text-muted-foreground">
+                                cited by{" "}
+                                {e.citedBy
+                                  .map(
+                                    (c) =>
+                                      `“${c.label}” · ${c.agentName}${c.via !== "output" ? ` (${c.via})` : ""}`
+                                  )
+                                  .join(", ")}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })()
+              : null}
             </React.Fragment>
           ))}
           {(liveWorkflow?.runs.length ?? 0) === 0 && (

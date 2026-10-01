@@ -8,6 +8,7 @@ import type {
   WorkflowRun,
 } from "./types";
 import { IMAGE_MAX_DIMENSION, MAX_IMAGE_DATAURL_CHARS } from "./constants";
+import { buildEvidenceLedger } from "./evidence-ledger";
 
 export function uid(prefix = "id"): string {
   const rand =
@@ -500,6 +501,25 @@ export function runToMarkdown(workflow: Pick<Workflow, "name">, run: WorkflowRun
       lines.push("", "</details>");
     }
   });
+  // r184 (directive item c): claim-to-source evidence ledger — every external
+  // URL the run's outputs and tool calls referenced, with the citing steps.
+  const ledger = buildEvidenceLedger(run.steps);
+  if (ledger.length > 0) {
+    lines.push(
+      "",
+      "## Evidence ledger",
+      "",
+      `${ledger.length} distinct source${ledger.length === 1 ? "" : "s"} referenced by this run:`,
+      ""
+    );
+    for (const e of ledger) {
+      const citers = e.citedBy
+        .map((c) => `“${c.label}” · ${c.agentName}${c.via !== "output" ? ` (${c.via})` : ""}`)
+        .join(", ");
+      lines.push(`- ${e.url} — cited by ${citers}`);
+    }
+    lines.push("", "_Each claim above can be checked against the source the run actually fetched or cited._");
+  }
   if (run.callLog && run.callLog.length > 0) {
     lines.push("", "## LLM calls", "");
     run.callLog.forEach((c, i) => {
