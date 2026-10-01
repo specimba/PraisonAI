@@ -638,7 +638,13 @@ export async function executeWorkflowRun(
 
   const stopRemaining = (fromIndex: number) => {
     for (let j = fromIndex + 1; j < steps.length; j++) {
-      patchRunStep(steps[j].stepId, { status: "stopped", output: "" });
+      // r177 (user report): these rows read "Stopped" with empty output —
+      // indistinguishable from a user stop and alarming in the timeline.
+      // They never ran; say so honestly regardless of why the run ended.
+      patchRunStep(steps[j].stepId, {
+        status: "stopped",
+        output: "(not run — the run ended before reaching this step)",
+      });
     }
   };
 

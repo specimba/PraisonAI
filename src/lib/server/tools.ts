@@ -100,41 +100,81 @@ export function isRateLimitError(err: unknown): boolean {
   return RATE_LIMIT_RE.test(m);
 }
 
+/**
+ * r177 (user report): a bare "Error: network error" from the search backend
+ * used to kill the tool call outright — the ladder below only walked
+ * fallbacks for HTTP 429. Transient network faults (DNS blips, reset sockets,
+ * "Failed to fetch") deserve the same treatment. Deliberately EXCLUDES our
+ * own "timed out after 15s" envelope — timeouts already self-heal at the
+ * step level (workflow-runner escalating backoff); doubling that wait here
+ * would stretch a step past its budget.
+ */
+const TRANSIENT_NETWORK_RE =
+  /\bnetwork error\b|fetch failed|Failed to fetch|ECONNRESET|ECONNREFUSED|ECONNABORTED|ENOTFOUND|EAI_AGAIN|socket hang up|network request failed/i;
+
+export function isTransientNetworkError(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err);
+  return TRANSIENT_NETWORK_RE.test(m);
+}
+
 export interface SearchFallback {
   id: string;
   run: () => Promise<string>;
 }
 
 /**
- * r90 429 ladder: run `primary`; on a rate-limit error (and a non-aborted
- * signal) walk the fallback sources in order. The first fallback that answers
- * wins, prefixed with a provenance label so transcripts stay honest about
- * which source actually served the step. Non-rate-limit errors propagate
- * untouched; if every fallback fails too, the thrown error carries the
- * original cause plus a per-fallback failure note.
+ * r90 429 ladder (extended r177): run `primary`; on a TRANSIENT error —
+ * rate-limit (429) or a network fault — walk the fallback sources in order.
+ * r177: a network fault first gets ONE jittered retry of the primary itself
+ * (research pattern: retry-at-the-tool-boundary, LangGraph/Temporal style) —
+ * the old code propagated a bare "network error" with no retry and no
+ * fallback, wasting the whole step. The first answer wins, prefixed with a
+ * provenance label so transcripts stay honest about which source actually
+ * served the step. Non-transient errors propagate untouched; if every
+ * fallback fails too, the thrown error carries the original cause plus a
+ * per-fallback failure note.
  */
 export async function runSearchLadder<T>(
   primary: () => Promise<T>,
   fallbacks: SearchFallback[],
   signal?: AbortSignal
 ): Promise<T | string> {
+  let err: unknown;
   try {
     return await primary();
-  } catch (err) {
-    if (signal?.aborted || !isRateLimitError(err)) throw err;
-    const cause = err instanceof Error ? err.message : String(err);
-    const failed: string[] = [];
-    for (const fb of fallbacks) {
-      if (signal?.aborted) break;
-      try {
-        const content = await fb.run();
-        return `[web_search rate-limited (HTTP 429) — auto-fell back to ${fb.id}]\n\n${content}`;
-      } catch (fbErr) {
-        failed.push(`${fb.id}: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`);
-      }
-    }
-    throw new Error(`${cause}; fallback ladder exhausted (${failed.join("; ")})`);
+  } catch (firstErr) {
+    if (signal?.aborted) throw firstErr;
+    err = firstErr;
   }
+  const rateLimited = isRateLimitError(err);
+  const transientNetwork = !rateLimited && isTransientNetworkError(err);
+  if (!rateLimited && !transientNetwork) throw err;
+  // r177: one jittered retry of the primary for transient network faults
+  // (429s skip this — re-dialing inside the same quota window just burns it;
+  // the runner's cooldown ladder owns that case).
+  if (transientNetwork) {
+    await new Promise((r) => setTimeout(r, 500 + Math.floor(Math.random() * 400)));
+    if (signal?.aborted) throw err;
+    try {
+      return await primary();
+    } catch (retryErr) {
+      if (signal?.aborted) throw retryErr;
+      err = retryErr;
+    }
+  }
+  const cause = err instanceof Error ? err.message : String(err);
+  const flavor = isRateLimitError(err) ? "rate-limited (HTTP 429)" : "unreachable (network error)";
+  const failed: string[] = [];
+  for (const fb of fallbacks) {
+    if (signal?.aborted) break;
+    try {
+      const content = await fb.run();
+      return `[web_search ${flavor} — auto-fell back to ${fb.id}]\n\n${content}`;
+    } catch (fbErr) {
+      failed.push(`${fb.id}: ${fbErr instanceof Error ? fbErr.message : String(fbErr)}`);
+    }
+  }
+  throw new Error(`${cause}; fallback ladder exhausted (${failed.join("; ")})`);
 }
 
 async function doWebSearch(args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {

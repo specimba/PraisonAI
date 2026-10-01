@@ -589,3 +589,38 @@ export function comparisonToMarkdown(
   lines.push("", "---", "", "_Generated locally by PraisonAI Web — multi-agent platform._");
   return lines.join("\n");
 }
+
+/**
+ * r177 (user report): recurring workflow runs used to export to the SAME
+ * filename (`praison-run-<slug>.md`) — every new run overwrote the previous
+ * report in the user's Downloads. Convention (r177 research: GitHub Actions
+ * run_number × ISO-stamp hybrid, honoring the user's own a/b/c habit):
+ *   praison-run-<slug>-run<NNN>-<YYYYMMDD-HHMM>[a|b|c].md
+ * NNN = the run's 1-based ordinal inside the workflow's own run list (sorted
+ * by startedAt — stable as long as the run exists); stamp = the run's local
+ * start time; the letter is appended ONLY when sibling runs share the same
+ * start minute — collision-free without probing the filesystem.
+ */
+export function runReportFileName(
+  workflowName: string,
+  run: { id: string; startedAt: number },
+  runs: { id: string; startedAt: number }[]
+): string {
+  const slug = slugify(workflowName) || "workflow";
+  const ordered = [...runs].sort(
+    (a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id)
+  );
+  const idx = ordered.findIndex((r) => r.id === run.id);
+  const nnn = String((idx >= 0 ? idx : ordered.length) + 1).padStart(3, "0");
+  const d = new Date(run.startedAt);
+  const p = (x: number) => String(x).padStart(2, "0");
+  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+  const minute = Math.floor(run.startedAt / 60_000);
+  const siblings = ordered.filter((r) => Math.floor(r.startedAt / 60_000) === minute);
+  let letter = "";
+  if (siblings.length > 1) {
+    const li = siblings.findIndex((r) => r.id === run.id);
+    letter = String.fromCharCode(97 + Math.min(Math.max(li, 0), 25));
+  }
+  return `praison-run-${slug}-run${nnn}-${stamp}${letter}.md`;
+}

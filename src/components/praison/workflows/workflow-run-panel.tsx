@@ -60,6 +60,7 @@ import {
   fmtMs,
   fmtRel,
   runDiagnostics,
+  runReportFileName,
   runToMarkdown,
   slugify,
 } from "@/lib/helpers";
@@ -372,7 +373,7 @@ function RunRecoveryCard({
 
   function savePartialReport() {
     downloadText(
-      `praison-run-partial-${slugify(workflow.name)}.md`,
+      runReportFileName(workflow.name, run, workflow.runs ?? []),
       runToMarkdown(workflow, run),
       "text/markdown"
     );
@@ -1000,7 +1001,7 @@ export function WorkflowRunPanel({
                   onClick={() => {
                     if (!viewedRun || !liveWorkflow) return;
                     downloadText(
-                      `praison-run-${slugify(liveWorkflow.name)}.md`,
+                      runReportFileName(liveWorkflow.name, viewedRun, liveWorkflow.runs ?? []),
                       runToMarkdown(liveWorkflow, viewedRun),
                       "text/markdown"
                     );

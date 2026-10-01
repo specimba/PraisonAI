@@ -4702,3 +4702,63 @@ Verification result: PASS
 Open risks: (1) repo-root `npx tsc --noEmit` reports a pre-existing error in scripts/hang-server.ts (missing Bun global types) — src is clean; r175 still reported tsc 0, so that file appeared very recently (parallel-session artifact?) — one git log line will attribute it. (2) The queued message still lives only in memory — a reload drops it (pre-existing, consistent with "stopped drops queue", but worth a look someday). (3) composer.tsx (1124 lines) is now the second-largest unaudited chat surface.
 Blockers: none
 Next recommended action: r177 — (1) FIRST read any user report; (2) rollback guard (one git log line); (3) rotation: composer.tsx audit (1124 lines) or scripts/hang-server.ts provenance check + tsc hygiene (one git log line — if a parallel session added it, coordinate via worklog). Keep rotating.
+---
+Task ID: r177-research-b
+Agent: general-purpose subagent (report-versioning research)
+Task: Research how established systems version recurring generated reports (never overwrite history, stay sortable/recognizable) and produce a recommended filename pattern for PraisonAI's recurring workflow exports.
+
+Work Log:
+- 7 z-ai web_search calls, all successful, no CLI failures:
+  1. "report file naming convention timestamp versioning best practices recurring exports" (8) → Harvard HMS, Princeton Records, Stanford Guides: date-first ISO YYYYMMDD keeps chronological order; append version info at END of name (filename_v2 / v01, v02); short + meaningful; avoid vague names.
+  2. "MLflow run artifacts naming convention run id timestamp" (6) → MLflow model: every run gets a globally unique run ID; artifacts live under per-run directories keyed by run ID; metrics carry timestamps; name/ID separation (run name for humans, run ID for uniqueness).
+  3. "github actions artifact naming run number date convention" (6) → GitHub Actions docs: `run_number` = monotonic counter per workflow starting at 1; `run_id` = globally unique; common artifact pattern `<name>-<run_number>` and/or date stamp; run-name is display-only, uniqueness comes from numbers.
+  4. "langsmith experiment run export naming convention" (6) → LangSmith: experiment names must be UNIQUE per workspace (uniqueness enforced at the name level, not the filesystem); bulk exports keyed by project + date range into dated partition paths.
+  5. "daily report file versioning a b c suffix vs timestamp filename collision" (8) → timestamp treated as "increasing but non-sequential" numbering (SO 61683); letter/rev suffixes (v1a, v1b) are an editorial-practice pattern for disambiguating WITHIN a version bucket; predictable timestamp-only names still collide when granularity > event rate (securinglaravel note).
+  6. "ISO 8601 timestamp filename sortable date format YYYYMMDDHHMM best practice" (6) → ISO 8601 basic format (YYYYMMDD-HHMM) is lexicographically sortable AND human-readable; date-first rule confirmed (MD Anderson, UConn, r/ISO8601); avoid `:` (illegal in Windows filenames) — use `-`.
+  7. "log rotation dateext single file append vs per-run file convention audit report history" (6) → logrotate: two established modes — sequential-number rotation vs `dateext` (date appended to rotated filename; "makes locating old logs by hand" easier); append-to-one-file only works with external rotation/size management.
+
+Stage Summary:
+- Six concrete conventions found across the surveyed systems:
+  1. ISO-8601 date-first timestamp — `praison-run-<slug>-20260212-0110.md`. Pros: sortable, readable, zero state. Cons: collides if two runs share a minute (manual re-run); no tie to the DB record. (Harvard/Stanford/MD Anderson standard.)
+  2. Monotonic run number (GitHub Actions `run_number` model) — `praison-run-<slug>-run043.md`. Pros: collision-proof per workflow, short, orders by generation. Cons: carries no date; needs a persisted per-workflow counter (derivable from WorkflowRun list).
+  3. Hybrid run number + timestamp — `praison-run-<slug>-run043-20260212-0110.md`. Pros: sortable, collision-proof (number from run ordinal), self-describing (date for humans), greppable, ties to the run list. Cons: longer name. ← strongest general pattern.
+  4. Letter suffix a/b/c (user's own suggestion; editorial v1a/v1b practice) — `praison-run-<slug>-20260212-0110a.md`. Pros: matches user habit, compact. Cons: NOT self-guaranteeing — the app cannot enumerate the Downloads folder, so letters must be derived from the workflow's own run list (same-minute runs); breaks past z; sort ambiguity vs plain timestamp siblings.
+  5. Append-to-single-file journal — one `praison-run-<slug>.md` with `## Run 43 — 2026-02-12 01:10` sections appended per run (logrotate's "one growing file" pole). Pros: single greppable timeline, each export contains full history so overwriting is harmless. Cons: unbounded growth, harder to share one run, diffs get noisy; logrotate only tolerates it with rotation rules.
+  6. Run-ID-as-name (MLflow model) — `praison-run-<slug>-<short-run-id>.md`. Pros: globally unique, links artifact↔DB record. Cons: opaque, not time-sortable, human-unfriendly — good as an ID, bad as the primary name.
+- Append-vs-new-file verdict: new-file-per-run is the right default for exported reports (each run is a self-contained deliverable; matches dateext/logrotate practice); append-to-single-file is only better when the consumer is a continuous greppable timeline. A compromise exists: keep the full-history journal in-app and export snapshots per run.
+- FINAL RECOMMENDATION for PraisonAI: `praison-run-<slug>-run<NNN>-<YYYYMMDD-HHMM>.md` (NNN = per-workflow ordinal of the run, derivable from WorkflowRun ordering; timestamp = run `startedAt`, local time to match the user's 0110 habit), plus letter disambiguation appended ONLY when the run list shows a sibling run in the same minute: `...-run043-20260212-0110a.md`. Never overwrite; every run's startedAt already provides both the ordinal and the minute bucket — no filesystem probing needed (browser Downloads is not enumerable from the app, so pure a-b-c is unreliable on its own).
+
+Round Handoff:
+Round ID: r177 (user-report round — findings feed the main agent's fixes)
+Blockers: none
+---
+Task ID: r177-research-a
+Agent: general-purpose subagent (pipeline-resilience research)
+Task: Web research — how production multi-agent/pipeline systems handle transient tool-call network failures and keep runs productive (informs fixes for the reported web_search "network error", 0ms no-op tool calls, and downstream "Stopped" step).
+
+Work Log:
+- z-ai web_search (all 10 queries SUCCEEDED, no CLI failures):
+  1. "LangGraph tool call retry backoff transient error policy" (8 results) — LangGraph RetryPolicy/TimeoutPolicy docs + guides.
+  2. "Temporal activity retry policy LLM workflow transient failures" (8) — Temporal retry-policy + error-handling pattern docs; durable-AI-agent retry guidance.
+  3. "n8n error workflow retry node best practices" (6) — n8n Retry-on-Fail node settings, centralized error workflows, resume-from-failed-step community threads.
+  4. "crewai autogen tool execution retry error handling 2025" (6) — CrewAI structured-error-feedback-to-model pattern; 2025 retry-manager best-practice writeups.
+  5. "LLM agent pipeline graceful degradation partial results continue on step failure" (8) — zylos/latitude graceful-degradation research; Temporal+Braintrust deep-research-agent post ("continue with partial results").
+  6. "circuit breaker pattern API calls agent workflow per-tool failure threshold" (6) — Azure circuit breaker; agentic-patterns.com Agent Circuit Breaker (threshold/cooldown/half-open).
+  7. "AI agent tool result caching idempotent tools avoid repeated network calls" (6) — idempotency-key patterns; cache-identical-tool-input pattern; Haystack issue on caching tool results inside agent loops.
+  8. "workflow checkpoint resume partial run durable execution agent state persistence" (6) — MS Agent Framework checkpoints; Mastra durable agents; durable session-log patterns.
+  9. "tool call returns empty result vs failure timeout distinction agent observability" (6) — Braintrust agent-observability guide (silent-failure signal table); failure-harness testing (timeout/empty/rate-limit cases).
+  10. "agent fallback degraded mode when search tool unavailable alternative tool routing" (6) — fallback routing at tool boundaries; fail-safe patterns (skip non-critical steps, backup routing).
+
+Stage Summary:
+- P1 Per-tool retry with jittered exponential backoff (LangGraph RetryPolicy; Temporal bounded RetryPolicy 3–5 attempts; n8n Retry-on-Fail ~3–4 tries + wait). Retry at the tool-call boundary, NOT the whole run; only for transient classes (network, 429, 5xx). → Impl: shared retry wrapper around each PraisonAI tool executor (web_search/arxiv/read_url) with jittered expo backoff, cap 3–4 attempts; store per-attempt outcomes on the step record.
+- P2 Timeout ≠ error ≠ empty — distinct terminal classes (LangGraph TimeoutPolicy → NodeTimeoutError with attempt-writes cleared; Temporal StartToClose vs ScheduleToClose; Braintrust "silent failures" signal table). → Impl: per-tool wall-clock timeout in the runner; classify each tool result as success | timeout | error | empty; a 0ms completion is physically impossible for a real network call — flag/mark as suspected no-op (swallowed throw or cache hit) in the run timeline instead of reporting success.
+- P3 Empty-result is a silent failure, feed it back as structured text (CrewAI practice: catch internally, return structured feedback strings the model can act on; Confident-AI failure harness: test timeout/empty/rate-limit). → Impl: never resolve a tool promise to undefined/""; always hand the agent a structured {status, reason} payload so the downstream step can adapt its prompt instead of hallucinating over missing data.
+- P4 Graceful degradation / continue-with-partial-results (Temporal+Braintrust deep-research agent: "system needs to continue with partial results"; zylos/latitude: skip non-critical steps, deliver partial value; agentic-academy: produce result without failed tool's contribution). → Impl: a failed tool step becomes "skipped-degraded" with an injected "tool X unavailable" note for downstream agents — the run stays productive; only hard-fail when the step is marked critical.
+- P5 Circuit breaker per tool (agentic-patterns.com Agent Circuit Breaker: failure_count ≥ threshold → OPEN, cooldown → half-open probe; r/AI_Agents: 3 fails/60s → open). → Impl: tiny per-tool breaker (module-level map, not persisted state) — after N consecutive network failures, fail fast with "tool temporarily down" instead of re-burning retries at every step; auto-probe after cooldown. Mirrors the r176 doctrine of not firing into a failing window.
+- P6 Cache idempotent tool calls within a run (ReadySetCloud: check cache by tool+input before executing; Haystack issue: LLM-loop caching must cover the tool layer; Medium idempotency-key patterns make retries safe). → Impl: memoize read_url/arXiv (GET-like) by URL and web_search by query for the run's lifetime; cache hits labeled as such in telemetry — legitimate 0ms results become explainable, duplicates stop re-paying network cost.
+- P7 Checkpoint/resume of partial runs (MS Agent Framework workflow checkpoints; Mastra durable agents; HF durable session-log + latest-checkpoint resume; n8n community: per-execution status row, retry-from-failed-step, not from zero). → Impl: extend the zustand-persisted runner with a per-step ledger {status: done|failed|skipped, output, error-class} so a run offers "Resume from failed step" — the user's run survived but was wasted precisely because partial state wasn't resumable.
+- P8 Bounded retries + per-run failure budget (Temporal: unbounded default retries are an anti-pattern — bound them, then catch the exhausted error and decide; "Resumable Activity / pause on failure" pattern). → Impl: per-run budget (e.g. ≥3 distinct tool failures → stop retrying, flip run to degraded mode, surface budget state in the timeline); prevents one flaky network window from consuming the whole run.
+
+Round Handoff:
+Round ID: r177 (user-report round — findings feed the main agent's fixes)
+Blockers: none
