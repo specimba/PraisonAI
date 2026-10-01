@@ -18,7 +18,7 @@ import { AgentAvatar, EmptyState, ModelBadge, PageHeader, ToolBadge } from "@/co
 import { AgentFormDialog } from "@/components/praison/agents/agent-form-dialog";
 import { TestAgentDialog } from "@/components/praison/agents/test-agent-dialog";
 import { downloadJson, fmtRel } from "@/lib/helpers";
-import { useAgentsStore, useConversationsStore } from "@/lib/stores";
+import { useAgentsStore, useConversationsStore, useWorkflowsStore } from "@/lib/stores";
 import type { Agent, AgentColor, ToolId } from "@/lib/types";
 
 // ─── Agent import/export helpers ─────────────────────────────────────
@@ -82,6 +82,10 @@ function exportAgents(agents: Agent[]) {
 
 export interface AgentUsage {
   replies: number;
+  /** Completed pipeline steps (r162) — chat replies alone made pipeline
+   *  workhorses read as idle ("0 replies" while running 11-step workflows
+   *  hourly). Steps counted only when status="done" (honest completed work). */
+  steps: number;
   lastAt: number;
 }
 
@@ -91,14 +95,18 @@ export function AgentsView() {
   const removeAgent = useAgentsStore((s) => s.remove);
   const duplicateAgent = useAgentsStore((s) => s.duplicate);
   const conversations = useConversationsStore((s) => s.conversations);
+  const workflows = useWorkflowsStore((s) => s.workflows);
 
-  // Per-agent usage (assistant replies in stored chats) — local data only
+  // Per-agent usage — local data only, two sources (r162): assistant replies
+  // in stored chats AND completed pipeline steps (the roster previously read
+  // chat-only, so the platform's actual workhorses — pipeline agents — showed
+  // "0 replies" and looked idle while their schedules churned every hour).
   const usage = React.useMemo(() => {
     const map = new Map<string, AgentUsage>();
     for (const conv of conversations) {
       for (const m of conv.messages) {
         if (m.role !== "assistant" || !m.agentId) continue;
-        const cur = map.get(m.agentId) ?? { replies: 0, lastAt: 0 };
+        const cur = map.get(m.agentId) ?? { replies: 0, steps: 0, lastAt: 0 };
         cur.replies += 1;
         cur.lastAt = Math.max(cur.lastAt, m.createdAt);
         map.set(m.agentId, cur);
@@ -106,6 +114,37 @@ export function AgentsView() {
     }
     return map;
   }, [conversations]);
+
+  const stepUsage = React.useMemo(() => {
+    const map = new Map<string, AgentUsage>();
+    for (const wf of workflows) {
+      for (const run of wf.runs) {
+        const at = run.finishedAt ?? run.startedAt;
+        for (const st of run.steps) {
+          if (!st.agentId || st.status !== "done") continue;
+          const cur = map.get(st.agentId) ?? { replies: 0, steps: 0, lastAt: 0 };
+          cur.steps += 1;
+          cur.lastAt = Math.max(cur.lastAt, at);
+          map.set(st.agentId, cur);
+        }
+      }
+    }
+    return map;
+  }, [workflows]);
+
+  const mergedUsage = React.useCallback(
+    (agentId: string): AgentUsage | undefined => {
+      const r = usage.get(agentId);
+      const s = stepUsage.get(agentId);
+      if (!r && !s) return undefined;
+      return {
+        replies: r?.replies ?? 0,
+        steps: s?.steps ?? 0,
+        lastAt: Math.max(r?.lastAt ?? 0, s?.lastAt ?? 0),
+      };
+    },
+    [usage, stepUsage]
+  );
 
   const [formOpen, setFormOpen] = React.useState(false);
   const [formAgent, setFormAgent] = React.useState<Agent | null>(null);
@@ -234,7 +273,7 @@ export function AgentsView() {
               <AgentCard
                 key={agent.id}
                 agent={agent}
-                usage={usage.get(agent.id)}
+                usage={mergedUsage(agent.id)}
                 onTest={() => openTest(agent)}
                 onEdit={() => openEdit(agent)}
                 onDuplicate={() => handleDuplicate(agent)}
@@ -381,14 +420,25 @@ function AgentCard({
         >
           Updated {fmtRel(agent.updatedAt)}
         </p>
-        {usage && usage.replies > 0 && (
+        {usage && (usage.replies > 0 || usage.steps > 0) && (
           <div
             className="flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5 px-2 py-1 text-[11px] text-foreground/85"
-            title={`${agent.name} has written ${usage.replies} replies in your chats`}
+            title={`${agent.name} has written ${usage.replies} chat ${usage.replies === 1 ? "reply" : "replies"} and completed ${usage.steps} pipeline ${usage.steps === 1 ? "step" : "steps"}`}
           >
             <span className="flex h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-            <span className="tabular-nums font-medium text-violet-400">{usage.replies}</span>
-            <span>repl{usage.replies === 1 ? "y" : "ies"}</span>
+            {usage.replies > 0 && (
+              <>
+                <span className="tabular-nums font-medium text-violet-400">{usage.replies}</span>
+                <span>repl{usage.replies === 1 ? "y" : "ies"}</span>
+                {usage.steps > 0 && <span aria-hidden>·</span>}
+              </>
+            )}
+            {usage.steps > 0 && (
+              <>
+                <span className="tabular-nums font-medium text-violet-400">{usage.steps}</span>
+                <span>step{usage.steps === 1 ? "" : "s"}</span>
+              </>
+            )}
             <span aria-hidden>·</span>
             <span className="text-muted-foreground">last {fmtRel(usage.lastAt)}</span>
           </div>
