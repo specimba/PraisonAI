@@ -26,7 +26,12 @@ function check(name, ok, detail = "") {
 }
 
 const MIN = 60_000;
-function wf(id, name, schedule, steps) {
+// steps defaults to [] — a 0-step fixture is the H1 design ("fires NO run").
+// Call sites originally passed no 4th arg, persisting steps:undefined —
+// malformed workflow data that deterministically broke boot (2×2/8 runs:
+// no nav, no tick, store untouched; single-fixture probes with real steps
+// booted fine every time).
+function wf(id, name, schedule, steps = []) {
   return {
     id,
     name,
@@ -47,6 +52,23 @@ async function main() {
   });
   const context = await browser.newContext();
   const page = await context.newPage();
+  page.on("pageerror", (e) => console.log("[pageerror]", String(e).slice(0, 300)));
+
+  // r171 harness note: getByText against sonner toasts proved racy/fragile
+  // across runs while the toast DOM provably renders — poll textContent of
+  // [data-sonner-toast] instead (same approach the debug run validated).
+  async function waitForToast(substr, timeout = 25_000) {
+    try {
+      await page.waitForFunction(
+        (s) => [...document.querySelectorAll("[data-sonner-toast]")].some((t) => (t.textContent ?? "").includes(s)),
+        substr,
+        { timeout }
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   try {
     const oneStep = [{ id: "s1", agentId: "a1", label: "Only step" }];
@@ -80,16 +102,25 @@ async function main() {
       version: 0,
     };
 
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" }).catch(() => {});
-    await page.evaluate((s) => localStorage.setItem("praison-workflows", JSON.stringify(s)), seed);
+    // Deterministic seeding: addInitScript runs BEFORE any app script on every
+    // navigation. The original goto1/setItem/goto2 relay raced the app's own
+    // debounced persist — a losing race clobbers the fixture seed with the
+    // just-seeded defaults, H1 then times out with no fixture present. An
+    // init-script seed cannot lose that race (dbg-rl.mjs proved the product
+    // toasts at t≈3s; only the seeding relay was flaky).
+    // localStorage.clear() first: the real profile must not leak in (its due
+    // schedules would fire REAL LLM runs mid-QA and pollute the assertions).
+    await context.addInitScript(
+      (s) => {
+        localStorage.clear();
+        localStorage.setItem("praison-workflows", JSON.stringify(s));
+      },
+      seed
+    );
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
 
     // ── H1 + H2: scheduler tick (≤10s) auto-resumes only the elapsed one ──
-    await page
-      .getByText("Gateway backoff elapsed — schedule auto-resumed")
-      .first()
-      .waitFor({ timeout: 20_000 });
-    check("H1a toast announced the auto-resume", true);
+    check("H1a toast announced the auto-resume", await waitForToast("Gateway backoff elapsed"));
 
     const states = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("praison-workflows") ?? "{}").state.workflows.reduce(
@@ -129,8 +160,12 @@ async function main() {
       `enabled=${future?.enabled} autoResumeAt=${future?.autoResumeAt}`
     );
     check(
-      "H2b Future Wf fired no auto-resume toast count (Backoff only)",
-      (await page.getByText("Gateway backoff elapsed").count()) === 1
+      "H2b auto-resume fired for Backoff Wf only (single toast)",
+      (await page.evaluate(() =>
+        [...document.querySelectorAll("[data-sonner-toast]")].filter((t) =>
+          (t.textContent ?? "").includes("Gateway backoff elapsed")
+        ).length
+      )) === 1
     );
 
     // ── H3: manual pause chip renders, resumes, clears stale flags ────────
@@ -147,10 +182,7 @@ async function main() {
     );
 
     await chip.click();
-    await page
-      .getByText("Schedule resumed — \"Manual Wf\" fires on the next tick")
-      .first()
-      .waitFor({ timeout: 10_000 });
+    check("H3c resume toast confirmed", await waitForToast("Schedule resumed"));
     const after = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("praison-workflows") ?? "{}").state.workflows.find(
         (w) => w.id === "rl-manual"

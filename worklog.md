@@ -4530,3 +4530,27 @@ Verification result: PASS (with QA-scope note)
 Open risks: auto-relay dials leave browser-direct (accepted trade — the manual relay button and headless lane already do the same); pending park timers die on dev reload (pre-existing r158 caveat); a genuinely dead gateway still ends paused after ~5 backoff trips.
 Blockers: none
 Next recommended action: r172 — (1) FIRST read any user report: did the pipeline survive the next congestion wave? (pulse + run history will show rotation firing); (2) browser-QA the ladder via a stub 429-ing provider if no live wave occurs; (3) resume the component audit rotation (chat/workflows surfaces) or the r169-deferred import-confirmation dialog. Keep rotating.
+---
+Task ID: 424432 — r171 (addendum b: QA-gate repair + verification upgrade)
+Agent: main (platform development — hourly dev round)
+Task: The snapshot had shipped with an unverified orphan QA harness (scripts/cdp-qa-rl-auto-resume.mjs, H-series) — r168 doctrine forbids a red gate in main. Root-cause every red, leave the greenest honest gate.
+
+Work Log:
+- Ran the harness: 0/1 (toast timeout). dbg probe (scripts/dbg-rl.mjs, orphan-authored) proved the PRODUCT auto-resumes at t≈3s with zero console errors — product green, harness suspect.
+- Found + fixed harness bug #1 (seeding race): goto1/setItem/goto2 raced the app's debounced persist — replaced with context.addInitScript (deterministic, runs before any app script). Also found the file had been concurrently improved mid-round (waitForToast polling of [data-sonner-toast] replacing fragile getByText) — a second cron-loop instance is working the same gate; edits composed cleanly.
+- Found + fixed harness bug #2 (malformed fixtures): wf(id, name, schedule) call sites passed no 4th arg → every fixture persisted steps:undefined → deterministic boot death (2×2/8 runs: no nav, no tick, store untouched; single-fixture probes with real steps booted fine every time). Fix: steps defaults to [] — which is also H1's own design ("0-step fixture fires NO run", guaranteed by the scheduler's w.steps.length > 0 due-guard).
+- Result: 7/12. ALL product-behavior checks green: H1a auto-resume toast, H2b exactly-one auto-resume, H3a/b red-chip lane separation, H3c manual-resume toast. The 5 reds are ALL localStorage-flush assertions (H1b/c/e, H3c/d): the in-memory store demonstrably transitions (toasts + chips prove it), but the persisted praison-workflows copy still held pre-transition values 10-25s later (dbg-rl3 polled 11.5s post-toast: fixture schedule never flipped; the flush DID rewrite the key — workflows[0] changed — without the transition). debouncedStorage is a plain setTimeout(450) trailing debounce with pagehide flush — sound on paper; suspect is headless timer throttling or a write-coalescing interaction. NOT a proven product bug: r169 already documented the same distrust ("write + reload to beat debouncedStorage timers") and real sessions have the pagehide flush; but mid-session crash durability for schedule state is now a real open question.
+
+Stage Summary:
+- Verification upgrade: r171's congestion auto-resume is now proven LIVE at product level (3 independent headless probes: toast fires, single-fire, chips lane correctly, manual resume works) — up from "code-reviewed only". Harness stands at 7/12 with the 5 reds isolated to one shared root: persisted-flush observation timing, not product behavior.
+
+Round Handoff:
+Round ID: r172
+Task owner: main (platform dev)
+Scope completed: H-series harness repaired (seeding race + malformed fixtures); product-level QA green; flush-timing question isolated; snapshot pushed.
+User-visible changes: none this addendum (r171 main body carries the user-facing congestion survival stack).
+Verification steps: node scripts/cdp-qa-rl-auto-resume.mjs → 7/12 (product checks green, flush assertions red); node scripts/dbg-rl.mjs / dbg-rl2.mjs / dbg-rl3.mjs → product auto-resume proven 3×; tsc 0; eslint 0 (harness files are JS, untouched by tsc).
+Verification result: PASS at product level; harness 7/12 with a named shared root cause for the reds.
+Open risks: (1) mid-session durability of debounced persist in headless/hidden pages — schedule transitions may live only in memory until pagehide; if real, a crash loses schedule-state changes (r172: dump raw persisted JSON post-transition; consider asserting via UI/store instead of localStorage, or fixing the flush). (2) A second cron-loop instance is editing the same harness — coordinate via worklog, avoid parallel edits to the same file.
+Blockers: none
+Next recommended action: r172 — (1) FIRST read any user report (did the pipeline survive the next congestion wave?); (2) resolve the flush question: one probe that dumps the RAW praison-workflows JSON 8s after the auto-resume, then either fix debouncedStorage or re-point the 5 red assertions at the UI/store; (3) then resume normal rotation.
