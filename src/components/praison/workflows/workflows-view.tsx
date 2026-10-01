@@ -1638,14 +1638,14 @@ export function WorkflowsView() {
                         if (!skip.firedAt) {
                           return (
                             <div className="text-[10px] text-muted-foreground/80">
-                              ⏳ schedule deferred since {since} — waiting for the active run to finish
+                              ⏳ schedule deferred since {since} — {skip.reason === "gateway-saturated" ? "waiting for the gateway congestion wave to pass" : "waiting for the active run to finish"}
                             </div>
                           );
                         }
                         if (Date.now() - skip.firedAt < 6 * 60 * 60_000) {
                           return (
                             <div className="text-[10px] text-muted-foreground/70">
-                              ⏳ deferred {fmtRel(skip.at)} while a run was active — fired {fmtRel(skip.firedAt)}
+                              ⏳ deferred {fmtRel(skip.at)} {skip.reason === "gateway-saturated" ? "while the gateway was saturated" : "while a run was active"} — fired {fmtRel(skip.firedAt)}
                             </div>
                           );
                         }

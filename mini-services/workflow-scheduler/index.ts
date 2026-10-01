@@ -13,6 +13,13 @@
 
 import { PrismaClient } from "@prisma/client";
 import ZAI from "z-ai-web-dev-sdk";
+import * as fs from "node:fs";
+import { fileURLToPath } from "node:url";
+// r181: single source of truth for the saturation predicate — the same pure
+// module the in-tab scheduler uses. gateway-cadence must stay dependency-free
+// (it is imported by client components AND this service); if it ever grows a
+// browser dependency this import fails loudly here, never silently.
+import { gatewaySaturatedFromEvents } from "../../src/lib/gateway-cadence";
 
 const prisma = new PrismaClient();
 const TICK_MS = 30_000;
@@ -34,6 +41,47 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const isTransient = (e: unknown) => TRANSIENT_RE.test(errMsg(e));
 const isRateLimit = (e: unknown) => RATE_LIMIT_RE.test(errMsg(e));
 const rateLimitBackoffMs = (streak: number) => Math.min(streak, 10) * 60_000;
+
+// ─── r181: pre-fire saturation gate (headless half) ─────────────────────────
+// Live evidence r180→r181: hourly Deep pipelines burned 12 runs / 24h, zero
+// done, against one saturated shared gateway — the r171 breaker only reacts
+// AFTER 3 doomed runs. A due fire here now reads the persistent 429 ring
+// (db/gateway-pulse.json — the header chip's own signal) and DEFERS while a
+// wave is active: no run, no quota burn, the fire lands on a later tick.
+// Fail-open: a missing/corrupt pulse file must never stall schedules.
+const PULSE_FILE = fileURLToPath(new URL("../../db/gateway-pulse.json", import.meta.url));
+const SAT_DEFER_MS = 60_000; // re-arm 1m past a saturated check — the wave decides the rest
+
+function readPulseEvents(): { t: number }[] {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(PULSE_FILE, "utf8")) as {
+      events?: { t: number }[];
+    };
+    return Array.isArray(parsed.events) ? parsed.events : [];
+  } catch {
+    return []; // first run / unreadable file — gate open, never crash a fire over telemetry
+  }
+}
+
+/** The headless lane dials the built-in engine DIRECTLY (not through the
+ * app's agent-engine), so its 429s are invisible to the server-side recorder.
+ * Without this write-back the saturation gate would be dead code in exactly
+ * its target scenario (closed tab + built-in-lane congestion). Read-modify-
+ * write is best-effort telemetry: a lost update against the app-server's
+ * writer is bounded and harmless (the ring self-prunes at 64 events / 48h). */
+function recordOwn429(): void {
+  try {
+    const events: { t: number; model?: string }[] = readPulseEvents().filter(
+      (e) => typeof e?.t === "number"
+    );
+    events.push({ t: Date.now(), model: "headless-autopilot" });
+    const capped = events.slice(-64);
+    fs.mkdirSync(new URL("../../db/", import.meta.url), { recursive: true });
+    fs.writeFileSync(PULSE_FILE, JSON.stringify({ events: capped }), "utf8");
+  } catch {
+    /* telemetry — never crash a fire over it */
+  }
+}
 
 type StepDef = { label: string; agentName?: string; prompt: string };
 
@@ -178,6 +226,7 @@ async function executeRun(
     const streak = wf.failStreak + 1;
     const rl = isRateLimit(e);
     const transient = rl || isTransient(e);
+    if (rl) recordOwn429(); // r181: feed the shared saturation signal (headless dials are server-invisible)
     // v21: tick already claimed nextRunAt = now+interval BEFORE executing.
     // A rate-limited run (environmental congestion) pushes the next attempt
     // further out — failStreak-scaled, capped 10min — so a congested gateway
@@ -206,9 +255,28 @@ async function tick(): Promise<void> {
       where: { enabled: true, nextRunAt: { lte: new Date() } },
     });
     let slot = 0;
+    // r181: one pulse-file read per tick serves the whole due set.
+    const saturated = gatewaySaturatedFromEvents(readPulseEvents());
+    if (saturated) {
+      console.log(
+        `[autopilot] ${due.length} due schedule(s) deferred — gateway saturated (429 within the last 10m, ≥3 in the past hour); re-checking next tick`
+      );
+    }
     for (const wf of due) {
       if (inFlight.has(wf.id)) continue;
       const interval = Math.max(60_000, wf.intervalMs);
+      // r181: wave gate — defer BEFORE claiming. The fire is never lost:
+      // nextRunAt re-arms 1m out (not interval-scaled) so a quiet window is
+      // entered within ~1m of opening. Applies to manual run-now fires too:
+      // a click during an active wave lands right after it passes instead of
+      // producing a guaranteed doomed run.
+      if (saturated) {
+        await prisma.automationWorkflow.update({
+          where: { id: wf.id },
+          data: { nextRunAt: new Date(Date.now() + SAT_DEFER_MS + Math.round(Math.random() * 10_000)) },
+        });
+        continue;
+      }
       // Claim BEFORE running — a slow run can never double-fire on the next tick
       // (the delayed execution below is still covered by the claim).
       await prisma.automationWorkflow.update({

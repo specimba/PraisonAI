@@ -13,6 +13,8 @@
 // state preservation on edit (full reload) — which would destroy an
 // in-flight client-side run. A new lib file invalidates nothing.
 
+export type ScheduleSkipReason = "active-run" | "gateway-saturated";
+
 export interface ScheduleSkipEntry {
   id: string;
   name: string;
@@ -20,6 +22,9 @@ export interface ScheduleSkipEntry {
   at: number;
   /** Set when the schedule finally fired (first tick after the run ended). */
   firedAt?: number;
+  /** r181: WHY the fire was skipped — the audit line renders it. Old entries
+   * predate the field and always meant "active-run". */
+  reason?: ScheduleSkipReason;
 }
 
 const KEY = "praison-schedule-skips";
@@ -51,11 +56,15 @@ function save(list: ScheduleSkipEntry[]): void {
  * trail. An episode still open after 24h is considered abandoned (tab closed
  * mid-run) and a fresh one may start.
  */
-export function noteScheduleDeferred(id: string, name: string): void {
+export function noteScheduleDeferred(
+  id: string,
+  name: string,
+  reason: ScheduleSkipReason = "active-run"
+): void {
   const list = load();
   const last = [...list].reverse().find((e) => e.id === id);
   if (last && !last.firedAt && Date.now() - last.at < OPEN_STALE_MS) return;
-  list.push({ id, name, at: Date.now() });
+  list.push({ id, name, at: Date.now(), reason });
   save(list);
 }
 

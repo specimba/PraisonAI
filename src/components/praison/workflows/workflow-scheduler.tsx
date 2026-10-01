@@ -5,7 +5,12 @@ import { toast } from "sonner";
 import { useWorkflowsStore } from "@/lib/stores";
 import { executeWorkflowRun, isWorkflowRunning } from "@/lib/workflow-runner";
 import { closeScheduleDeferral, noteScheduleDeferred } from "@/lib/schedule-skips";
-import { gatewayQuietUntil, MAX_AUTO_RESUME_TRIPS } from "@/lib/gateway-cadence";
+import {
+  gatewayQuietUntil,
+  gatewaySaturated,
+  MAX_AUTO_RESUME_TRIPS,
+  type SaturationSignal,
+} from "@/lib/gateway-cadence";
 
 // ─── In-app workflow scheduler ───────────────────────────────────────────────
 // Ticks every 10s and fires any enabled workflow schedule whose nextRunAt is
@@ -30,12 +35,55 @@ const START_SPACING_MS = 75_000;
 const jitter = (ms: number) => Math.round(ms * (0.9 + Math.random() * 0.2));
 let lastScheduledStartAt = 0;
 
+// ─── r181: persistent saturation gate (the wave killer) ─────────────────────
+// The v24 quiet window is 90s of in-memory politeness; live evidence r180→r181
+// shows congestion WAVES lasting tens of minutes (429s at 57m/40m/7m ago, 17
+// in 24h) — after 90s the scheduler fired straight back into the same wave
+// and the r171 breaker needed 3 doomed runs to react. Now a due fire first
+// asks the server's persistent 429 ring (/api/gateway/pulse — the header
+// chip's own signal) whether the wave is still active, and DEFERS at zero
+// cost (no run, no step-1 quota burn, no red history row) until it passes.
+const PULSE_TTL_MS = 30_000; // one fetch serves every due-fire check in that window
+const PULSE_TIMEOUT_MS = 3_000; // a hung telemetry fetch must never stall the tick
+const SAT_DEFER_MS = 60_000; // re-arm 1m past a saturated check — the wave decides the rest
+const SAT_TOAST_THROTTLE_MS = 10 * 60_000; // one ambient toast per wave, not per minute
+let pulseCache: { sig: SaturationSignal; at: number } | null = null;
+let pulseFetching: Promise<SaturationSignal | null> | null = null;
+let lastSatToastAt = 0;
+
+/** Read the server's gateway pulse with a short TTL cache. Fail-open: a
+ * telemetry outage must never stall schedules (same doctrine as the pulse
+ * module's own "never crash a dial over telemetry"). */
+async function readPulse(): Promise<SaturationSignal | null> {
+  if (pulseCache && Date.now() - pulseCache.at < PULSE_TTL_MS) return pulseCache.sig;
+  if (!pulseFetching) {
+    pulseFetching = fetch("/api/gateway/pulse", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(PULSE_TIMEOUT_MS),
+    })
+      .then(async (r) => {
+        if (!r.ok) return null;
+        const sig = (await r.json()) as SaturationSignal;
+        // Shape guard — an error-shaped body must not be cached as signal.
+        if (typeof sig?.last429At !== "number" && sig?.last429At !== null) return null;
+        if (typeof sig?.count1h !== "number") return null;
+        pulseCache = { sig, at: Date.now() };
+        return sig;
+      })
+      .catch(() => null)
+      .finally(() => {
+        pulseFetching = null;
+      });
+  }
+  return pulseFetching;
+}
+
 /** Module-level singleton guard (StrictMode mounts effects twice). */
 let ticking = false;
 
 export function WorkflowScheduler() {
   React.useEffect(() => {
-    const tick = () => {
+    const tick = async () => {
       if (ticking) return;
       ticking = true;
       try {
@@ -86,6 +134,16 @@ export function WorkflowScheduler() {
         );
         for (const wf of blocked) noteScheduleDeferred(wf.id, wf.name);
 
+        // r181: saturation gate — one cached pulse read serves the whole due
+        // set (due fires are rare; the 10s tick itself never fetches when
+        // nothing is due). Checked BEFORE the fire loop so a saturated
+        // gateway defers every due start at zero cost.
+        let saturated = false;
+        if (due.length > 0) {
+          const sig = await readPulse();
+          saturated = !!sig && gatewaySaturated(sig);
+        }
+
         for (const wf of due) {
           const schedule = wf.schedule;
           if (!schedule) continue;
@@ -95,6 +153,29 @@ export function WorkflowScheduler() {
             (wf.description.trim()
               ? `Scheduled run — ${wf.description.trim()}`
               : "Scheduled run — carry out this pipeline as designed.");
+
+          // r181: wave gate — a saturated gateway defers the START instead of
+          // launching a doomed run. The fire is never lost: nextRunAt re-arms
+          // 1m out, the audit trail records the episode, and the first quiet
+          // tick fires it. The r171 auto-resume wake (above) flows through
+          // this same gate, so a still-saturated wake no longer burns runs.
+          if (saturated) {
+            store.update(wf.id, {
+              schedule: {
+                ...schedule,
+                nextRunAt: now + SAT_DEFER_MS + Math.round(Math.random() * 10_000),
+              },
+            });
+            noteScheduleDeferred(wf.id, wf.name, "gateway-saturated");
+            if (now - lastSatToastAt > SAT_TOAST_THROTTLE_MS) {
+              lastSatToastAt = now;
+              toast("Scheduled fire deferred — gateway saturated", {
+                icon: "⏳",
+                description: `"${wf.name}" was due, but the gateway logged a 429 within the last 10 minutes (≥3 in the past hour). The fire is deferred, not lost — it launches on the first tick after the wave passes. Zero quota burned.`,
+              });
+            }
+            continue;
+          }
 
           // v24: cadence gate — wait for start-spacing AND the gateway's
           // 429 quiet window. The run is deferred (never lost): re-arm just
@@ -136,7 +217,7 @@ export function WorkflowScheduler() {
       }
     };
 
-    tick(); // catch any schedule that came due while unmounted
+    void tick(); // catch any schedule that came due while unmounted
     const t = setInterval(tick, TICK_MS);
     return () => clearInterval(t);
   }, []);
