@@ -4897,3 +4897,28 @@ Verification result: PASS
 Open risks: (1) The pulse ring only sees server-routed dials (agent-engine + now the headless service) — pure browser-direct BYOK 429s stay invisible by design; if the user's runs ever move fully browser-direct, the gate needs a client-side reporter. (2) The gate defers but cannot make quota appear: during a genuinely continuous saturation day the r171 ladder still escalates to manual pause — by design. (3) recordOwn429 uses unlocked read-modify-write against the app-server's writer — lost updates are bounded (ring 64/48h, telemetry-grade).
 Blockers: none
 Next recommended action: r182 — (1) FIRST read any user report. (2) Rollback guard + health. (3) Check the next Continuous-Research scheduled fires: during a wave expect deferral audit lines, not new failed runs; if a run still died at step 2 inside an active wave, the gate has a gap — investigate before any new work. (4) Otherwise backlog: directive item (b) PARTIAL/BLOCKED statuses, or the roleId editor input (r180 leftover). Keep rotating.
+
+---
+Task ID: 424432 — r182 (backlog round: directive item (a) completion — the r180 leftover)
+Agent: main (platform development — hourly dev round)
+Task: r181 handoff — roleId editor input (finish the directive's explicit-role-field work). No new user report; r181's congestion gate had its first live window with no new congestion to observe (pulse quiet: count1h 1, last 429 63m ago, gate open — no doomed runs to inspect).
+
+Work Log:
+- Guards clean (HEAD f26fb07c6 = r181; root 200; no parallel instance).
+- SHIPPED (directive item (a) now COMPLETE — author → run → display all honest): (1) helpers.ts: resolveStepRole(roleId, label) — the effective-role signal: explicit step.roleId WINS, parsed "[Tag]" label prefix is the legacy fallback; `source` lets chips phrase honestly ("role" vs "tag"). (2) workflow-editor-dialog.tsx: per-step "Role tag (optional)" input writing step.roleId (ml-auto in the kind row, aria-labeled); authoring-time amber warning when an explicit role disagrees with the selected worker ("routing follows the worker" — you see the disagreement BEFORE running, the directive's core ask); save normalizes whitespace-only roleId → absent so the parsed fallback stays live. (3) types.ts: WorkflowRunStep.roleId — materialized runs carry the explicit role. (4) workflow-runner.ts: materializeRunSteps propagates roleId into base steps AND deep-mode clones (the clone rows stay honest about who works). (5) run-panel + card chips switched to resolveStepRole — chips now read "role [X] ≠ worker" (explicit) vs "tag [X] ≠ worker" (legacy), tooltips phrased by source.
+- Deliberately NOT done (scope discipline): no auto-strip of legacy label prefixes (parse stays display-only, authoring freedom preserved); auto-planner doesn't emit roleId (its JSON contract is unchanged — the field is for humans).
+- Verification: K-series role-identity 26/26 (5 new preference unit cases + 7 source-level integration checks); congestion-gate K-series 24/24 (r181 regression intact); F-series browser 8/8; tsc clean (pre-existing hang-server noise only); eslint 0 (7 files); root 200; snapshot pushed 09231b027.
+
+Stage Summary:
+- The user directive's item (a) is now end-to-end: role identity has an explicit authoring field (editor input → step.roleId → materialized run rows), display everywhere prefers it over the legacy "[Role]" label encoding, and mismatches surface at authoring time in the editor — not after a failed run. Legacy label prefixes keep working for old workflows (parsed fallback).
+
+Round Handoff:
+Round ID: r183
+Task owner: main (platform dev)
+Scope completed: roleId editor input + resolveStepRole preference + run-step propagation; directive item (a) COMPLETE; snapshot pushed.
+User-visible changes: workflow editor has a "Role tag (optional)" input per step with live mismatch warning; run rows prefer the explicit role; chips distinguish "role" (explicit) from "tag" (legacy prefix).
+Verification steps: bun run scripts/qa-role-identity.ts → 26/26; bun run scripts/qa-congestion-gate.ts → 24/24; node scripts/cdp-qa-chat-guard.mjs → 8/8; tsc src-scoped → 0; bunx eslint (7 files) → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) Old workflows keep label-prefix encoding — their chips still show "tag [X] ≠ worker"; converting them requires editing each step's Role tag (one field) or a future bulk-migration helper. (2) r181's congestion gate has had no active wave since shipping — its first real test is the next congestion window; watch for deferral audit lines vs new failed runs. (3) resolveStepRole substring matching still fails toward amber noise, never silence (r180 risk, unchanged).
+Blockers: none
+Next recommended action: r183 — (1) FIRST read any user report. (2) Rollback guard + health + check whether any Continuous-Research fire hit the r181 deferral path (audit lines vs new failed runs). (3) Backlog: directive item (b) PARTIAL/BLOCKED statuses (runs finishing with skipped branches get an honest status), or item (c) claim-to-source evidence ledger. Keep rotating surfaces.
