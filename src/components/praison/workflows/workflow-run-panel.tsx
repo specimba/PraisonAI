@@ -59,6 +59,8 @@ import {
   fmtIntervalShort,
   fmtMs,
   fmtRel,
+  parseRolePrefix,
+  roleMatchesAgent,
   runDiagnostics,
   runReportFileName,
   runToMarkdown,
@@ -1212,6 +1214,13 @@ export function WorkflowRunPanel({
               })() : null}
               {viewedRun.steps.map((step, i) => {
                 const agent = agents.find((a) => a.id === step.agentId);
+                // r180 role-tag honesty: a label's "[Role]" prefix never routes —
+                // agentId does. When the tag disagrees with the actual worker,
+                // say so on the row (the directive's failed-run finding).
+                const roleTag = parseRolePrefix(step.label);
+                const roleMismatch =
+                  roleTag.role != null &&
+                  !roleMatchesAgent(roleTag.role, agent?.name ?? step.agentName);
                 return (
                   <Card
                     key={`${viewedRun.id}-${step.stepId}-${i}`}
@@ -1236,8 +1245,16 @@ export function WorkflowRunPanel({
                         <span className="truncate">{step.agentName}</span>
                         <span className="text-muted-foreground"> · </span>
                         <span className="truncate text-muted-foreground">
-                          {step.label}
+                          {roleTag.cleanLabel}
                         </span>
+                        {roleMismatch ? (
+                          <span
+                            className="ml-1.5 shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1 py-px align-middle text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                            title={`The label carries a "[${roleTag.role}]" role tag, but the actual worker is "${step.agentName}" — routing is decided by the assigned agent, never by the title.`}
+                          >
+                            tag [{roleTag.role}] ≠ worker
+                          </span>
+                        ) : null}
                       </div>
                       {/* Review-gate verdict + rework badges */}
                       {step.kind === "review" && step.status === "done" && step.verdict ? (

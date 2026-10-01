@@ -204,6 +204,13 @@ export interface WorkflowStep {
   id: string;
   agentId: string;
   label: string;
+  /**
+   * r180 (user directive item (a)): explicit role identity. Labels like
+   * "[Strategic Planner] …" used to masquerade as routing while the real
+   * worker is `agentId` — the UI now parses those tags and flags tag-vs-worker
+   * disagreements; this field is the honest home for the role going forward.
+   */
+  roleId?: string;
   instruction?: string;
   /** "review" steps audit the previous step's output and can force a rework. */
   kind?: StepKind;

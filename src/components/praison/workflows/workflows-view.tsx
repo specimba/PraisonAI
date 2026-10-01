@@ -64,7 +64,7 @@ import {
 import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
 import { buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { useSettingsStore } from "@/lib/stores";
-import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, uid } from "@/lib/helpers";
+import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, parseRolePrefix, roleMatchesAgent, uid } from "@/lib/helpers";
 import { resolveLlm } from "@/lib/llm-config";
 import { isWorkflowRunning } from "@/lib/workflow-runner";
 import { readScheduleSkips } from "@/lib/schedule-skips";
@@ -1342,6 +1342,13 @@ export function WorkflowsView() {
                     {wf.steps.map((step, i) => {
                       const agent = agentById.get(step.agentId);
                       const isReview = (step.kind ?? "generate") === "review";
+                      // r180 role-tag honesty: flag "[Role]" labels that disagree
+                      // with the assigned worker (card chip = authored state).
+                      const roleTag = parseRolePrefix(step.label || "");
+                      const roleMismatch =
+                        roleTag.role != null &&
+                        agent?.name != null &&
+                        !roleMatchesAgent(roleTag.role, agent.name);
                       return (
                         <React.Fragment key={step.id}>
                           {i > 0 ? (
@@ -1351,12 +1358,18 @@ export function WorkflowsView() {
                             />
                           ) : null}
                           <span
-                            title={step.label || agent?.name}
+                            title={
+                              roleMismatch
+                                ? `${step.label || agent?.name} — ⚠ role tag "${roleTag.role}" ≠ worker "${agent?.name}" (routing follows the assigned agent)`
+                                : step.label || agent?.name
+                            }
                             className={cn(
                               "flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5",
                               isReview
                                 ? "border-amber-500/40 bg-amber-500/10"
-                                : "border bg-muted/40"
+                                : roleMismatch
+                                  ? "border-amber-500/40 bg-amber-500/[0.06]"
+                                  : "border bg-muted/40"
                             )}
                           >
                             {isReview ? (
@@ -1369,6 +1382,9 @@ export function WorkflowsView() {
                             <span className="max-w-32 truncate text-xs font-medium">
                               {agent?.name ?? step.label ?? "Unassigned"}
                             </span>
+                            {roleMismatch ? (
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden />
+                            ) : null}
                           </span>
                         </React.Fragment>
                       );

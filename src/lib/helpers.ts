@@ -182,6 +182,41 @@ export function parseReviewVerdict(text: string): "pass" | "rework" {
   return /\brework\b/i.test(text) ? "rework" : "pass";
 }
 
+// ─── r180: role-tag honesty (user directive item (a)) ──────────────────────
+// Workflow step labels often carry a "[Role]" prefix ("[Strategic Planner] …")
+// that MASQUERADES as routing while the actual worker is step.agentId. The
+// user's failed-run directive (agent_workflow_upgrade_directive_v1.md, r179
+// Drive retrieval): "Store role_id and agent_id as explicit fields. Do not
+// encode routing in free-text titles." The run evidence: a title prefixed
+// Strategic Planner was shown under Research Scout and nobody flagged it.
+// parseRolePrefix extracts the tag for honest display; roleMatchesAgent
+// decides whether the tag agrees with the assigned worker — callers render
+// an amber mismatch chip when it does not. Display-only: labels stay
+// authoring freedom, routing stays step.agentId (unchanged by design).
+
+/** Extract a leading "[Role]" tag from a step label (tolerant: null when absent). */
+export function parseRolePrefix(label: string): { role: string | null; cleanLabel: string } {
+  const m = /^\s*\[([^\][\n]{1,80})\]\s*/.exec(label ?? "");
+  if (!m) return { role: null, cleanLabel: (label ?? "").trim() };
+  return { role: m[1].trim(), cleanLabel: label.slice(m[0].length).trim() };
+}
+
+/** Normalized identity: lowercase, letters/digits only (strips emoji, spacing, punctuation). */
+function normIdentity(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Does a label's "[Role]" tag agree with the worker's agent name? Substring
+ * match both ways on normalized identities — "Research Scout" tag on a
+ * "Research Scout" agent agrees; "Strategic Planner" on "Research Scout"
+ * does not. Empty/absent inputs never match (callers treat null role as no-signal). */
+export function roleMatchesAgent(role: string, agentName: string): boolean {
+  const r = normIdentity(role ?? "");
+  const a = normIdentity(agentName ?? "");
+  if (!r || !a) return false;
+  return r === a || a.includes(r) || r.includes(a);
+}
+
 /** Rough token estimate for the NEXT chat turn (4 chars ≈ 1 token). */
 export function estimateNextTurnTokens(
   messages: ChatMessage[],
