@@ -4997,3 +4997,28 @@ Verification result: PASS
 Open risks: (1) HEADLESS lane does not degrade yet — a closed-tab fire of a stuck Deep workflow still materializes deep (the mini-service reads its own schedule store; plumbing a depthOverride there is the natural next step). (2) The degradation is silent in the run row itself (run shows Standard steps; the audit line + toast carry the why). (3) If the lane is too unstable even for Standard, the existing r171 breaker still escalates to manual pause — degradation cannot conjure capacity. (4) Vyce live key rotation still pending on the user side.
 Blockers: none
 Next recommended action: r186 — (1) FIRST read any user report — specifically whether the Continuous Research card now shows "fired at standard depth" lines and whether any run reaches done (that restores deep). (2) Rollback guard + health. (3) If a standard fire completed: verify deep restored (next fire materializes 11 steps again). (4) Backlog: headless-lane depth degradation (close risk 1), or directive item (d) event-ID scheduler health. Keep rotating surfaces.
+
+---
+Task ID: 424432 — r186 (user-report follow-up: "same !" — deep fire still materialized + red "Failed" rows)
+Agent: main (platform development — hourly dev round)
+Task: USER REPORT follow-up. Fresh board paste: a scheduled RSIinFIELD fire minutes after r185 STILL materialized all 7 deep steps and died at step 1 (3 calls: timeout → 429 → 429), rendered red "Failed" — degradation visibly bypassed, honest-status doctrine leaking. (imp repo answer delivered: DSPy-on-BEAM — typed signatures, optimizers that measure-then-rewrite, supervised runs, no silent side-effect retries.)
+
+Work Log:
+- DIAGNOSIS (3 structural findings): (1) r185 degradation lived ONLY in the scheduler tick — any bypassing fire path (stale HMR bundle, future call sites) materializes deep. (2) The r181 wave gate is structurally blind to the periodic-solo-offender pattern: this workflow's own doomed dials ARE the only fresh 429s (2 per run, ~74m apart), so at every fire time count1h ≈ 0–2 and last429At is stale → gate open → doomed fire. Degradation + r171 backoff, not the wave gate, break this loop. (3) failRun: once the r178 park ladder is exhausted (4 parks, burned through days ago), resolvePark returns null and congestion deaths finalized "error" → red "Failed" lying about the cause.
+- SHIPPED: (1) workflow-runner.ts — runner-side enforcement at the single choke point: scheduled fire + deep + failStreak ≥ 2 + no explicit override → materializes Standard regardless of call site; effective depth STAMPED on the run row (WorkflowRun.depth, types.ts). (2) workflow-run-panel.tsx — header DepthChip prefers the run's stamped depth (degraded fire reads "Standard", not a lying "Deep"). (3) failRun — congestion-class death (rate-limit/network/timeout) with exhausted park ladder finalizes "blocked" + "park ladder exhausted… schedule's congestion backoff owns the retry" note instead of red "error"; stall-owned watchdog path untouched; r171 streak/breaker unchanged.
+- Verification: qa-depth-degrade 33/33 (+3 choke-point/stamp assertions), qa-run-statuses 22/22 (+2 reclassification assertions), qa-evidence-ledger 36/36, qa-congestion-gate 24/24 (live pulse: 23 events, last 429 14m ago, gate open), qa-role-identity 26/26; F-series browser 8/8; tsc clean; eslint 0 errors; root 200.
+- Snapshot pushed: 61ba0f657 → fork/main.
+
+Stage Summary:
+- The doom loop's remaining bypasses are closed: degradation is enforced where every run materializes, history is self-diagnosing (run rows + panel chip show what actually ran), and a congestion death with no park budget reads amber "blocked — auto-resume pending" instead of red "Failed". Expected on the user's board: next scheduled fires of the stuck Deep pipelines materialize the shorter Standard shape, and the first completion resets failStreak → deep restores itself.
+
+Round Handoff:
+Round ID: r187
+Task owner: main (platform dev)
+Scope completed: runner-choke-point degradation + run-row depth stamp + panel chip + exhausted-park honest finalization; snapshot pushed.
+User-visible changes: degraded fires show "Standard" in the run panel; congestion deaths after park exhaustion show amber blocked rows, not red failed; scheduler toast/audit disclosure unchanged.
+Verification steps: bun run scripts/qa-depth-degrade.ts → 33/33; bun run scripts/qa-run-statuses.ts → 22/22; bun run scripts/qa-evidence-ledger.ts → 36/36; bun run scripts/qa-congestion-gate.ts → 24/24; bun run scripts/qa-role-identity.ts → 26/26; node scripts/cdp-qa-chat-guard.mjs → 8/8; tsc clean; eslint 0 errors; curl root → 200.
+Verification result: PASS
+Open risks: (1) The engine is client-side — the user's long-lived tab must pick up the new bundle (dev HMR delivers it; a hard reload guarantees it) before the new behavior is visible. (2) Pre-r186 run rows carry no depth stamp — panel falls back to authored depth (display-only). (3) Wave-gate solo-offender blindness remains by design; if Standard fires also die at streak ≥ 2, the r171 breaker escalates to manual pause — honest, and the next lever is a per-workflow dial-outcome memory feeding the saturation predicate.
+Blockers: none
+Next recommended action: r187 — (1) FIRST read any user report — check the next scheduled fires: run panel "Standard" chip, amber blocked rows instead of red failed, and whether any run reaches done (restores deep). (2) Rollback guard + health. (3) If Standard fires still die: implement per-workflow dial-outcome memory (feed the saturation predicate). (4) Backlog: directive item (d) event-ID scheduler health or (e) credential scrubbing. Keep rotating surfaces.

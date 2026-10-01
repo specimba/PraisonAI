@@ -15,6 +15,12 @@ try {
 } catch { /* networkidle can be flaky with polling routes */ }
 await page.waitForTimeout(2500); // client hydration + store rehydration
 
+// The board is a tab — navigate to it if not already active.
+const nav = page.locator("nav, aside").first();
+if (/Workflow Studio/i.test(await page.locator("body").innerText()) === false) {
+  await nav.getByText("Workflows", { exact: true }).first().click().catch(() => {});
+  await page.waitForTimeout(1500);
+}
 ok(true, "board route loaded");
 const body = await page.locator("body").innerText();
 ok(/Workflow Studio/i.test(body), "Workflow Studio heading renders");
