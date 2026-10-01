@@ -4762,3 +4762,28 @@ Stage Summary:
 Round Handoff:
 Round ID: r177 (user-report round — findings feed the main agent's fixes)
 Blockers: none
+---
+Task ID: 424432 — r177 (user-report round)
+Agent: main (platform development — hourly dev round)
+Task: USER REPORT (drive folder + run paste): (1) every run exports its report to the SAME "praison-run-<slug>.md" file — overwrites history; user asked for smarter creation with an a-b-c addition. (2) Scheduled Continuous-Research run: Research Scout web_search FAILED "Error: network error"; downstream Code Smith step showed "Stopped"; several tool rows showed 0ms. (3) Explicit ask: expert subagent team + deep search of how similar pipelines solve this.
+
+Work Log:
+- Rollback guard clean (HEAD ecce4bfae, a parallel cron commit ON TOP of b12c58d20 — lineage intact). Root 200.
+- ROOT CAUSES: (a) both export sites (full + partial, workflow-run-panel.tsx) hardcoded `praison-run-<slug>.md` — zero run identity → browser overwrite every run. (b) runSearchLadder (src/lib/server/tools.ts) was 429-ONLY: a transient "network error" propagated with NO retry and NO fallback — the r90 ladder never fired for the user's failure class. (c) Code Smith's "Stopped" is stopRemaining(): when a run finalizes upstream, every not-yet-reached step is marked status "stopped" with EMPTY output — indistinguishable from a user stop; the run actually died at the tool failure. (d) 0ms rows: Clock is genuinely instant; for web tools no cache/no-op was found in the executor — flagged open (needs a live repro; possibly frozen in-flight rows).
+- SHIPPED: (1) runReportFileName() in helpers.ts — `praison-run-<slug>-run<NNN>-<YYYYMMDD-HHMM>[a|b|c].md`: NNN = 1-based ordinal from the workflow's own run list (startedAt-sorted), stamp = the run's local start time (matches the user's 0110 habit), letter ONLY when sibling runs share a start minute (collision-free, no filesystem probing). Wired into BOTH export sites. (2) runSearchLadder: transient network faults (network error / Failed to fetch / ECONNRESET / EAI_AGAIN / socket hang up…) now get ONE jittered (500-900ms) retry of the primary, then the existing fallback ladder with honest "unreachable (network error)" provenance labeling; 429 path byte-identical (no primary retry — the cooldown ladder owns congestion); our own 15s-timeout envelope deliberately excluded (step-level self-heal owns it); abort during the backoff cancels with no second dial. (3) stopRemaining honesty: "(not run — the run ended before reaching this step)" instead of silent empty.
+- RESEARCH (2 subagents, 17 web searches, 0 CLI failures — their sections r177-research-a / r177-research-b are appended to this worklog): 8 pipeline-resilience patterns (retry-at-tool-boundary, distinct result classes, structured error feedback to the model, graceful degradation, per-tool circuit breaker, idempotent call caching, checkpoint/resume, per-run failure budget) + 6 artifact-versioning conventions. Shipped naming = the recommended GH-Actions-run_number × ISO-stamp hybrid plus the user's letter twist. Research backlog by value: per-run failure budget + resume-from-failed-step (checkpoint/resume), per-tool circuit breaker, "(cached)" telemetry on memoized calls, degraded-mode "skipped" steps instead of wasted runs.
+- Verification: K-series 9/9 (scripts/qa-search-ladder.ts — retry/fallback/429-parity/abort/classifier + filename ordinal, letters, ghost-run fallback); F-series browser boot regression 8/8; eslint 0 (tools.ts, helpers.ts, workflow-runner.ts, workflow-run-panel.tsx); tsc src-scoped 0; root 200; snapshot pushed d8524dbac.
+
+Stage Summary:
+- Reports are now append-only history (every run gets its own file, a/b/c on same-minute collisions), a transient network blip no longer kills a search tool call (retry + honest fallback), and a downstream "Stopped" row now tells the truth: the run ended before reaching it — not a mysterious user stop.
+
+Round Handoff:
+Round ID: r178
+Task owner: main (platform dev)
+Scope completed: user-report round — report versioning (both export sites), transient-network retry ladder, stopRemaining honesty; 2 research deep-dives; K-series 9/9 + F-series 8/8; snapshot pushed.
+User-visible changes: report exports no longer overwrite (run-numbered, timestamped, letter-disambiguated); web_search survives one network blip per call and falls back with honest labels; steps that never ran say so.
+Verification steps: bun run scripts/qa-search-ladder.ts → 9/9; node scripts/cdp-qa-chat-guard.mjs → 8/8; bunx eslint (4 changed files) → 0; tsc src-scoped → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) the Google Drive link is unreachable from the sandbox (no Google auth) — worked from the paste alone; if the drive file holds more context, paste it inline. (2) 0ms web-tool rows need a live repro (Clock 0ms is legitimate). (3) slugify truncates long names (pre-existing; uniqueness now carried by runNNN). (4) ordinals renumber if old runs get pruned (cosmetic).
+Blockers: none
+Next recommended action: r178 — (1) FIRST read any user report (did the next scheduled Continuous-Research run ride out its network window? new honest labels + versioned exports should be visible in the fresh run); (2) rollback guard; (3) the research backlog's top item: per-run failure budget + resume-from-failed-step (checkpoint/resume of partial runs) — the highest-value user-facing piece; alternatively investigate the 0ms tool rows with a live run. Keep rotating.
