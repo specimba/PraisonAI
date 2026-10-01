@@ -144,7 +144,12 @@ export async function POST(req: NextRequest) {
           // transient-retry regex, so they pass straight through to this
           // catch — every server-side 429 lands here exactly once per
           // surfaced failure (both engine paths throw through this try).
-          if (kind === "rate-limit") recordGateway429(String(body.model ?? ""));
+          if (kind === "rate-limit")
+            // Model-less dials are the auto lane (agent-engine labels the
+            // primary hop `model: body.model ?? "auto"`) — record the same
+            // nomenclature instead of a blank row the chip reads as
+            // "unknown model".
+            recordGateway429(String(body.model?.trim() || "auto"));
           send({
             type: "error",
             message: humanizeError(err),
