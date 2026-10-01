@@ -158,6 +158,15 @@ async function main() {
     return true;
   `));
 
+  // r160: the ACTIVE VIEW is persisted (zustand persist) — a fresh tab can
+  // restore the radar view, which would make R1's "cold" mount measure
+  // nothing (sentinel already true, zero deltas). Force Chat first.
+  const alreadyRadar = await evalJs(ws, js(`return ${SENTINEL};`));
+  if (alreadyRadar) {
+    await navClick(ws, "Chat");
+    await sleep(1500);
+  }
+
   // ── R1: COLD mount ──
   const coldBefore = await metricsDelta(ws);
   await evalJs(ws, js(`window.__pTasks.length = 0; return true;`));
@@ -193,15 +202,26 @@ async function main() {
   // ── R5: tab-switch economy — visit all 4 tabs, then re-visit 3 of them ──
   const tabIds = ["github", "hf", "papers"];
   const marker = () => evalJs(ws, js(`
-    const m = performance.getEntriesByType("resource").filter((e) => /\\/api\\/(radar|tracker)/.test(e.name)).length;
+    // r160: scope to the TAB proxies only — the tracker ticker strip is
+    // always-mounted above the Tabs and polls /api/tracker on its own 15min
+    // cadence; a poll landing inside the marker window is legitimate app
+    // behavior, not a tab-economy violation.
+    const m = performance.getEntriesByType("resource").filter((e) => /\\/api\\/radar\\//.test(e.name)).length;
     return m;
   `));
   // Visit each secondary tab once (first mount may legitimately fetch).
   // Radix TabsTrigger exposes no reliable value attribute — match by label.
+  // r160 CORRECTION: Radix activates tabs on POINTERDOWN — a synthetic
+  // .click() silently switches nothing, which made r159's R5 run measure
+  // nothing (0 switches → 0 fetches → false PASS). Dispatch the full pointer
+  // sequence so the switch actually happens.
   const clickTab = (label) => evalJs(ws, js(`
     const t = [...document.querySelectorAll('[role="tab"]')].find((x) => (x.textContent ?? "").includes(${JSON.stringify(label)}));
     if (!t) throw new Error("tab not found: " + ${JSON.stringify(label)});
-    t.click();
+    t.focus();
+    t.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    t.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    t.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     return true;
   `));
   for (const v of ["GitHub Stars", "HF Trending", "Paper Radar"]) {
@@ -214,11 +234,17 @@ async function main() {
     await sleep(900);
   }
   const after = await marker();
+  // r160: the switch-actually-happened guard — a false PASS here means the
+  // pointer sequence broke again and the gate is measuring nothing.
+  const switched = await evalJs(ws, js(`
+    const t = [...document.querySelectorAll('[role="tab"]')].find((x) => (x.textContent ?? "").includes("Paper Radar"));
+    return t?.getAttribute("aria-selected") === "true";
+  `));
   const refetches = after - before;
   check(
     "R5 tab re-activation cache-first (0 proxy refetches)",
-    refetches === 0,
-    `${refetches} refetch(es) across ${tabIds.length} re-activations`
+    refetches === 0 && switched === true,
+    `${refetches} refetch(es) across 3 re-activations, switches-verified=${switched}`
   );
 
   await shot(ws, "R-radar-mount");

@@ -127,18 +127,42 @@ function CacheStatus({
   onRefresh,
   refreshing,
   extra,
+  staleAfterMs,
 }: {
   fetchedAt?: number;
   onRefresh: () => void;
   refreshing: boolean;
   extra?: React.ReactNode;
+  /** r160: past this age the cache stamp turns amber + "stale" — a week-old
+   * trending board used to look identical to a 5-minute-old one. TTLs are
+   * per-tab (HF boards rotate fastest, GitHub stars slowest). Display-only:
+   * no auto-refetch — the R5 QA gate guards the cache-first egress doctrine. */
+  staleAfterMs?: number;
 }) {
+  // Minute tick so the stale state appears (and deepens) on its own while the
+  // tab sits open — only the active tab is mounted (Radix unmounts the rest).
+  const [, tickNow] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => {
+    if (fetchedAt == null || staleAfterMs == null) return;
+    const t = setInterval(tickNow, 60_000);
+    return () => clearInterval(t);
+  }, [fetchedAt, staleAfterMs]);
+  const stale =
+    fetchedAt != null && staleAfterMs != null && Date.now() - fetchedAt > staleAfterMs;
   return (
     <div className="flex items-center gap-2">
       {extra}
       {fetchedAt ? (
-        <span className="text-[11px] text-muted-foreground" aria-live="polite">
+        <span
+          className={cn(
+            "text-[11px]",
+            stale ? "font-medium text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+          )}
+          aria-live="polite"
+          title={stale ? "This cache is older than usual — hit Refresh for fresh results" : undefined}
+        >
           cached {relTime(fetchedAt)}
+          {stale ? " · stale" : ""}
         </span>
       ) : null}
       <Button
@@ -374,6 +398,7 @@ function GitHubStarsTab() {
             fetchedAt={cache.fetchedAt}
             onRefresh={() => void fetchStars(user)}
             refreshing={loading}
+            staleAfterMs={7 * 86_400_000}
             extra={
               <span className="text-[11px] text-muted-foreground">
                 @{cache.user} · {cache.repos.length} repos
@@ -674,6 +699,7 @@ function HfTrendingTab() {
             fetchedAt={cache?.fetchedAt}
             onRefresh={() => void fetchTrending()}
             refreshing={loading}
+            staleAfterMs={6 * 3_600_000}
           />
         </div>
       </div>
@@ -843,6 +869,7 @@ function PaperRadarTab() {
             fetchedAt={cache.fetchedAt}
             onRefresh={() => void search(query)}
             refreshing={loading}
+            staleAfterMs={86_400_000}
           />
         ) : null}
       </div>
