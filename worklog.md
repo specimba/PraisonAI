@@ -4407,3 +4407,28 @@ Verification result: PASS
 Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (pulse record empty at r165 start — check /api/gateway/pulse first); the noKey-restore branch is registry-dormant (no provider sets noKey today) — first untested-against-registry code path; rest of the settings surface (settings-view 677, local-models 930, model-relay 331) still unaudited.
 Blockers: none
 Next recommended action: r166 — rotate: (1) if /api/gateway/pulse shows real 429s, read the user's next report cross-evidenced (park-chain + r142), or (2) continue the settings audit (model-relay.tsx — the fallback rotation UX — is the natural next target), or (3) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r166
+Agent: main (platform development — hourly dev round)
+Task: r165 handoff — at round start /api/gateway/pulse showed REAL data for the first time: 4 genuine 429s (two bursts 07:21–07:22Z and 07:34–07:35Z, written live by the server while no agent QA ran — almost certainly the user's hourly autopilot pipeline hitting the shared free-tier bucket). This was the handoff's priority #1: verify the chip's live appearance against the record, cross-evidenced. The deferred r161/r162 verification is finally unblocked.
+
+Work Log:
+- Timeline honesty: server clock 07:37:50Z vs events at 07:21:59Z/07:22:45Z/07:34:33Z/07:35:19Z — the 429s are minutes old and ongoing. db/gateway-pulse.json showed M in git (server-written, not QA residue — r164/r165 QAs never mocked server-side 429s).
+- Attribution finding: all four events recorded model:"" — the /api/chat catch records String(body.model ?? ""), and model-less dials are the AUTO lane (agent-engine.ts:380 builds the primary hop with model: body.model ?? "auto"). Honest but inconsistent nomenclature: the chip's tooltip renders those rows as "unknown model".
+- SHIPPED (route.ts): recordGateway429 now records body.model?.trim() || "auto" — the same label the engine itself gives model-less primary dials. Existing "" rows stay (live user data is never rewritten); new events will attribute to "auto".
+- LIVE VERIFICATION (Z-series, scripts/cdp-qa-gateway-pulse-live.mjs, 6/6 PASS, strictly READ-ONLY — no seeding, no reseed, no cleanup; the real record is the fixture): Z0 real data present; Z1 chip renders "gateway 429 · last 4m ago · 4 in 24h"; Z1b shown count ≥ API snapshot; Z2 tone matches age — AMBER at 299s (<10min), the fresh-congestion warning state working on first contact; Z3 tooltip lists all 4 real events; Z4 click-to-refresh keeps it truthful. Screenshot ops/qa/Z-gateway-pulse-live.png. tsc 0; eslint 0; root 200.
+- Cross-evidence readiness: when the user reports this run (parked/backed-off turns), /api/gateway/pulse is now the server-side corroborating record — 4 upstream 429s in the same window their client parked. Park state itself stays client-side by design (r158); the WHY-signal is what the server now holds.
+
+Stage Summary:
+- The GatewayPulse chip met its first real congestion event and behaved exactly as designed (amber fresh-warning, honest counts, per-event tooltip) — and future events now attribute to the auto lane instead of reading as blank rows.
+
+Round Handoff:
+Round ID: r167
+Task owner: main (platform dev)
+Scope completed: first real-data verification of the gateway pulse (Z-series 6/6 read-only) + attribution fix (auto-lane dials recorded as "auto"); snapshot pushed.
+User-visible changes: the workflows-view chip now reflects a real congestion event the user's own runs triggered; future 429 rows name their lane.
+Verification steps: node scripts/cdp-qa-gateway-pulse-live.mjs → 6/6; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: the user's pipeline was actively 429ing at round start — expect a park/backoff report; r142 real-world validation rides on the same report; record counts only server-relayed dials (browser-direct keys invisible — unchanged scope).
+Blockers: none
+Next recommended action: r167 — rotate: (1) FIRST read any user report of this run cross-evidenced against /api/gateway/pulse (park-chain + r142 confirmation), or (2) continue the settings audit (model-relay.tsx next), or (3) root-cause FIRST any user report. Keep rotating.
