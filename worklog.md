@@ -4946,3 +4946,28 @@ Verification result: PASS
 Open risks: (1) Persisted old runs keep legacy step statuses ("stopped" on never-ran rows from r177-era runs) — display still handles them; only new finalizations emit "skipped". (2) r181 congestion gate still awaits its first live wave-window observation — check pulse + any Continuous-Research fire first thing next round. (3) recordOwn429/browser-direct blind spots unchanged (r181 notes).
 Blockers: none
 Next recommended action: r184 — (1) FIRST read any user report. (2) Rollback guard + health. (3) Check the r181 gate's first live window: any scheduled fire during a 429 wave should show a deferral audit line, not a new blocked/failed run; if a run still died inside an active wave, the gate has a gap — investigate first. (4) Backlog: directive item (c) claim-to-source evidence ledger for research runs (or (d) event-ID scheduler health). Keep rotating surfaces.
+
+---
+Task ID: 424432 — r184 (backlog round: directive item (c) — claim-to-source evidence ledger)
+Agent: main (platform development — hourly dev round)
+Task: r183 handoff — (1) gate live-window check, (2) backlog: directive item (c) claim-to-source evidence ledger for research runs. No user report; HEAD 9557f64de clean.
+
+Work Log:
+- Gate live-window check: pulse ring 21 events, last 429 36m ago, count1h 2 — third consecutive hour below the ≥3/1h threshold, gate open, no wave to observe. The r181 gate's first live observation stays pending; the dashboard evidence (deferral lines vs new blocked runs) will come with the next real congestion wave.
+- SHIPPED (evidence ledger, pure + additive): (1) src/lib/evidence-ledger.ts — dependency-free module: tidyUrlTail (strips prose punctuation tails while KEEPING balanced parens, e.g. Wikipedia /A_(b)), harvestUrls, normalizeSourceUrl (canonical key: lowercase host, trailing slash stripped, non-http(s)/garbage rejected — path case preserved), buildEvidenceLedger (scans each step's prose output + tool-call results + tool-call query args; one entry per distinct source with citedBy[{stepId,label,agentName,via: output|tool-result|tool-args}]; cross-step merge; most-cited-first sort; empty ledger for source-free runs — no fabrication). (2) helpers.ts runToMarkdown — export gains "## Evidence ledger": URL — cited by "step" · agent (via), only rendered when sources exist. (3) workflow-run-panel history rows — Link2 count chip (N sources) per run + expanded violet block listing domain, clickable URL, and the citing steps with their via channel; absent quietly when a run cites nothing.
+- Verification: NEW K-series (scripts/qa-evidence-ledger.ts) 31/31 — tail-tidying boundaries, dedupe keys, via-channel recording, cross-step merge, sort, honest absence both in code and in export, no import cycle, wiring assertions; r183 K-series unaffected; F-series browser 8/8; tsc clean (hang-server noise only); eslint 0 (4 files); root 200.
+- Snapshot pushed: 3ed89d73c → fork/main.
+
+Stage Summary:
+- The directive's item (c) is live: a research run's claims are now checkable — every external source the run actually fetched (tool results) or cited (prose, search args) is enumerated with the exact steps that used it, in the run panel (per-row evidence toggle) and in the exported Markdown report the user reads. This pairs with r183's honest statuses: the user can now see WHAT a run did (partial/blocked/skipped) and WHERE its claims come from (ledger) without trusting the prose.
+
+Round Handoff:
+Round ID: r185
+Task owner: main (platform dev)
+Scope completed: evidence ledger module + Markdown export section + run-panel per-row UI + 31/31 QA; snapshot pushed.
+User-visible changes: run history rows show a 🔗 N chip for runs with external sources; expanding it lists each source with its citing steps (prose vs tool-result vs tool-args); exported reports carry an "## Evidence ledger" section.
+Verification steps: bun run scripts/qa-evidence-ledger.ts → 31/31; bun run scripts/qa-run-statuses.ts → 32/32; bun run scripts/qa-congestion-gate.ts → 24/24; node scripts/cdp-qa-chat-guard.mjs → 8/8; tsc src-scoped → 0; bunx eslint (4 files) → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) URL harvest is syntactic — a source cited without any URL anywhere (paraphrase-only claims) cannot appear in the ledger; ledger absence ≠ no claims. (2) The evidence chip computes the ledger on each render of a history row (pure, small N — fine at current scale; hoist if history grows large). (3) r181 gate still unobserved in a live wave (3 quiet hours). (4) directive item (e) credential scrubbing still queued; Vyce live key still needs USER rotation.
+Blockers: none
+Next recommended action: r185 — (1) FIRST read any user report. (2) Rollback guard + health. (3) Check the r181 gate's first live window (pulse count1h ≥3 + a due fire → expect a deferral audit line, not a new doomed run). (4) Backlog: directive item (d) event-ID-backed scheduler health (replace badge-only health with event evidence) or (e) credential scrubbing from logs/exports. Keep rotating surfaces — next round should touch a different file set than r183/r184 (workflow-runner/panel have had two consecutive rounds).
