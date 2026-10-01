@@ -5048,3 +5048,30 @@ Verification result: PASS
 Open risks: (1) USER ACTION NEEDED: refresh the browser tab once — the running page still holds the pre-r185 bundle; after refresh the scheduler's toast/audit disclosure re-appears (the runner-side enforcement works even without it). (2) Degradation cannot conjure capacity: if the shared lane 429s even Standard step 1 (as in the user's latest fire), the r171 breaker still escalates to manual pause after its trips — that is the designed floor. (3) failStreak lives in the schedule store; the user's paste shows 12 failed runs, so streak ≥ 2 holds for both Deep pipelines — first scheduled fire after tab refresh should read "standard depth (deep passes paused — lane unstable)".
 Blockers: none
 Next recommended action: r187 — (1) FIRST read any user report: did the next fire materialize Standard (run row chip "Standard", ~5 steps, no "Deep research pass" rows)? If a Standard run completed, verify deep restored on the following fire (failStreak reset, 11 steps). (2) If the lane 429s even Standard step 1 repeatedly, consider surfacing a "lane degraded — schedules auto-paused after N attempts" banner instead of silently burning trips (visibility beats a paused board the user can't explain). (3) Backlog: event-ID scheduler health (directive d), credential scrubbing from exports (directive e). Rotate surfaces.
+
+---
+Task ID: 424432 — r187 (user report: Vyce Playground paste — upstream models dying with tier/region/auth/maintenance errors)
+Agent: main (platform development — hourly dev round)
+Task: USER REPORT. Paste from Vyce's own Playground: most upstream models reject with "requires lite tier", "Too many requests", "not available in your region", "Authentication failed", "maintenance" — only 3 of ~12 answered. User's point: "our only provider is not Vyce; that is why we have many of them" — the platform must lean on provider diversity instead of re-dialing corpses.
+
+Work Log:
+- ROOT CAUSE (relay.ts, r25 legacy): the old isHardRelayFailure regex classified 401 (auth) and 403 (region/permission) as SOFT capacity noise — so dead hops were NEVER demoted and re-dialed every turn. The user's own paste shows exactly this loop: the same tier/region/auth errors recurring at 02:15, 02:17 and 02:18. The chain already spans all keyed providers (buildRelayChain, full-vault catalog) — the ladder was walking it blind.
+- SHIPPED — three-tier failure taxonomy (r187): SOFT (429/408/rate-limit/quota — never demotes, unchanged), HARD (network/5xx — 5min cooldown, unchanged), and NEW DEAD (401 auth, 403 region/permission, tier paywall, maintenance — 6h cooldown). isDeadlyRelayFailure + isSoftRelayFailure exported; RelayHealthEntry.dead is backward-compatible (old localStorage entries read as plain hard).
+- SHIPPED — provider-wide auth stamping: an auth-class death stamps EVERY hop of the same provider dead ("shared key rejected (auth)") — the key travels with the request, not the model; one dead key means the whole provider family is dead. Region/tier deaths stay hop-scoped (a region-blocked model doesn't condemn its siblings). A success clears both dead and soft (recovered hops rejoin the chain immediately).
+- SHIPPED — picker surfacing: model pickers now show a "blocked" amber badge (with the last error) for dead hops, distinct from "sick" (5min hard) and "throttled" (soft) — the rotator's memory is visible where the user chooses models.
+- Verification: NEW scripts/qa-relay-taxonomy.ts 47/47 (classifier boundaries incl. every error string from the user's paste; old-regex regression check; badge windowing @10m/@7h; source wiring for stamping + dead-window); eslint 0 (relay.ts + QA script); tsc src-scoped clean; r186 browser smoke 5/5 (0 page errors); root 200.
+- Snapshot pushed → fork/main (fdaa885dc).
+
+Stage Summary:
+- The relay ladder now remembers which hops are PERMANENTLY dead (auth/region/tier/maintenance) for 6 hours and which are just busy (429) for no time at all — so the user's "many providers" actually get tried: one dead Vyce key or region-locked model no longer eats ladder rungs turn after turn; the chain skips straight to live lanes. In the user's paste scenario, after the first turn every dead model in that roster is "blocked" in the picker and never re-dialed.
+
+Round Handoff:
+Round ID: r188
+Task owner: main (platform dev)
+Scope completed: relay failure taxonomy (soft/hard/dead) + 6h dead cooldown + provider-wide auth stamping + blocked badge; QA suite added.
+User-visible changes: dead models show "blocked" in pickers and stop being re-dialed for 6h; one auth failure sinks its whole provider family; recovered hops rejoin on first success.
+Verification steps: bun run scripts/qa-relay-taxonomy.ts → 47/47; bunx eslint (2 files) → 0; tsc src-scoped → clean; node scripts/qa-r186-smoke.mjs → 5/5; curl root → 200.
+Verification result: PASS
+Open risks: (1) The 6h dead window is heuristic — a provider that fixes a region block mid-window stays demoted until a manual "Reset relay health" (settings) or a direct primary dial succeeds (recordRelayHopResult(ok) clears). (2) DEADLY_RE is English-message-based; providers returning untranslated/structured errors with matching HTTP codes (401/403) are still caught, exotic messages may not be. (3) The workflow-runner's relay lane benefits automatically via the shared classifier, but its recording path is separate — verify it stamps dead hops too on the next observed failure. (4) Vyce upstream health is genuinely poor today (user's paste) — degradation + breaker + this taxonomy reduce waste but cannot conjure capacity.
+Blockers: none
+Next recommended action: r188 — (1) FIRST read any user report: check whether the chat/agent lanes now skip blocked hops (rotation status lines should stop repeating tier/region/auth errors). (2) Verify workflow-runner relay recording stamps dead hops (risk 3) — if it bypasses the classifier, route it through the same helpers. (3) Backlog: "lane degraded" banner for auto-paused schedules (r187 handoff), event-ID scheduler health (directive d), credential scrubbing (directive e). Rotate surfaces.
