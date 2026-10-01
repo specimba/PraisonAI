@@ -8,7 +8,7 @@ import type {
   WorkflowRun,
 } from "./types";
 import { IMAGE_MAX_DIMENSION, MAX_IMAGE_DATAURL_CHARS } from "./constants";
-import { buildEvidenceLedger } from "./evidence-ledger";
+import { buildEvidenceLedger, formatCiters } from "./evidence-ledger";
 
 export function uid(prefix = "id"): string {
   const rand =
@@ -513,10 +513,7 @@ export function runToMarkdown(workflow: Pick<Workflow, "name">, run: WorkflowRun
       ""
     );
     for (const e of ledger) {
-      const citers = e.citedBy
-        .map((c) => `“${c.label}” · ${c.agentName}${c.via !== "output" ? ` (${c.via})` : ""}`)
-        .join(", ");
-      lines.push(`- ${e.url} — cited by ${citers}`);
+      lines.push(`- ${e.url} — cited by ${formatCiters(e)}`);
     }
     lines.push("", "_Each claim above can be checked against the source the run actually fetched or cited._");
   }

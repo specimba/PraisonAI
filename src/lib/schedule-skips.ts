@@ -13,7 +13,7 @@
 // state preservation on edit (full reload) — which would destroy an
 // in-flight client-side run. A new lib file invalidates nothing.
 
-export type ScheduleSkipReason = "active-run" | "gateway-saturated";
+export type ScheduleSkipReason = "active-run" | "gateway-saturated" | "depth-degraded";
 
 export interface ScheduleSkipEntry {
   id: string;

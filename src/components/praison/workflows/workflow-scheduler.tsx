@@ -199,15 +199,37 @@ export function WorkflowScheduler() {
           // line under the workflow card then reads "deferred X — fired Y".
           closeScheduleDeferral(wf.id, now);
 
+          // r185 (user report: "0 progression getting worse and worse"): the
+          // user's own board shows the pattern — the only never-completing
+          // pipelines are DEEP ones on the unstable free lane (12 runs / 0
+          // done, each burning 45min–2.3h and up to 73 tool calls before
+          // dying at a deep pass), while Standard pipelines complete. Imp
+          // (deepfates/imp, DSPy on the BEAM) doctrine applied at fire time:
+          // run what the lane can actually sustain, measured. 2+ consecutive
+          // failures on a Deep workflow fire Standard; the first completed
+          // run resets failStreak and deep restores itself. Manual Run keeps
+          // the authored depth — the user chooses their own risk.
+          const degraded =
+            (wf.schedule?.failStreak ?? 0) >= 2 && (wf.depth ?? "standard") === "deep";
+          if (degraded) {
+            // Audit trail: an episode that opens and closes at the same tick —
+            // the card line reads "fired at standard depth … deep paused".
+            noteScheduleDeferred(wf.id, wf.name, "depth-degraded");
+            closeScheduleDeferral(wf.id, now);
+          }
+
           toast(`Scheduled run started`, {
             icon: "⏰",
-            description: `${wf.name} · every ${Math.round(interval / 60_000)}m`,
+            description: `${wf.name} · every ${Math.round(interval / 60_000)}m${
+              degraded ? " · standard depth (deep passes paused — lane unstable)" : ""
+            }`,
           });
 
           void executeWorkflowRun({
             workflow: { id: wf.id },
             task,
             source: "scheduled",
+            depthOverride: degraded ? "standard" : undefined,
           }).catch(() => {
             /* runner already surfaces step errors in the run row + toasts */
           });

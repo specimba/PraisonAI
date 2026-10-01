@@ -27,7 +27,7 @@ import {
   Server,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { buildEvidenceLedger } from "@/lib/evidence-ledger";
+import { buildEvidenceLedger, formatCiters } from "@/lib/evidence-ledger";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -1000,13 +1000,7 @@ export function WorkflowRunPanel({
                                 {e.url}
                               </a>
                               <span className="block text-muted-foreground">
-                                cited by{" "}
-                                {e.citedBy
-                                  .map(
-                                    (c) =>
-                                      `“${c.label}” · ${c.agentName}${c.via !== "output" ? ` (${c.via})` : ""}`
-                                  )
-                                  .join(", ")}
+                                cited by {formatCiters(e)}
                               </span>
                             </li>
                           ))}

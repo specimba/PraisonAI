@@ -1646,7 +1646,11 @@ export function WorkflowsView() {
                         if (Date.now() - skip.firedAt < 6 * 60 * 60_000) {
                           return (
                             <div className="text-[10px] text-muted-foreground/70">
-                              ⏳ deferred {fmtRel(skip.at)} {skip.reason === "gateway-saturated" ? "while the gateway was saturated" : "while a run was active"} — fired {fmtRel(skip.firedAt)}
+                              ⏳ {skip.reason === "depth-degraded" ? (
+                                <>fired at standard depth {fmtRel(skip.firedAt)} — deep passes paused after consecutive incomplete runs; a completed run restores deep</>
+                              ) : (
+                                <>deferred {fmtRel(skip.at)} {skip.reason === "gateway-saturated" ? "while the gateway was saturated" : "while a run was active"} — fired {fmtRel(skip.firedAt)}</>
+                              )}
                             </div>
                           );
                         }

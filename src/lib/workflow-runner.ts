@@ -330,6 +330,11 @@ export interface ExecuteRunOptions {
   task: string;
   /** "scheduled" runs toast with a clock icon and a distinct message. */
   source?: "manual" | "scheduled";
+  /** r185 (user report: "0 progression"): scheduled fires of a DEEP workflow
+   * with a failing streak downgrade to "standard" — the deep passes are the
+   * steps that never survive an unstable lane. The authored workflow is
+   * untouched; failStreak resets on the next done run, restoring deep. */
+  depthOverride?: PipelineDepth;
   /** Called right after the run row is created (panel uses it to view + wire Stop). */
   onStarted?: (runId: string, controller: AbortController) => void;
   /** Called with the final status whether done, stopped or errored. */
@@ -462,7 +467,7 @@ const DEEP_PASSES: { n: 2 | 3; label: string }[] = [
  * Resume is deliberately NOT routed through here: resumed runs re-use their
  * already-materialized step rows, so old runs stay byte-identical.
  */
-export function materializeRunSteps(wf: Workflow, agentsNow: Agent[]): WorkflowRunStep[] {
+export function materializeRunSteps(wf: Workflow, agentsNow: Agent[], depthOverride?: PipelineDepth): WorkflowRunStep[] {
   const base: WorkflowRunStep[] = wf.steps.map((s) => {
     const agent = agentsNow.find((a) => a.id === s.agentId);
     return {
@@ -483,7 +488,9 @@ export function materializeRunSteps(wf: Workflow, agentsNow: Agent[]): WorkflowR
     };
   });
 
-  const depth: PipelineDepth = wf.depth ?? "standard";
+  // r185: an explicit depthOverride (scheduler degradation) wins over the
+  // authored depth; authored depth remains the default for manual runs.
+  const depth: PipelineDepth = depthOverride ?? wf.depth ?? "standard";
   if (depth === "quick" || base.length === 0) return base;
 
   let steps = base;
@@ -604,7 +611,7 @@ export async function executeWorkflowRun(
     task = options.task.trim();
     // r26 depth control: quick = as authored · standard = + verification pass ·
     // deep = + 2 research passes + verification. Resume (above) is untouched.
-    steps = materializeRunSteps(wf, agentsNow);
+    steps = materializeRunSteps(wf, agentsNow, options.depthOverride);
     store.addRun(wf.id, {
       id: runId,
       workflowId: wf.id,

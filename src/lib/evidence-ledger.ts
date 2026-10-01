@@ -16,7 +16,9 @@ export interface EvidenceCitation {
   stepId: string;
   label: string;
   agentName: string;
-  via: CitationVia;
+  /** All channels this step used the source through (r184 feedback: the
+   * same step repeated once per channel was unreadable — collapse per step). */
+  vias: CitationVia[];
 }
 
 export interface EvidenceSource {
@@ -112,6 +114,9 @@ export function buildEvidenceLedger(steps: Pick<WorkflowRunStep, "stepId" | "lab
       ]),
     ];
     for (const { url, via } of citations) {
+      // Auth-redirect hops (idp .../transit?redirect_uri=...) are login
+      // plumbing, not evidence — the real target is cited separately.
+      if (/[^a-z]redirect_uri=/.test(url)) continue;
       const key = normalizeSourceUrl(url);
       if (!key) continue;
       let entry = byKey.get(key);
@@ -119,14 +124,39 @@ export function buildEvidenceLedger(steps: Pick<WorkflowRunStep, "stepId" | "lab
         entry = { url, domain: domainOf(url), citedBy: [], firstStepIndex: i };
         byKey.set(key, entry);
       }
-      const citation: EvidenceCitation = { stepId: s.stepId, label: s.label, agentName: s.agentName, via };
-      const dup = entry.citedBy.some(
-        (c) => c.stepId === citation.stepId && c.via === citation.via
-      );
-      if (!dup) entry.citedBy.push(citation);
+      const perStep = entry.citedBy.find((c) => c.stepId === s.stepId);
+      if (perStep) {
+        if (!perStep.vias.includes(via)) perStep.vias.push(via);
+      } else {
+        entry.citedBy.push({ stepId: s.stepId, label: s.label, agentName: s.agentName, vias: [via] });
+      }
     }
   });
   return [...byKey.values()].sort(
     (a, b) => b.citedBy.length - a.citedBy.length || a.firstStepIndex - b.firstStepIndex
   );
+}
+
+/** Step labels double as full instructions in some authored workflows —
+ * display surfaces shorten them; the ledger keeps the full text. */
+export function shortenLabel(label: string, max = 48): string {
+  return label.length <= max ? label : `${label.slice(0, max - 1).trimEnd()}…`;
+}
+
+const VIA_DISPLAY: Record<CitationVia, string> = {
+  output: "prose",
+  "tool-result": "tool-result",
+  "tool-args": "tool-args",
+};
+
+/** One compact “who cited this” string shared by the run panel and the
+ * Markdown export — single source so the two never drift. */
+export function formatCiters(e: EvidenceSource): string {
+  return e.citedBy
+    .map((c) => {
+      const viaTxt = c.vias.map((v) => VIA_DISPLAY[v]).join(" + ");
+      const needsVia = !(c.vias.length === 1 && c.vias[0] === "output");
+      return `“${shortenLabel(c.label)}” · ${c.agentName}${needsVia ? ` (${viaTxt})` : ""}`;
+    })
+    .join(", ");
 }
