@@ -4787,3 +4787,27 @@ Verification result: PASS
 Open risks: (1) the Google Drive link is unreachable from the sandbox (no Google auth) — worked from the paste alone; if the drive file holds more context, paste it inline. (2) 0ms web-tool rows need a live repro (Clock 0ms is legitimate). (3) slugify truncates long names (pre-existing; uniqueness now carried by runNNN). (4) ordinals renumber if old runs get pruned (cosmetic).
 Blockers: none
 Next recommended action: r178 — (1) FIRST read any user report (did the next scheduled Continuous-Research run ride out its network window? new honest labels + versioned exports should be visible in the fresh run); (2) rollback guard; (3) the research backlog's top item: per-run failure budget + resume-from-failed-step (checkpoint/resume of partial runs) — the highest-value user-facing piece; alternatively investigate the 0ms tool rows with a live run. Keep rotating.
+---
+Task ID: 424432 — r178 (backlog round)
+Agent: main (platform development — hourly dev round)
+Task: r177 handoff queue — research backlog top item: per-run failure budget / park-and-resume for transient network deaths (resume-from-failed-step itself already existed since r72; the genuine gap found by code-reading was that failRun parked ONLY on rate-limit).
+
+Work Log:
+- Guards: lineage OK (d8524dbac ancestor; 17cd65c1b = sandbox worklog-only auto-commit on top), root 200, no new user report.
+- Gap analysis (4 reads of workflow-runner.ts): r158 park-and-resume covered kind="rate-limit" only. The user's r177 failure ("Error: network error" → run dead) reached failRun with kind="network" → terminal error, human required. r158's own doctrine ("congestion, not breakage") applies to network/timeout windows too — the r19 engine self-heal (2 retries) and r177 in-tool ladder both outlive only seconds-long blips.
+- SHIPPED: (1) src/lib/park-policy.ts (NEW, pure, browser-dep-free): budgets + jittered delay curves + resolvePark() decision fn. Network parks: 3 × (2m→4m→8m ±20%) = 14m of honest waiting vs rate-limit's 4 × (5m→10m→20m→30m) = 65m — blips are shorter than quota windows; still-dead-after-14m deserves a human, not a 12th silent retry. (2) WorkflowRun.netParkCount — separate budget from parkCount (mirrors r158's "not resumeCount" reasoning: a flaky-gateway deep run can plausibly need both). (3) failRun: park branch generalized via resolvePark (network/timeout engage; stallOwned opts exempts the r72 watchdog path — it schedules its own bounded auto-resume, parking there would double-schedule and silently spend network budget); honest per-kind park annotation in error.message; cooldown chip reuse unchanged. (4) scheduleRateLimitResume → scheduleParkResume with parkKind param; kind-honest toasts ("parked on a network failure" vs "parked on a 429"); relay-rotation resume (forceServer) + re-arm + schedule-de-dup machinery byte-identical for both kinds. (5) All 4 stall-path failRun call sites pass { stallOwned: true } — r72's "budget exhausted → manual-resume card" contract preserved exactly.
+- Verification: K-series NEW scripts/qa-park-policy.ts 20/20 (engagement, stall exemption, separate bounded budgets, non-transient kinds never park, curve escalation/caps/jitter bounds, rate-limit curve unchanged); F-series browser regression 8/8; eslint 0 (park-policy.ts, workflow-runner.ts, types.ts); tsc src-scoped 0; root 200; snapshot pushed 3e5815aa6.
+
+Stage Summary:
+- A transient network death no longer leaves a run dead-waiting-for-a-human: it parks with a visible countdown, waits out the window (2/4/8m), and auto-resumes through relay rotation — the same doctrine the user's 429 parks have ridden out congestion waves with since r158. Quota and network budgets are separate, both bounded, and real breakage (auth/model/region) still goes straight to the recovery card.
+
+Round Handoff:
+Round ID: r179
+Task owner: main (platform dev)
+Scope completed: network/timeout park-and-resume (park-policy module + runner wiring + stall exemption); K-series 20/20 + F-series 8/8; snapshot pushed.
+User-visible changes: a run killed by a network blip now says "parked: network unreachable, auto-resume in ~Xm (network park N/3)" and comes back on its own through the relay lane; the 429 park behavior is unchanged.
+Verification steps: bun run scripts/qa-park-policy.ts → 20/20; node scripts/cdp-qa-chat-guard.mjs → 8/8; bunx eslint (3 changed files) → 0; tsc src-scoped → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) parks are live only while the tab is open (worker timers die with the tab — pre-existing r158 caveat; the headless lane keeps its own backoff). (2) timeout-kind parks: a chronically slow provider now costs up to 14m of parked waiting before the manual card — bounded, and each resume rotates lanes, but watch for user reports of "slow park loops". (3) the r177 open item remains: 0ms web-tool rows need a live repro. (4) backlog next: per-tool circuit breaker (P5) / "(cached)" telemetry on memoized calls (P6) from the r177 research.
+Blockers: none
+Next recommended action: r179 — (1) FIRST read any user report — the next scheduled Continuous-Research run is the live test of BOTH new ladders (r177 in-tool retry, r178 network parks); check its run row for honest park annotations. (2) rollback guard. (3) If no report: per-tool circuit breaker (fail-fast after N consecutive network failures per tool, module-level map, cooldown probe — research P5) or the 0ms tool-row live repro. Keep rotating.
