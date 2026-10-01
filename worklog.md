@@ -4482,3 +4482,27 @@ Verification result: PASS
 Open risks: import still replaces silently (no pre-import confirmation dialog — the r164 dirty-guard doctrine suggests one, deferred as scope for this round); workflow step deep-shape is only guarded at the object level (runner-level tolerance unverified).
 Blockers: none
 Next recommended action: r170 — rotate: (1) FIRST read any user report cross-evidenced against /api/gateway/pulse, or (2) continue the settings audit — local-models.tsx (930 lines, last unaudited settings surface), or (3) consider the import-confirmation dialog (r164 dirty-guard parity) if user reports touch data loss. Keep rotating.
+---
+Task ID: 424432 — r170
+Agent: main (platform development — hourly dev round)
+Task: settings audit rotation → local-models.tsx (930 lines, the last unaudited settings surface). No user report attached; pulse unchanged (8 events, no new 429s in ~3h — recent runs succeeded or parked).
+
+Work Log:
+- Full audit of the WebGPU panel: supersede guards (loadRunId/runId refs), honest GPU explainers (no-adapter / no-secure-context / SwiftShader / no-shader-f16), budget gating and the cache probe are all sound. One real honesty bug found: the playground rendered a "thinking…" spinner whenever an assistant bubble's content was empty — but three TERMINAL paths leave the last bubble empty (natural end with zero tokens, Stop before the first token, error before any tokens). Status left "generating" while the spinner spun forever — a lying UI.
+- SHIPPED (local-models.tsx, two layers): (1) finalizeEmptyAssistant(note) called on each terminal path — "— no tokens returned —" (natural end), "— stopped before any tokens —" (stopGenerate, deferred 80ms past the stream loop's last gasp so a final in-flight chunk can't land after the note), "— generation failed before any tokens —" (catch); (2) a render-level guard — the spinner now shows ONLY while isLast && status === "generating"; any other empty bubble renders an italic "— empty reply —". No code path can spin forever anymore, including unforeseen ones.
+- QA (EF-series smoke, scripts/cdp-qa-local-models.mjs): 5/5 — headless chrome's missing WebGPU is a genuine fixture for the degraded paths: the panel stated "No WebGPU adapter" (honest device truth), rendered 5 CPU-friendly catalog rows with the budget line, the size-tier radiogroup toggles aria-checked correctly, 5 HF field examples render. The engine itself cannot load headless (no GPU) — the spinner fix is verified by tsc + the render guard's simplicity (single conditional, all three finalize call sites reviewed).
+- tsc 0; eslint 0; root 200.
+
+Stage Summary:
+- The local playground can no longer lie about still-thinking: terminal empty bubbles now carry an honest reason, and the render guard makes perpetual spinners structurally impossible. Settings audit rotation complete — all four surfaces (provider-gallery, model-relay, settings-view, local-models) have now been audited this cycle.
+
+Round Handoff:
+Round ID: r171
+Task owner: main (platform dev)
+Scope completed: local-models terminal-empty-bubble honesty fix (finalize notes + render guard); EF-series 5/5 smoke; snapshot pushed.
+User-visible changes: stopping a local-model reply before the first token (or a zero-token/failed generation) now shows why instead of a spinner that never resolves.
+Verification steps: node scripts/cdp-qa-local-models.mjs → 5/5; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: the spinner-fix E2E could not run against a real WebGPU engine in headless (no adapter) — the three finalize paths are code-reviewed + render-guarded but not live-fired; delete-cached-weights still has no confirmation (re-downloadable data, deferred deliberately); settings cycle complete → next round should rotate OFF settings (workflows/chat/agents surfaces or the r169-deferred import-confirmation dialog).
+Blockers: none
+Next recommended action: r171 — rotate OFF settings (cycle complete): (1) FIRST read any user report cross-evidenced against /api/gateway/pulse, (2) audit the next-largest unaudited surface (workflows or chat view components — check sizes first), or (3) ship the import-confirmation dialog from r169's deferred risk. Keep rotating.

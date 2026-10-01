@@ -349,6 +349,7 @@ export function LocalModelsPanel() {
         });
       }
       if (runIdRef.current !== runId) return;
+      if (tokCount === 0) finalizeEmptyAssistant("— no tokens returned —");
       if (firstTok !== null && tokCount > 1) {
         const secs = (performance.now() - firstTok) / 1000;
         if (secs > 0) setToksPerSec(tokCount / secs);
@@ -356,6 +357,7 @@ export function LocalModelsPanel() {
       setStatus("ready");
     } catch (err) {
       if (runIdRef.current !== runId) return;
+      finalizeEmptyAssistant("— generation failed before any tokens —");
       const msg = err instanceof Error ? err.message : "Generation failed";
       setErrorText(msg);
       setStatus("error");
@@ -370,6 +372,27 @@ export function LocalModelsPanel() {
       /* ignore */
     }
     setStatus("ready");
+    // Defer past the stream loop's last gasp — it may still append one final
+    // chunk after the runId bump (r170: stopped runs used to leave the
+    // "thinking…" spinner spinning forever on an empty bubble).
+    window.setTimeout(
+      () => finalizeEmptyAssistant("— stopped before any tokens —"),
+      80
+    );
+  }
+
+  // r170: a terminal EMPTY assistant bubble must not read as "still thinking".
+  // Patch the note AFTER the fact; the render guard below is the fallback.
+  function finalizeEmptyAssistant(note: string) {
+    setTranscript((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last?.role === "assistant" && last.content === "") {
+        next[next.length - 1] = { ...last, content: note };
+      }
+      return next;
+    });
   }
 
   async function clearChat() {
@@ -638,24 +661,34 @@ export function LocalModelsPanel() {
             )}
             {transcript.length > 0 ? (
               <div className="max-h-96 space-y-2.5 overflow-y-auto rounded-lg border bg-muted/20 p-3 pr-1 scrollbar-thin scrollbar-thumb-violet-500/30">
-                {transcript.map((m, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed",
-                      m.role === "user"
-                        ? "ml-auto bg-violet-500/15 text-foreground"
-                        : "bg-background text-foreground"
-                    )}
-                  >
-                    {m.content || (
-                      <span className="inline-flex items-center gap-1 text-muted-foreground">
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                        thinking…
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {transcript.map((m, i) => {
+                  const isLast = i === transcript.length - 1;
+                  return (
+                    <div
+                      key={i}
+                      className={cn(
+                        "max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed",
+                        m.role === "user"
+                          ? "ml-auto bg-violet-500/15 text-foreground"
+                          : "bg-background text-foreground"
+                      )}
+                    >
+                      {m.content ||
+                        (isLast && status === "generating" ? (
+                          <span className="inline-flex items-center gap-1 text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                            thinking…
+                          </span>
+                        ) : (
+                          // r170: an empty bubble is a TERMINAL state unless a
+                          // generation is actually in flight — never spin forever.
+                          <span className="italic text-muted-foreground">
+                            — empty reply —
+                          </span>
+                        ))}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               engineActive && (
