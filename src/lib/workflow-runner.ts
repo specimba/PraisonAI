@@ -13,6 +13,7 @@ import {
 } from "@/lib/gateway-cadence";
 import { maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
+import { maxParks, parkDelayMs, resolvePark, type ParkKind } from "@/lib/park-policy";
 import { resolveLlm } from "@/lib/llm-config";
 import { decide, SYSTEMONE_GATE_CONFIDENCE } from "@/lib/systemone";
 import { buildRelayWire, recordRelayHopResult, type RelayTaskFit, type RelayWireHop } from "@/lib/relay";
@@ -104,13 +105,13 @@ const MAX_AUTO_RESUMES = 3;
 // (pulse-verified: the global free gateway saturates in on-the-hour bursts).
 // Each delay is ±20% jittered so concurrent parked runs don't re-dial in
 // lockstep with the very cron wave they're hiding from.
-const MAX_RATE_LIMIT_PARKS = 4;
-const PARK_BASE_MS = 5 * 60_000;
-const PARK_CAP_MS = 30 * 60_000;
+// r178: park curves + budgets for BOTH kinds moved to src/lib/park-policy.ts
+// (pure, unit-testable); network/timeout deaths now park too — the user's
+// r177 report died at "Error: network error" and stayed dead, because the
+// r158 park covered quota congestion only. PARK_REARM_MS/MAX_PARK_REARMS
+// below are re-arm mechanics shared by both kinds.
 const PARK_REARM_MS = 60_000;
 const MAX_PARK_REARMS = 5;
-const parkDelayMs = (parkIndex: number) =>
-  jitteredBackoff(Math.min(PARK_BASE_MS * 2 ** parkIndex, PARK_CAP_MS));
 const STALL_CHECK_MS = 15_000;
 const STALL_WATCHDOG_KEY = "praison-stall-watchdog";
 let stallWatchdog: ReturnType<typeof setInterval> | null = null;
@@ -214,10 +215,12 @@ function scheduleAutoResume(
 }
 
 /**
- * r158: long-delay sibling of scheduleAutoResume for rate-limit parks.
- * Re-enters the run through the normal resume path after parkDelayMs(parkIndex)
- * — 5m → 10m → 20m — long enough to outlive the gateway's quota window that
- * the 65s self-heal ladder cannot. Differences from the stall path, per the
+ * r158: long-delay sibling of scheduleAutoResume for parks (rate-limit; r178
+ * adds the network/timeout sibling via `parkKind`).
+ * Re-enters the run through the normal resume path after parkDelayMs(parkKind,
+ * parkIndex) — 5m → 10m → 20m → 30m for quota parks, 2m → 4m → 8m for network
+ * parks — long enough to outlive the failure window that the 65s self-heal
+ * ladder cannot. Differences from the stall path, per the
  * adversarial design review:
  *  - guards run BEFORE any toast (a park whose run row was evicted/deleted
  *    must die silently, never announce a resume that can't happen);
@@ -236,20 +239,21 @@ function scheduleAutoResume(
  * HMR caveat: dev reloads drop pending worker timers (same class as the stall
  * timer) — a dev-only park loss, accepted.
  */
-function scheduleRateLimitResume(
+function scheduleParkResume(
   workflowId: string,
   runId: string,
   fromStepIndex: number,
   parkIndex: number,
   originSource: "manual" | "scheduled",
+  parkKind: ParkKind,
   rearms = 0
 ): void {
   const reArm = (extraDelay: number, nextRearms: number) => {
     if (!setWorkerTimeout(`park-resume-${runId}`, extraDelay, () =>
-      scheduleRateLimitResume(workflowId, runId, fromStepIndex, parkIndex, originSource, nextRearms)
+      scheduleParkResume(workflowId, runId, fromStepIndex, parkIndex, originSource, parkKind, nextRearms)
     )) {
       setTimeout(
-        () => scheduleRateLimitResume(workflowId, runId, fromStepIndex, parkIndex, originSource, nextRearms),
+        () => scheduleParkResume(workflowId, runId, fromStepIndex, parkIndex, originSource, parkKind, nextRearms),
         extraDelay
       );
     }
@@ -275,10 +279,15 @@ function scheduleRateLimitResume(
     // "Retry via relay" button — triggered by congestion history instead of a
     // human noticing. If the whole chain is saturated the park ladder simply
     // continues with its growing waits.
-    toast("Gateway congested — resuming parked run via relay rotation", {
-      icon: "⏳",
-      description: `"${run.steps[fromStepIndex]?.label ?? "Failed step"}" was parked on a 429 — resuming "${wf.name}" from there through the model relay lane (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS}, completed steps preserved).`,
-    });
+    toast(
+      parkKind === "network"
+        ? "Network unreachable — resuming parked run via relay rotation"
+        : "Gateway congested — resuming parked run via relay rotation",
+      {
+        icon: "⏳",
+        description: `"${run.steps[fromStepIndex]?.label ?? "Failed step"}" was parked on a ${parkKind === "network" ? "network failure" : "429"} — resuming "${wf.name}" from there through the model relay lane (park ${parkIndex + 1}/${maxParks(parkKind)}, completed steps preserved).`,
+      }
+    );
     const resumed = executeWorkflowRun({
       workflow: wf,
       task: run.task,
@@ -311,8 +320,8 @@ function scheduleRateLimitResume(
         console.error("[workflow-runner] park-resume failed", err);
       });
   };
-  if (!setWorkerTimeout(`park-resume-${runId}`, parkDelayMs(parkIndex), fire)) {
-    setTimeout(fire, parkDelayMs(parkIndex));
+  if (!setWorkerTimeout(`park-resume-${runId}`, parkDelayMs(parkKind, parkIndex), fire)) {
+    setTimeout(fire, parkDelayMs(parkKind, parkIndex));
   }
 }
 
@@ -835,8 +844,16 @@ export async function executeWorkflowRun(
     onSettled?.(runId, status);
   };
 
-  /** Build the full RunErrorInfo for a failed step and finish the run. */
-  const failRun = (fallbackIndex: number, err: Error) => {
+  /**
+   * Build the full RunErrorInfo for a failed step and finish the run.
+   * `opts.stallOwned` marks the r72 watchdog path — it schedules its own
+   * bounded auto-resume, so the r178 park ladder must not also engage.
+   */
+  const failRun = (
+    fallbackIndex: number,
+    err: Error,
+    opts?: { stallOwned?: boolean }
+  ) => {
     // v23: a rejection reason that is not an Error (undefined, a string) used
     // to leak a literal `undefined` into the error row and the dev overlay.
     const safeMessage = err instanceof Error ? err.message : String(err ?? "unknown error");
@@ -867,27 +884,32 @@ export async function executeWorkflowRun(
     // back once the quota window has passed. NOTE the ordering: the park note
     // must be appended to info BEFORE finish() — finish copies the object into
     // the store row, so later edits never reach the UI.
-    let parkIndex: number | null = null;
-    if (kind === "rate-limit") {
-      const liveRun = useWorkflowsStore
-        .getState()
-        .workflows.find((w) => w.id === wf.id)
-        ?.runs.find((r) => r.id === runId);
-      const parks = liveRun?.parkCount ?? 0;
-      if (parks < MAX_RATE_LIMIT_PARKS) parkIndex = parks;
-    }
-    if (parkIndex !== null) {
-      const waitMs = parkDelayMs(parkIndex);
-      info.message += ` — parked: gateway saturated, auto-resume in ~${Math.max(1, Math.round(waitMs / 60_000))}m (park ${parkIndex + 1}/${MAX_RATE_LIMIT_PARKS}; resume rotates to the relay lane)`;
-      patchRun({ parkCount: parkIndex + 1 });
+    // r178: park decision now covers BOTH transient families via park-policy.
+    const liveRun = useWorkflowsStore
+      .getState()
+      .workflows.find((w) => w.id === wf.id)
+      ?.runs.find((r) => r.id === runId);
+    const parkKind = resolvePark(
+      kind,
+      { parkCount: liveRun?.parkCount, netParkCount: liveRun?.netParkCount },
+      opts
+    );
+    if (parkKind !== null) {
+      const parkIndex = parkKind === "network" ? (liveRun?.netParkCount ?? 0) : (liveRun?.parkCount ?? 0);
+      const waitMs = parkDelayMs(parkKind, parkIndex);
+      info.message +=
+        parkKind === "network"
+          ? ` — parked: network unreachable, auto-resume in ~${Math.max(1, Math.round(waitMs / 60_000))}m (network park ${parkIndex + 1}/${maxParks(parkKind)}; completed steps preserved; resume rotates to the relay lane)`
+          : ` — parked: gateway saturated, auto-resume in ~${Math.max(1, Math.round(waitMs / 60_000))}m (park ${parkIndex + 1}/${maxParks(parkKind)}; resume rotates to the relay lane)`;
+      patchRun(parkKind === "network" ? { netParkCount: parkIndex + 1 } : { parkCount: parkIndex + 1 });
       // Live countdown on the failed step row — reuses the r128 "⏳ Cooldown"
       // chip machinery so the park wait is visible, not a silent hang.
       patchRunStep(step.stepId, { backoffUntil: Date.now() + waitMs, backoffKind: "cooldown" });
     }
     stopRemaining(failedIndex);
     finish("error", `Step "${step.label}" failed`, info);
-    if (parkIndex !== null) {
-      scheduleRateLimitResume(wf.id, runId, failedIndex, parkIndex, source);
+    if (parkKind !== null) {
+      scheduleParkResume(wf.id, runId, failedIndex, parkKind === "network" ? (liveRun?.netParkCount ?? 0) : (liveRun?.parkCount ?? 0), source, parkKind);
     }
   };
 
@@ -1368,7 +1390,8 @@ export async function executeWorkflowRun(
                     i,
                     new Error(
                       `Step timed out — no model output for over ${stallTimeoutLabel()}. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
-                    )
+                    ),
+                    { stallOwned: true } // r178: watchdog path resumes itself — park ladder must not double-schedule
                   );
                   scheduleAutoResume(wf.id, runId, i, stalledRun?.resumeCount ?? 0);
                   return runId;
@@ -1377,7 +1400,8 @@ export async function executeWorkflowRun(
                   i,
                   new Error(
                     `Step timed out — no model output for over ${stallTimeoutLabel()}. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here.`
-                  )
+                  ),
+                  { stallOwned: true } // r72 contract: budget exhausted → manual-resume card, not more machine waiting
                 );
                 return runId;
               }
@@ -1460,7 +1484,8 @@ export async function executeWorkflowRun(
                 i,
                 new Error(
                   `Step timed out — no model output for over ${stallTimeoutLabel()}. Auto-resuming (attempt ${(stalledRun?.resumeCount ?? 0) + 1}/${MAX_AUTO_RESUMES})…`
-                )
+                ),
+                { stallOwned: true } // r178: watchdog path resumes itself — park ladder must not double-schedule
               );
               scheduleAutoResume(wf.id, runId, i, stalledRun?.resumeCount ?? 0);
               return runId;
@@ -1469,7 +1494,8 @@ export async function executeWorkflowRun(
               i,
               new Error(
                 `Step timed out — no model output for over ${stallTimeoutLabel()}. The stream stalled (background tab throttling or a dropped connection). Every completed step is preserved — resume from here.`
-              )
+              ),
+              { stallOwned: true } // r72 contract: budget exhausted → manual-resume card, not more machine waiting
             );
             return runId;
           }

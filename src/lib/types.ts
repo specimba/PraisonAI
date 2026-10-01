@@ -326,6 +326,12 @@ export interface WorkflowRun {
    * resumeCount — stalls and manual resumes spend that one; parks spend this).
    */
   parkCount?: number;
+  /**
+   * r178: how many network/timeout parks this run used — its own budget,
+   * separate from parkCount (quota parks), so a flaky-gateway deep run can
+   * plausibly need both. 2m → 4m → 8m waits (see src/lib/park-policy.ts).
+   */
+  netParkCount?: number;
   /** Chronological log of LLM calls made during this run (capped, oldest-dropped). */
   callLog?: RunCallLogEntry[];
   /** Evolution Layer (r68): novelty % vs this workflow's recent done runs (0-100; <35 = stall). */
