@@ -4432,3 +4432,29 @@ Verification result: PASS
 Open risks: the user's pipeline was actively 429ing at round start — expect a park/backoff report; r142 real-world validation rides on the same report; record counts only server-relayed dials (browser-direct keys invisible — unchanged scope).
 Blockers: none
 Next recommended action: r167 — rotate: (1) FIRST read any user report of this run cross-evidenced against /api/gateway/pulse (park-chain + r142 confirmation), or (2) continue the settings audit (model-relay.tsx next), or (3) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r168
+Agent: main (platform development — hourly dev round)
+Task: r167 orphan recovery + verification-gate repair. The 16:23 cron round shipped the model-relay reorder-pin fix and its QA harness but died before verification/logging — commit a81d049df (cron auto-commit at 08:28Z) captured mid-work: fix + red harness, no r167 worklog section. This round: verify the orphan honestly, root-cause why its harness was red, leave a green gate.
+
+Work Log:
+- Round start evidence: /api/gateway/pulse held 8 events/24h — the 4 old model:"" rows plus 4 NEW rows recorded as "auto" (bursts ~07:38–07:39Z and ~08:01–08:02Z). The r166 attribution fix is CONFIRMED LIVE on real traffic. No user report attached this round; per handoff, rotated to the settings audit.
+- Discovered the orphan: a81d049df contains the model-relay.tsx reorder fix (59 lines) + scripts/cdp-qa-relay-reorder.mjs + live pulse json; worklog had no r167 section; tree clean.
+- Verified the product fix directly: tsc 0, eslint 0; the fix logic (orderIndex/orderCount from the filtered non-auto list) is correct in both auto-present and auto-absent chains.
+- Ran the orphan's QA: 1/7 — and root-caused the red: the harness hardcoded a 6-row vyce-only chain. Reality: DEFAULT_SETTINGS carries PRESEED_PROVIDER_KEYS (r18/r30 vault preseed: vyce + aihubmix + pollinations ALL keyed), so buildRelayChain's keyed-only contract yields 19 hops on a fresh profile. The UI is honest — no-key hops never render; the card's "skipped automatically" line is true at provider level. Only the harness assumptions were wrong.
+- SHIPPED (scripts/cdp-qa-relay-reorder.mjs, rebuilt): registry-robust structural invariants on the RENDERED rows — pin positions via nth() indexing, full-permutation persistence check (len === n, unique), tail-pair swap assertion with a bijection guard on model fragments (same model id can exist under two providers), DOM order swap, listitem-scoped "Built-in engine" checks (bare getByText strict-matches the card description text too).
+- Result: 14/14 PASS on the real 19-hop chain. A-series (auto primary — the bug case): second-to-last CAN move down (was wrongly pinned), last down + first up pinned, swap persists and renders. B-series (custom primary): auto row present, pinned LAST, zero arrows, real hops free above it.
+
+Stage Summary:
+- The r167 reorder-pin fix is now verified (14/14) instead of orphaned; the QA gate asserts structure, not catalog identities, so future catalog edits cannot silently re-break it. Pulse attribution fix independently confirmed on live traffic.
+
+Round Handoff:
+Round ID: r169
+Task owner: main (platform dev)
+Scope completed: r167 orphan verified + QA harness rebuilt registry-robust (14/14); snapshot pushed.
+User-visible changes: none new this round (verification-gate round); the r167 fix itself — bottom pair of the fallback chain reorderable when the built-in engine is primary (the default fresh-profile setup) — is now proven.
+Verification steps: node scripts/cdp-qa-relay-reorder.mjs → 14/14; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: relayOrder full-permutation writes (19 keys) go stale when the arena catalog changes — buildRelayChain already handles stale orders gracefully (listed keys by index, rest default, demoted always sink — r25 doctrine); QA touches only client-side localStorage seeds, no live server data.
+Blockers: none
+Next recommended action: r169 — rotate: (1) FIRST read any user report cross-evidenced against /api/gateway/pulse (8 real events now on record, all auto-lane), or (2) continue the settings audit — settings-view.tsx (677 lines) is the largest unaudited surface, then local-models.tsx (930), or (3) root-cause FIRST anything the user brings. Keep rotating.
