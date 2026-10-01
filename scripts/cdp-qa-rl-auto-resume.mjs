@@ -102,16 +102,19 @@ async function main() {
       version: 0,
     };
 
-    // Deterministic seeding: addInitScript runs BEFORE any app script on every
-    // navigation. The original goto1/setItem/goto2 relay raced the app's own
-    // debounced persist — a losing race clobbers the fixture seed with the
-    // just-seeded defaults, H1 then times out with no fixture present. An
-    // init-script seed cannot lose that race (dbg-rl.mjs proved the product
-    // toasts at t≈3s; only the seeding relay was flaky).
+    // Deterministic ONE-SHOT seeding: addInitScript runs on every navigation,
+    // but the seed must apply only to the FIRST load — an HMR reload mid-run
+    // (concurrent dev edits) would otherwise re-seed over the flushed resumed
+    // state and the state assertions would read seed values while the toasts
+    // prove the resume happened. The sessionStorage guard makes the seed
+    // exactly-once per tab; beforeunload flushes pending debounced writes, so
+    // a reload rehydrates the RESUMED state, never the seed.
     // localStorage.clear() first: the real profile must not leak in (its due
     // schedules would fire REAL LLM runs mid-QA and pollute the assertions).
     await context.addInitScript(
       (s) => {
+        if (sessionStorage.getItem("__rlqa_seeded") === "1") return;
+        sessionStorage.setItem("__rlqa_seeded", "1");
         localStorage.clear();
         localStorage.setItem("praison-workflows", JSON.stringify(s));
       },
