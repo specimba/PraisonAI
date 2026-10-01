@@ -214,22 +214,57 @@ export interface RelayHealthEntry {
   lastError?: string;
   /** Soft failures (429s, capacity) are recorded but NEVER demote a hop. */
   soft?: boolean;
+  /** r187: dead = permanent-for-this-hop rejection (401 auth, 403 region /
+   * permission, account-tier paywall, maintenance). Demoted for hours, not
+   * minutes — re-dialing these burns a ladder rung on a corpse every turn
+   * (live evidence: the same tier/region/auth errors recurred across the
+   * user's turns at 02:15, 02:17 and 02:18). Absent on old entries → read
+   * as plain hard (short cooldown), so persisted localStorage stays valid. */
+  dead?: boolean;
 }
 
 /**
- * Hard vs soft failures (r25, LiteLLM allowed_fails_policy doctrine):
- * network death / 5xx / deadlines demote a lane; 429s and other 4xx are
- * capacity noise and must not sink a healthy provider.
+ * Failure taxonomy (r187, tightening r25's LiteLLM allowed_fails_policy):
+ *  - SOFT  (429 / 408 / rate-limit / quota): capacity noise — recorded, NEVER
+ *          demotes a hop. A healthy provider having a busy minute must keep
+ *          its place in the chain.
+ *  - HARD  (network, 5xx, everything unmatched): demotes for the short
+ *          cooldown — transient enough to re-try soon.
+ *  - DEAD  (isDeadlyRelayFailure — 401 auth, 403 region/permission,
+ *          tier paywall, maintenance): demotes for HOURS. These errors mean
+ *          the hop cannot answer no matter how many times we re-dial; the
+ *          r25 regex treated 401/403 as SOFT (matched by its 4xx class),
+ *          so dead hops were re-dialed every single turn.
  */
+const SOFT_RE = /\b429\b|\b408\b|rate.?limit|quota|too many requests|slow down/i;
+const DEADLY_RE =
+  /\b401\b|\b403\b|authentication|unauthorized|access denied|not available in your region|region.?block|upgrade your account|requires?.{0,24}(lite|pro|max|tier|plan)|maintenance|invalid.{0,16}key|check your (api )?key/i;
+const AUTH_RE = /\b401\b|authentication|unauthorized|invalid.{0,16}key|check your (api )?key/i;
+
+/** Capacity noise — the hop is fine, the lane is busy. Never demotes. */
+export function isSoftRelayFailure(error?: string): boolean {
+  return !!error && SOFT_RE.test(error);
+}
+
+/** Permanent-for-this-hop rejection (auth / region / tier / maintenance).
+ * These hops are dead until their cause changes — hours, not minutes. */
+export function isDeadlyRelayFailure(error?: string): boolean {
+  if (!error || isSoftRelayFailure(error)) return false;
+  return DEADLY_RE.test(error);
+}
+
 export function isHardRelayFailure(error?: string): boolean {
   if (!error) return true;
-  return !/\b429\b|rate.?limit|quota|too many requests|\b4(?:0[13578]|1[02-9])\b/i.test(error);
+  return !SOFT_RE.test(error);
 }
 
 type RelayHealth = Record<string, RelayHealthEntry>;
 
-/** Cooldown window: a hop that failed this recently is demoted in the chain. */
+/** Cooldown windows: a hard-failed hop is demoted this recently; a DEAD hop
+ * (auth/region/tier) is demoted for hours — re-dialing it sooner just burns
+ * a ladder rung on a corpse (r187). */
 const HEALTH_COOLDOWN_MS = 5 * 60_000;
+const DEAD_COOLDOWN_MS = 6 * 60 * 60_000;
 
 function loadHealth(): RelayHealth {
   try {
@@ -258,10 +293,12 @@ export function recordRelayHopResult(key: string, ok: boolean, error?: string): 
     e.lastOkAt = Date.now();
     e.lastError = undefined;
     e.soft = false;
+    e.dead = false; // r187: a success proves the hop lives — rejoin the chain
   } else {
     e.fail += 1;
     e.lastFailAt = Date.now();
-    e.soft = !isHardRelayFailure(error);
+    e.soft = isSoftRelayFailure(error);
+    e.dead = isDeadlyRelayFailure(error);
     if (error) e.lastError = error.slice(0, 160);
     // OrcaRouter rate limits are WORKSPACE-wide (all keys share one bucket —
     // docs.orcarouter.ai/operations/rate-limits): one lane's 429 means every
@@ -274,6 +311,24 @@ export function recordRelayHopResult(key: string, ok: boolean, error?: string): 
             lastFailAt: Date.now(),
             soft: true,
             lastError: "workspace-wide rate limit",
+          };
+        }
+      }
+    }
+    // r187: an AUTH-class death (401 / rejected key) means EVERY hop sharing
+    // that provider's key is equally dead — the key travels with the request,
+    // not the model. Stamp the whole provider family so the ladder skips the
+    // corpse instead of re-learning it one hop at a time.
+    if (e.dead && error && AUTH_RE.test(error) && key.includes("::")) {
+      const pid = key.slice(0, key.indexOf("::"));
+      for (const k of Object.keys(h)) {
+        if (k.startsWith(`${pid}::`) && k !== key) {
+          h[k] = {
+            ...(h[k] ?? { ok: 0, fail: 0 }),
+            lastFailAt: Date.now(),
+            soft: false,
+            dead: true,
+            lastError: "shared key rejected (auth)",
           };
         }
       }
@@ -312,9 +367,13 @@ export function relayHopBadge(
 ): RelayHealthBadge | undefined {
   const entry = (snapshot ?? loadHealth())[hopKey(providerId, model)];
   if (!entry || (entry.ok === 0 && entry.fail === 0)) return undefined;
+  const windowMs = entry.dead ? DEAD_COOLDOWN_MS : HEALTH_COOLDOWN_MS;
   const failedRecently =
     entry.lastFailAt !== undefined &&
-    Date.now() - entry.lastFailAt < HEALTH_COOLDOWN_MS;
+    Date.now() - entry.lastFailAt < windowMs;
+  if (failedRecently && entry.dead) {
+    return { label: "blocked", tone: "amber", detail: entry.lastError };
+  }
   if (failedRecently && !entry.soft) {
     return { label: "sick", tone: "amber", detail: entry.lastError };
   }
@@ -333,11 +392,13 @@ export function resetRelayHealth(): void {
   }
 }
 
-/** True when the hop failed inside the cooldown window. */
+/** True when the hop failed inside its cooldown window (hard = 5min,
+ * dead = 6h — r187). Soft failures never demote. */
 function recentlyFailed(entry: RelayHealthEntry | undefined): boolean {
   // Soft failures (429/capacity) never demote — only hard deaths do (r25).
   if (!entry?.lastFailAt || entry.soft) return false;
-  return Date.now() - entry.lastFailAt < HEALTH_COOLDOWN_MS;
+  const windowMs = entry.dead ? DEAD_COOLDOWN_MS : HEALTH_COOLDOWN_MS;
+  return Date.now() - entry.lastFailAt < windowMs;
 }
 
 // ─── Task fit heuristics ──────────────────────────────────────────────────────
