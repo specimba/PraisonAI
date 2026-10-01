@@ -4237,3 +4237,28 @@ Verification result: PASS
 Open risks: park→resume E2E unverified against a live 429 (next real failure is the test — check history chips + parkCount); parks die with the tab (documented; headless lane unaffected); gateway congestion remains external.
 Blockers: none
 Next recommended action: r159 — (1) if the user's pipeline ran again, read the new WHY chips + parkCount and confirm the park chain actually completes a run (if a parked resume re-fails with a NON-rate-limit kind, root-cause that); (2) else rotate to the never-measured radar view mount perf pass; (3) root-cause FIRST any new user report. Keep rotating.
+---
+Task ID: 424432 — r159
+Agent: main (platform development — hourly dev round)
+Task: r158 handoff — (2) the never-measured radar view mount perf pass (no new user report; the park-chain confirmation needs the user's next real run — client-side store, not readable from the sandbox).
+
+Work Log:
+- Start-of-round discipline: divergence clean, health 200 warm, no new user reports → rotation followed.
+- SHIPPED (scripts/cdp-qa-radar-mount.mjs, R-series): the radar view finally measured, mirroring r151's P-series calibration. R1 cold mount (dev-compile included, recorded not judged), R2 warm remount PASS gate (ΔScript<400ms, ≤2 longtasks), R3 DOM growth, R4 perceived mount, and a radar-NEW permanent gate — R5 tab-switch economy: with caches present, re-activating every tab must fire ZERO /api/radar|/api/tracker fetches (cache-first doctrine, didAuto one-shot per mount).
+- RESULTS: R2 warm = ΔScript 0.086s, 0 longtasks, sentinel 243ms — the CHEAPEST main view measured (workflows and ticker were heavier). R1 cold = 223ms, two 59/57ms longtasks (tracker grid first paint; dev compile included — benign). R5 = 0 refetches across 3 re-activations — HF/papers/GitHub cache-first behavior verified live, not just by reading the code. VERDICT: no fix warranted — the honest finding is that radar is healthy; no theatre fix invented. The R5 gate is the lasting asset (it's the only test guarding the cache-first tab doctrine; a future refactor that makes tabs refetch on every activation now fails QA instead of silently doubling egress).
+- HARNESS NOTES: Radix TabsTrigger exposes no value attribute — tabs matched by label text; r150's startsWith lesson applied to the Radar nav (bundled label+hint); atomic chrome on 9222, killed after.
+- VERIFIED: R-series 2/2 PASS; screenshot ops/qa/R-radar-mount.png; eslint 1 pre-existing-style warning (0 errors) on the new script; app 200; snapshot pushed (9ca12bb6a).
+
+Stage Summary:
+- All main views are now measured (chat legacy, workflows r151, ticker r150/r151, radar r159) with persisted gates. Radar closes the measurement sweep: cheapest mount, cache-first tabs proven live.
+
+Round Handoff:
+Round ID: r160
+Task owner: main (platform dev)
+Scope completed: radar mount measurement + R5 cache-first regression gate; finding = no fix warranted (healthy surface); snapshot pushed.
+User-visible changes: none (measurement round — the R5 gate protects tab-switch egress from future regressions).
+Verification steps: node scripts/cdp-qa-radar-mount.mjs → 2/2 PASS; eslint 0 errors; curl root → 200.
+Verification result: PASS
+Open risks: r142 real-world validation still pending; the user's pipeline park-chain (r158) is unverified until their next real 429 run — the r157 chips + parkCount will narrate it; R5 depends on localStorage caches existing in the QA profile (a wiped profile legitimately refetches once — the gate only asserts RE-activations).
+Blockers: none
+Next recommended action: r160 — rotate: (1) confirm the r158 park chain on the user's next real rate-limit run (read the r157 chips + parkCount off their next report), or (2) pick up a user-facing small feature / error-handling pass (e.g. the papers/GitHub tabs have no stale-cache TTL — a "synced Xm ago · refresh" affordance parity with the tracker strip), or (3) root-cause FIRST any user report. Keep rotating.
