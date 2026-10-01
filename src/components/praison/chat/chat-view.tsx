@@ -502,6 +502,19 @@ export function ChatView() {
           }
           return;
         }
+        // r176: an ERRORED turn must not auto-fire the queued follow-up into
+        // the same failure — during a congestion wave that burns a second
+        // attempt inside the same failure window (the exact r170 complaint).
+        // Hold it: the composer keeps the pending chip ("Send now" or the
+        // next successful turn flushes it).
+        if (settled === "error") {
+          if (queuedRef.current?.convId === convId) {
+            toast.warning("Reply failed — your queued message is still pending", {
+              description: "It was not auto-sent into the same error. Use “Send now” or reply again.",
+            });
+          }
+          return;
+        }
         // Hermes-style hygiene: fold new activity into the memory doc once the
         // threshold is crossed (silent background pass).
         if (settled === "done") void maybeAutoConsolidate(convId);
@@ -561,7 +574,9 @@ export function ChatView() {
 
   // ─── Regenerate the last assistant response ──────────────────────────
   const regenerate = React.useCallback(async () => {
-    if (streaming || !conversation) return;
+    // r176: sync-ref guard (parity with send) — a fast double-activation must
+    // not re-enter runTurn before the streaming state has re-rendered.
+    if (streamingRef.current || streaming || !conversation) return;
     const store = useConversationsStore.getState();
     const conv = store.conversations.find((c) => c.id === conversation.id);
     if (!conv) return;
@@ -704,7 +719,7 @@ export function ChatView() {
   // ─── Edit a user message and resend the turn from that point ─────────────
   const editAndResend = React.useCallback(
     async (msgId: string, newText: string) => {
-      if (streaming || !conversation) return;
+      if (streamingRef.current || streaming || !conversation) return;
       const store = useConversationsStore.getState();
       const conv = store.conversations.find((c) => c.id === conversation.id);
       if (!conv) return;
@@ -781,7 +796,7 @@ export function ChatView() {
   // ─── Re-run a past turn with a different agent ("Answer as …") ────────────
   const answerAs = React.useCallback(
     async (msgId: string, agentId: string) => {
-      if (streaming || !conversation) return;
+      if (streamingRef.current || streaming || !conversation) return;
       const store = useConversationsStore.getState();
       const conv = store.conversations.find((c) => c.id === conversation.id);
       if (!conv) return;
