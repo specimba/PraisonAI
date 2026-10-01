@@ -4312,3 +4312,27 @@ Verification result: PASS
 Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (the pulse now gives server-side congestion context to read alongside their report); pulse counts only server-relayed dials (browser-direct keys invisible — documented in chip tooltip); Turbopack stale-error caching may confuse future rounds (touch-to-recompile).
 Blockers: none
 Next recommended action: r162 — rotate: (1) read the user's next real run report WITH /api/gateway/pulse as cross-evidence (park-chain + r142 confirmation), or (2) if a real 429 lands in the record, verify the chip's live appearance end-to-end against it, or (3) pick a fresh surface (agents view is unmeasured/unaudited in a while; settings/providers UX) or (4) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r162
+Agent: main (platform development — hourly dev round)
+Task: r161 handoff — pulse record was empty at round start (no real 429 landed since r161; park-chain/r142 confirmations remain gated on the user's next runs). Rotated to the last unaudited surface: the agents view. Found and fixed a real honesty gap.
+
+Work Log:
+- Premise check: agents-view.tsx (grid, import/export with sanitization, a11y-complete cards) is solid — but its usage chip counted ONLY chat replies. The platform's actual workhorses — pipeline agents running 11-step workflows hourly — rendered "no chip at all", reading as idle. The roster lied by omission about who does the work.
+- SHIPPED (agents-view.tsx): AgentUsage gained steps — per-agent count of COMPLETED pipeline steps (status="done" only; errored steps deliberately don't count — honest completed work) merged with chat replies into one chip: "1 reply · 2 steps · last 4m ago". Zero-usage agents still render nothing (silence stays truthful). Data source: the client-side workflows store (runs[].steps[].agentId), same local-data doctrine as the replies map; lastAt = max(reply time, run finish/start).
+- QA (V-series, scripts/cdp-qa-agents-usage.mjs, 5/5 PASS): seeded localStorage (praison-agents v1 / praison-workflows / praison-conversations) in a throwaway profile — V1 2 done + 1 error step → "2 steps" (error excluded), no replies segment; V2 seeded one reply → "1 reply · 2 steps" merged in one chip; V2b second agent "1 step" only; V3 zero-usage agent → no chip. Screenshot ops/qa/V-agents-usage.png. tsc 0; eslint 0; root 200.
+- No conflict with existing gates (agents view is outside the R5 radar egress scope; the chip adds zero fetches — it derives from already-mounted stores).
+
+Stage Summary:
+- The agent roster now tells the truth about pipeline labor: step counts sit beside reply counts, so hourly pipeline agents finally show their real activity instead of looking idle.
+
+Round Handoff:
+Round ID: r163
+Task owner: main (platform dev)
+Scope completed: honest agent usage (chat replies + completed pipeline steps in one chip); V-series 5/5; snapshot pushed (5ac1cbbf5).
+User-visible changes: agent cards now show "N replies · M steps · last Xm ago" — pipeline workhorses no longer read as idle; errored steps excluded by design.
+Verification steps: node scripts/cdp-qa-agents-usage.mjs → 5/5; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (pulse record empty as of round start — check /api/gateway/pulse first next round); usage derives from client-side stores only (headless autopilot runs recorded there are included only if the tab that ran them persisted them).
+Blockers: none
+Next recommended action: r163 — rotate: (1) if /api/gateway/pulse shows real 429s, verify the chip's live appearance against the record and read the user's next report cross-evidenced (park-chain + r142), or (2) fresh surface: settings/providers UX or the test-agent-dialog error honesty (does the playground surface rate-limit kinds as honestly as chat does?), or (3) root-cause FIRST any user report. Keep rotating.
