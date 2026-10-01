@@ -10,6 +10,7 @@ import {
   type TurnSafetyAudit,
 } from "@/lib/tools-defs";
 import { guardPublicUrl } from "@/lib/server/url-guard";
+import { recordGateway429 } from "@/lib/server/gateway-pulse";
 import type { ToolCallInfo } from "@/lib/types";
 import {
   buildMaterialsDigest,
@@ -133,10 +134,21 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         if (!isAbort(err)) {
+          const kind = classifyUpstreamError(err);
+          // r161: the server relay is the one vantage point that sees every
+          // non-browser-direct completion dial. A 429 death here IS the
+          // shared-gateway congestion that parks runs (r158) — record it
+          // before the SSE error ships, so congestion stays observable
+          // (/api/gateway/pulse) after the fact and survives tab deaths.
+          // Scope note: rate-limit errors don't match the engine's
+          // transient-retry regex, so they pass straight through to this
+          // catch — every server-side 429 lands here exactly once per
+          // surfaced failure (both engine paths throw through this try).
+          if (kind === "rate-limit") recordGateway429(String(body.model ?? ""));
           send({
             type: "error",
             message: humanizeError(err),
-            kind: classifyUpstreamError(err),
+            kind,
           });
         }
       } finally {

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { ServerAutopilot } from "@/components/praison/workflows/server-autopilot";
+import { GatewayPulse } from "@/components/praison/workflows/gateway-pulse-chip";
 import {
   ChevronRight,
   Clock,
@@ -1189,6 +1190,7 @@ export function WorkflowsView() {
       </PageHeader>
 
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <GatewayPulse />
         <div className="mb-4">
           <ServerAutopilot />
         </div>
