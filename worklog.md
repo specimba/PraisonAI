@@ -4360,3 +4360,26 @@ Verification result: PASS
 Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (check /api/gateway/pulse first next round); playground retry shares the composer's send path but the stopped-turn state deliberately has NO retry (matches chat); the groq-route non-interception is unexplained (moot for this harness).
 Blockers: none
 Next recommended action: r164 — rotate: (1) if /api/gateway/pulse shows real 429s, read the user's next report cross-evidenced (park-chain + r142 confirmation), or (2) fresh surface: settings/providers UX audit, or the agent-form-dialog (temperature/maxIterations affordances), or (3) root-cause FIRST any user report. Keep rotating.
+---
+Task ID: 424432 — r164
+Agent: main (platform development — hourly dev round)
+Task: r163 handoff — pulse record still empty (no real 429s; park-chain/r142 remain gated on the user's runs). Rotated to the agent-form-dialog (the handoff's named fresh surface): found three real gaps — unexplained technical sliders, a UTF-16 maxLength that halved flag emoji, and silent loss of edits on Esc/backdrop.
+
+Work Log:
+- Contract check first: agent-engine consumes temperature (line 610) and maxIterations with honest grace (line 555: runs to maxIterations+3, cap 13; line 797 grace logic) — instructions IS the system prompt (test-agent-dialog:166); role/description are card identity. No engine mismatch to fix; the gaps are all in the form's affordances.
+- SHIPPED (agent-form-dialog.tsx): (1) helper text under both sliders — temperature ("Lower = focused and repeatable, higher = loose and creative") and max iterations ("Tool roundtrips per run — the engine may spend a couple of grace steps to land a final answer", which is TRUE per the engine's grace logic — the label no longer hides real behavior); (2) emoji field: maxLength 2→8 UTF-16 units and save now extracts the first grapheme via Intl.Segmenter (fallback [...t][0]) — "🇺🇸" used to save as half a flag "🇺"; (3) dirty guard: baseline snapshot seeded on every open, any drift arms a "Discard changes?" AlertDialog on Esc/backdrop/Cancel (Keep editing / Discard) — typed instructions are no longer silently lost; clean closes stay silent (no noise); (4) honest submit labels: "Save changes" vs "Create agent" (was the silly Save/Save ternary).
+- QA (X-series, scripts/cdp-qa-agent-form.mjs, 10/10 PASS): X1 both helper texts visible; X2a-d dirty guard end-to-end (Esc→confirm→Keep editing keeps form→Discard closes→store keeps ORIGINAL instructions — discard really discards); X3 clean Esc closes with no confirm; X4 flag emoji 🇺🇸 survives to the roster card; X5a/b honest submit labels in both modes. tsc 0; eslint 0; root 200. QA ran in a throwaway profile — no synthetic seeds to clean.
+
+Stage Summary:
+- The agent form now explains its two most technical knobs (including the engine's grace-iteration truth), never mangles flag/compound emoji, and never silently discards typed edits.
+
+Round Handoff:
+Round ID: r165
+Task owner: main (platform dev)
+Scope completed: agent-form-dialog affordances + honesty pass (slider helper text incl. engine grace truth, grapheme-safe emoji, dirty-close guard, honest submit labels); X-series 10/10; snapshot pushed (ad75a9040).
+User-visible changes: create/edit agent dialog explains temperature & max iterations, keeps 🇺🇸-style emoji intact, and asks before throwing away unsaved edits.
+Verification steps: node scripts/cdp-qa-agent-form.mjs → 10/10; tsc 0; eslint 0; curl root 200.
+Verification result: PASS
+Open risks: r142 real-world validation + r158 park-chain still gated on the user's next real runs (pulse record empty at r164 start — check /api/gateway/pulse first); dirty guard compares a JSON snapshot (tool toggle order changes read as dirty — honest, if occasionally over-eager).
+Blockers: none
+Next recommended action: r165 — rotate: (1) if /api/gateway/pulse shows real 429s, read the user's next report cross-evidenced (park-chain + r142), or (2) fresh surface: settings/providers UX audit (the other handoff candidate — provider-gallery is the largest unaudited file), or (3) root-cause FIRST any user report. Keep rotating.
