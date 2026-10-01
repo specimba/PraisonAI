@@ -673,11 +673,23 @@ export function ensureSeeded(): void {
   useWorkflowsStore.setState((s) => ({
     workflows: s.workflows.map((w) => ({
       ...w,
-      runs: w.runs.map((r) =>
-        r.status === "running"
-          ? { ...r, status: "stopped" as const, finishedAt: r.finishedAt ?? Date.now() }
-          : r
-      ),
+      runs: w.runs.map((r) => {
+        if (r.status !== "running") return r;
+        // r183 (directive item b): hydration after a mid-run close — never-ran
+        // steps become "skipped" (they never ran; pending ghosts lied), and a
+        // run that got real work done is honestly "partial", not "stopped".
+        const progressed = r.steps.some((st) => st.status === "done");
+        return {
+          ...r,
+          status: (progressed ? "partial" : "stopped") as WorkflowRun["status"],
+          finishedAt: r.finishedAt ?? Date.now(),
+          steps: r.steps.map((st) =>
+            st.status === "pending" || st.status === "running"
+              ? { ...st, status: "skipped" as const, output: st.output || "(not run — the app closed before reaching this step)" }
+              : st
+          ),
+        };
+      }),
     })),
   }));
 

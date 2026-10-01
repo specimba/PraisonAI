@@ -231,8 +231,10 @@ export interface WorkflowRunStep {
   toolCalls: ToolCallInfo[];
   /** "pending" = materialized but not yet reached by the engine loop (r80:
    * honest queue state — was previously all-"running" from t0, which made
-   * every future step lie "Running…" for many minutes on deep pipelines). */
-  status: "pending" | "running" | "done" | "error" | "stopped";
+   * every future step lie "Running…" for many minutes on deep pipelines).
+   * "skipped" (r183) = the run ended before reaching this step — it never
+   * ran, and the row must not read as if the user stopped it mid-flight. */
+  status: "pending" | "running" | "done" | "error" | "stopped" | "skipped";
   ms?: number;
   /** Mirrors the step definition kind (missing = "generate"). */
   kind?: StepKind;
@@ -323,11 +325,17 @@ export interface WorkflowRun {
   workflowId: string;
   workflowName: string;
   task: string;
-  status: "running" | "done" | "error" | "stopped";
+  /** r183 (directive item b): "partial" = ended early by user intent with
+   * completed steps preserved (zero-progress stops stay "stopped");
+   * "blocked" = parked by an external condition (gateway saturation /
+   * network, r178 park ladder) — not a failure of the pipeline itself, and
+   * it auto-resumes. Both keep run.error populated, so the recovery card
+   * and the r171 breaker streak still see them. */
+  status: "running" | "done" | "error" | "stopped" | "partial" | "blocked";
   startedAt: number;
   finishedAt?: number;
   steps: WorkflowRunStep[];
-  /** Populated when status = "error" — powers the recovery card. */
+  /** Populated when status = "error" or "blocked" — powers the recovery card. */
   error?: RunErrorInfo;
   /** How many times this run was resumed after a failure/stop. */
   resumeCount?: number;

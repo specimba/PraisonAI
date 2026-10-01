@@ -16,6 +16,7 @@ import {
   LifeBuoy,
   Lightbulb,
   Loader2,
+  Minus,
   Play,
   RotateCcw,
   ShieldCheck,
@@ -101,6 +102,7 @@ const STEP_BORDER: Record<WorkflowRunStep["status"], string> = {
   done: "border-l-emerald-500",
   error: "border-l-red-500",
   stopped: "border-l-amber-500",
+  skipped: "border-l-zinc-500",
 };
 
 // ── r130 call-log grouping ──────────────────────────────────────────────────
@@ -352,7 +354,11 @@ function RunRecoveryCard({
 
   const firstPending = run.steps.findIndex((s) => s.status !== "done");
   const hasOutput = run.steps.some((s) => s.output.trim().length > 0);
-  const stopped = run.status === "stopped";
+  // r183: partial (user stop with preserved progress) and blocked (parked by
+  // congestion/network) share the calm amber chrome — neither is a failure —
+  // but the header copy below distinguishes all three.
+  const stopped =
+    run.status === "stopped" || run.status === "partial" || run.status === "blocked";
   const settings = useSettingsStore((s) => s.settings);
   const preferRelay = settings.preferRelay === true;
   // r84: live recovery math. The frozen err.stepsDone/err.stepIndex snapshot was
@@ -415,7 +421,11 @@ function RunRecoveryCard({
         </span>
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-sm font-semibold leading-tight">
-            {stopped ? "Run stopped — resume anytime" : "Run failed — pick a recovery option"}
+            {run.status === "blocked"
+              ? "Run parked — auto-resume scheduled"
+              : stopped
+                ? "Run stopped — resume anytime"
+                : "Run failed — pick a recovery option"}
           </p>
           {err ? (
             <p className="text-xs leading-relaxed text-muted-foreground">
@@ -820,6 +830,10 @@ export function WorkflowRunPanel({
                   <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden />
                 ) : r.status === "error" ? (
                   <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />
+                ) : r.status === "partial" ? (
+                  <Minus className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+                ) : r.status === "blocked" ? (
+                  <Hourglass className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
                 ) : r.status === "stopped" ? (
                   <Ban className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
                 ) : (
@@ -845,6 +859,7 @@ export function WorkflowRunPanel({
                             s.status === "done" && "bg-emerald-500",
                             s.status === "error" && "bg-red-500",
                             s.status === "stopped" && "bg-zinc-400 dark:bg-zinc-600",
+                            s.status === "skipped" && "bg-zinc-400 dark:bg-zinc-600",
                             s.status === "running" && "animate-pulse bg-violet-400",
                             s.status === "pending" && "bg-zinc-300 dark:bg-zinc-700"
                           )}
@@ -1194,6 +1209,7 @@ export function WorkflowRunPanel({
                             s.status === "done" && "bg-emerald-500",
                             s.status === "error" && "bg-red-500",
                             s.status === "stopped" && "bg-zinc-400 dark:bg-zinc-600",
+                            s.status === "skipped" && "bg-zinc-400 dark:bg-zinc-600",
                             s.status === "running" && "animate-pulse bg-violet-400",
                             s.status === "pending" && "bg-zinc-300 dark:bg-zinc-700"
                           )}

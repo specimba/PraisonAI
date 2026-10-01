@@ -11,6 +11,7 @@ import {
   Check,
   Clock,
   Loader2,
+  Minus,
   Undo2,
   X,
 } from "lucide-react";
@@ -154,7 +155,12 @@ function groupRuns(workflows: Workflow[], serverRuns: ServerRunRow[]): Record<Co
         sortAt: run.startedAt ?? 0,
       };
       if (run.status === "running") cards.running.push(card);
-      else if (run.status === "error" || run.status === "stopped")
+      else if (
+        run.status === "error" ||
+        run.status === "stopped" ||
+        run.status === "partial" ||
+        run.status === "blocked"
+      )
         cards.attention.push(card);
       else cards.done.push(card);
     }
@@ -307,7 +313,7 @@ function RunCard({
           "border-violet-500/30 hover:border-violet-500/60 hover:shadow-violet-500/10",
         run.status === "error" &&
           "border-red-500/30 hover:border-red-500/60 hover:shadow-red-500/10",
-        run.status === "stopped" &&
+        (run.status === "stopped" || run.status === "partial" || run.status === "blocked") &&
           "border-amber-500/30 hover:border-amber-500/60 hover:shadow-amber-500/10",
         run.status === "done" &&
           "hover:border-emerald-500/60 hover:shadow-emerald-500/10"
@@ -318,6 +324,10 @@ function RunCard({
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-400" aria-hidden />
         ) : run.status === "error" ? (
           <X className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />
+        ) : run.status === "partial" ? (
+          <Minus className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+        ) : run.status === "blocked" ? (
+          <Clock className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
         ) : run.status === "stopped" ? (
           <Ban className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
         ) : (

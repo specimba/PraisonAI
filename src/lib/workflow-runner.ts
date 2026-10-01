@@ -656,8 +656,10 @@ export async function executeWorkflowRun(
       // r177 (user report): these rows read "Stopped" with empty output —
       // indistinguishable from a user stop and alarming in the timeline.
       // They never ran; say so honestly regardless of why the run ended.
+      // r183: dedicated "skipped" step status — never-ran rows must not
+      // share a status with steps the user actually stopped mid-flight.
       patchRunStep(steps[j].stepId, {
-        status: "stopped",
+        status: "skipped",
         output: "(not run — the run ended before reaching this step)",
       });
     }
@@ -673,6 +675,19 @@ export async function executeWorkflowRun(
   ) => {
     if (finalized) return;
     finalized = true;
+    // r183 (directive item b): a user stop that preserved completed steps is
+    // PARTIAL — distinct from a zero-progress stop (which keeps "stopped").
+    // The store row is authoritative (same lesson as the r119 novelty fix:
+    // the local `steps` closure misses patched statuses).
+    if (status === "stopped") {
+      const storeRow = useWorkflowsStore
+        .getState()
+        .workflows.find((w) => w.id === wf.id)
+        ?.runs.find((r) => r.id === runId);
+      if ((storeRow?.steps ?? steps).some((s) => s.status === "done")) {
+        status = "partial";
+      }
+    }
     // Evolution Layer (r68): novelty % vs this workflow's recent done runs —
     // best-effort; a scoring failure must never affect run finalization.
     let novelty: number | undefined;
@@ -762,12 +777,12 @@ export async function executeWorkflowRun(
       // Success resets the streak. A half-open probe = the user re-enabling.
       const live = useWorkflowsStore.getState().workflows.find((w) => w.id === wf.id);
       const sched = live?.schedule;
-      if (sched && (status === "done" || status === "error")) {
+      if (sched && (status === "done" || status === "error" || status === "blocked")) {
         if (status === "done" && (sched.failStreak || sched.autoResumeTrips || sched.autoResumeAt != null)) {
           // r171: success also refills the congestion budget — a healthy
           // pipeline always keeps its full 5 auto-resumes.
           useWorkflowsStore.getState().update(wf.id, { schedule: { ...sched, failStreak: 0, autoResumeTrips: 0, autoResumeAt: undefined } });
-        } else if (status === "error" && sched.enabled) {
+        } else if ((status === "error" || status === "blocked") && sched.enabled) {
           const streak = (sched.failStreak ?? 0) + 1;
           // r156 (user report: hourly pipeline 0/11 for 19h): a rate-limit
           // failure is the SHARED gateway saying "back off" — the whole lane
@@ -825,7 +840,7 @@ export async function executeWorkflowRun(
         }
       }
       if (status === "done") toast.success("Scheduled run finished", { icon: "⏰", description: `${wf.name} · ${steps.length} steps` });
-      else if (status === "error") {
+      else if (status === "error" || status === "blocked") {
         const sched2 = useWorkflowsStore.getState().workflows.find((w) => w.id === wf.id)?.schedule;
         // r171 honesty fix: the note used to hardcode "~10m/~30m" even when the
         // rate-limit ladder had armed a 2h backoff — read the real re-arm time.
@@ -835,13 +850,13 @@ export async function executeWorkflowRun(
             : sched2?.enabled && sched2.autoResumeAt != null
               ? ` — auto-resume in ~${Math.max(1, Math.round((sched2.autoResumeAt - Date.now()) / 60_000))}m`
               : "";
-        toast.error("Scheduled run failed", { icon: "⏰", description: errorInfo ? `${errorInfo.stepLabel} · ${ERROR_KIND_META[errorInfo.kind].label.toLowerCase()}${retryNote} — open the run to recover` : wf.name });
+        toast.error(status === "blocked" ? "Scheduled run parked — auto-resumes" : "Scheduled run failed", { icon: "⏰", description: errorInfo ? `${errorInfo.stepLabel} · ${ERROR_KIND_META[errorInfo.kind].label.toLowerCase()}${retryNote} — open the run to recover` : wf.name });
       }
     } else {
       if (status === "done") toast.success(toastMsg);
-      else if (status === "error" && errorInfo) {
+      else if ((status === "error" || status === "blocked") && errorInfo) {
         // Non-silent failure: tell the user WHERE to recover, not just that it broke.
-        toast.error(`Run failed at "${errorInfo.stepLabel}"`, {
+        toast.error(status === "blocked" ? `Run parked at "${errorInfo.stepLabel}"` : `Run failed at "${errorInfo.stepLabel}"`, {
           icon: "🛟",
           description: `${ERROR_KIND_META[errorInfo.kind].label} issue · ${errorInfo.stepsDone}/${steps.length} steps done — recovery options are in the run panel.`,
         });
@@ -913,7 +928,11 @@ export async function executeWorkflowRun(
       patchRunStep(step.stepId, { backoffUntil: Date.now() + waitMs, backoffKind: "cooldown" });
     }
     stopRemaining(failedIndex);
-    finish("error", `Step "${step.label}" failed`, info);
+    // r183 (directive item b): a parked run did not fail on its own merits —
+    // an external condition (gateway saturation / network) blocked it and it
+    // will auto-resume. Give it "blocked", not "error". The r171 streak gate
+    // below counts blocked runs too, so the congestion breaker still trips.
+    finish(parkKind !== null ? "blocked" : "error", `Step "${step.label}" failed`, info);
     if (parkKind !== null) {
       scheduleParkResume(wf.id, runId, failedIndex, parkKind === "network" ? (liveRun?.netParkCount ?? 0) : (liveRun?.parkCount ?? 0), source, parkKind);
     }

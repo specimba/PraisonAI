@@ -458,6 +458,9 @@ const STATUS_LABEL: Record<WorkflowRun["status"], string> = {
   done: "✅ Completed",
   error: "❌ Failed",
   stopped: "⛔ Stopped",
+  // r183 (directive item b): honest outcomes instead of stopped-with-empty.
+  partial: "🟡 Partial — ended early, completed steps preserved",
+  blocked: "⏸ Blocked — parked, auto-resumes",
 };
 
 /** Render one workflow run as a portable Markdown report. */
