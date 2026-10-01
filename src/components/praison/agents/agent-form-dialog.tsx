@@ -11,6 +11,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +47,19 @@ const COLOR_SWATCHES: { id: AgentColor; gradient: string; ring: string }[] = [
   { id: "fuchsia", gradient: "from-fuchsia-500 to-pink-600", ring: "ring-fuchsia-500" },
 ];
 
+// First user-perceived character — flags (🇺🇸 is 2 code points / 4 UTF-16
+// units) and ZWJ sequences survive; a plain 2-unit maxLength left half a flag.
+function firstGrapheme(s: string): string {
+  const t = s.trim();
+  if (!t) return "";
+  try {
+    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    return seg.segment(t)[Symbol.iterator]().next().value?.segment ?? "";
+  } catch {
+    return [...t][0] ?? "";
+  }
+}
+
 export function AgentFormDialog({
   open,
   onOpenChange,
@@ -60,6 +83,29 @@ export function AgentFormDialog({
   const [temperature, setTemperature] = React.useState(0.7);
   const [maxIterations, setMaxIterations] = React.useState(6);
   const [tools, setTools] = React.useState<ToolId[]>([]);
+
+  // Dirty tracking: a baseline snapshot is seeded on every open; any drift
+  // arms a discard confirmation instead of silently losing typed instructions.
+  const [baseline, setBaseline] = React.useState("");
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false);
+  const current = JSON.stringify({
+    name,
+    emoji,
+    color,
+    role,
+    description,
+    instructions,
+    model,
+    temperature,
+    maxIterations,
+    tools,
+  });
+  const dirty = open && baseline !== "" && current !== baseline;
+
+  const requestClose = () => {
+    if (dirty) setConfirmDiscard(true);
+    else onOpenChange(false);
+  };
 
   // Every registry provider's catalog, grouped and ready-badged, merged with
   // the persisted live :free catalog — searchable via the ModelPicker.
@@ -98,29 +144,43 @@ export function AgentFormDialog({
   // Re-seed local state each time the dialog opens (create vs edit).
   React.useEffect(() => {
     if (!open) return;
-    if (agent) {
-      setName(agent.name);
-      setEmoji(agent.emoji);
-      setColor(agent.color);
-      setRole(agent.role);
-      setDescription(agent.description);
-      setInstructions(agent.instructions);
-      setModel(agent.model);
-      setTemperature(agent.temperature);
-      setMaxIterations(agent.maxIterations);
-      setTools([...agent.tools]);
-    } else {
-      setName("");
-      setEmoji("");
-      setColor("violet");
-      setRole("");
-      setDescription("");
-      setInstructions("");
-      setModel(AUTO_MODEL.id);
-      setTemperature(0.7);
-      setMaxIterations(6);
-      setTools([]);
-    }
+    const next = agent
+      ? {
+          name: agent.name,
+          emoji: agent.emoji,
+          color: agent.color,
+          role: agent.role,
+          description: agent.description,
+          instructions: agent.instructions,
+          model: agent.model,
+          temperature: agent.temperature,
+          maxIterations: agent.maxIterations,
+          tools: [...agent.tools],
+        }
+      : {
+          name: "",
+          emoji: "",
+          color: "violet" as AgentColor,
+          role: "",
+          description: "",
+          instructions: "",
+          model: AUTO_MODEL.id,
+          temperature: 0.7,
+          maxIterations: 6,
+          tools: [] as ToolId[],
+        };
+    setName(next.name);
+    setEmoji(next.emoji);
+    setColor(next.color);
+    setRole(next.role);
+    setDescription(next.description);
+    setInstructions(next.instructions);
+    setModel(next.model);
+    setTemperature(next.temperature);
+    setMaxIterations(next.maxIterations);
+    setTools(next.tools);
+    setBaseline(JSON.stringify(next));
+    setConfirmDiscard(false);
   }, [open, agent]);
 
   const toggleTool = (id: ToolId, on: boolean) =>
@@ -134,7 +194,7 @@ export function AgentFormDialog({
     }
     const payload = {
       name: name.trim(),
-      emoji: emoji.trim() || "🤖",
+      emoji: firstGrapheme(emoji) || "🤖",
       color,
       role: role.trim(),
       description: description.trim(),
@@ -160,7 +220,12 @@ export function AgentFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) requestClose();
+      }}
+    >
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{agent ? "Edit Agent" : "Create Agent"}</DialogTitle>
@@ -191,7 +256,7 @@ export function AgentFormDialog({
                 id="agent-emoji"
                 value={emoji}
                 onChange={(e) => setEmoji(e.target.value)}
-                maxLength={2}
+                maxLength={8}
                 placeholder="🤖"
                 className="text-center"
               />
@@ -289,6 +354,9 @@ export function AgentFormDialog({
                 onValueChange={([v]) => setTemperature(v)}
                 aria-label="Temperature"
               />
+              <p className="text-xs text-muted-foreground">
+                Lower = focused and repeatable, higher = loose and creative
+              </p>
             </div>
             <div className="space-y-2.5">
               <Label htmlFor="agent-iterations">Max tool iterations · {maxIterations}</Label>
@@ -301,6 +369,10 @@ export function AgentFormDialog({
                 onValueChange={([v]) => setMaxIterations(v)}
                 aria-label="Max tool iterations"
               />
+              <p className="text-xs text-muted-foreground">
+                Tool roundtrips per run — the engine may spend a couple of
+                grace steps to land a final answer
+              </p>
             </div>
           </div>
 
@@ -337,12 +409,32 @@ export function AgentFormDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" onClick={requestClose}>
               Cancel
             </Button>
-            <Button type="submit">{agent ? "Save" : "Save"}</Button>
+            <Button type="submit">{agent ? "Save changes" : "Create agent"}</Button>
           </DialogFooter>
         </form>
+
+        <AlertDialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This agent's edits haven't been saved — closing now loses them.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep editing</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/40"
+                onClick={() => onOpenChange(false)}
+              >
+                Discard
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
