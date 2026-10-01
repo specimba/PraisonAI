@@ -80,12 +80,21 @@ export function ModelRelayCard() {
     );
   }, [settings, primary]);
 
-  function move(idx: number, dir: -1 | 1) {
-    const hops = chain.filter((h) => h.providerId !== "auto");
-    const target = idx + dir;
-    if (target < 0 || target >= hops.length) return;
-    const reordered = [...hops];
-    const [row] = reordered.splice(idx, 1);
+  // Reorder controls index THIS list (auto pinned last is never swappable).
+  // r167 fix: the old code indexed the full chain but reordered the filtered
+  // list, and disabled move-down with `index >= chain.length - 2` — which
+  // wrongly pinned the second-to-last REAL hop whenever the auto hop is
+  // absent (auto primary — the default fresh-profile setup).
+  const reorderable = React.useMemo(
+    () => chain.filter((h) => h.providerId !== "auto"),
+    [chain]
+  );
+
+  function move(orderIdx: number, dir: -1 | 1) {
+    const target = orderIdx + dir;
+    if (target < 0 || target >= reorderable.length) return;
+    const reordered = [...reorderable];
+    const [row] = reordered.splice(orderIdx, 1);
     reordered.splice(target, 0, row);
     update({ relayOrder: reordered.map((h) => h.key) });
   }
@@ -165,17 +174,21 @@ export function ModelRelayCard() {
           role="list"
           aria-label="Fallback chain"
         >
-          {chain.map((hop, i) => (
-            <HopRow
-              key={hop.key}
-              hop={hop}
-              index={i}
-              count={chain.length - 1}
-              enabled={enabled}
-              health={health[hop.key]}
-              onMove={(d) => move(i, d)}
-            />
-          ))}
+          {chain.map((hop, i) => {
+            const orderIndex = hop.providerId === "auto" ? -1 : reorderable.indexOf(hop);
+            return (
+              <HopRow
+                key={hop.key}
+                hop={hop}
+                index={i}
+                orderIndex={orderIndex}
+                orderCount={reorderable.length}
+                enabled={enabled}
+                health={health[hop.key]}
+                onMove={(d) => move(orderIndex, d)}
+              />
+            );
+          })}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -246,14 +259,18 @@ export function ModelRelayCard() {
 function HopRow({
   hop,
   index,
-  count,
+  orderIndex,
+  orderCount,
   enabled,
   health,
   onMove,
 }: {
   hop: RelayHop;
+  /** Position in the displayed chain (row number only). */
   index: number;
-  count: number;
+  /** Position among REORDERABLE hops — auto is pinned and never swappable. */
+  orderIndex: number;
+  orderCount: number;
   enabled: boolean;
   health?: RelayHealthEntry;
   onMove: (dir: -1 | 1) => void;
@@ -308,7 +325,7 @@ function HopRow({
             size="sm"
             className="h-5 w-6 p-0 text-muted-foreground"
             aria-label={`Move ${hop.label} up`}
-            disabled={index === 0}
+            disabled={orderIndex <= 0}
             onClick={() => onMove(-1)}
           >
             <ArrowUp className="h-3 w-3" aria-hidden />
@@ -319,7 +336,7 @@ function HopRow({
             size="sm"
             className="h-5 w-6 p-0 text-muted-foreground"
             aria-label={`Move ${hop.label} down`}
-            disabled={index >= count - 1}
+            disabled={orderIndex >= orderCount - 1}
             onClick={() => onMove(1)}
           >
             <ArrowDown className="h-3 w-3" aria-hidden />
