@@ -159,5 +159,51 @@ ok(/recordRelayStatusLine\(m\)/.test(runnerSrc) && /recordRelayStatusLine\(m\)/.
 ok(!runnerSrc.includes("recordRelayHopResult") && !chatSrc.includes("recordRelayHopResult"), "no consumer re-implements the regexes (old dual parsers gone)");
 ok(/stripRelayMarkers\(m\)/.test(runnerSrc) && /stripRelayMarkers\(m\)/.test(chatSrc), "notes + status lines stay marker-free");
 
+console.log("K9 — r194 structured error-code mapping (r188 risk 2 closed)");
+ok(
+  isDeadlyRelayFailure('{"error":{"message":"Request failed","code":"model_not_found"}}'),
+  "K9: code model_not_found with keyword-less message → DEAD (was hard: corpse re-dialed)"
+);
+ok(
+  isDeadlyRelayFailure('{"error":{"type":"authentication_error"}}') && isAuthRelayFailure('{"error":{"type":"authentication_error"}}'),
+  "K9: type authentication_error → DEAD+AUTH (family stamp fires)"
+);
+ok(
+  isDeadlyRelayFailure('{"error":{"message":"Request failed","code":"account_deactivated"}}') &&
+    isAuthRelayFailure('{"error":{"message":"Request failed","code":"account_deactivated"}}'),
+  "K9: code account_deactivated → DEAD+AUTH"
+);
+ok(
+  isDeadlyRelayFailure('{"code":"permission_denied"}') && !isAuthRelayFailure('{"code":"permission_denied"}'),
+  "K9: code permission_denied → DEAD but not AUTH (hop-scoped, key is fine)"
+);
+ok(
+  isDeadlyRelayFailure('{"code": "region_not_supported"}'),
+  "K9: code region_not_supported (space after colon) → DEAD"
+);
+ok(
+  isSoftRelayFailure('{"error":{"message":"You exceeded your current quota","code":"insufficient_quota"}}') &&
+    !isDeadlyRelayFailure('{"error":{"code":"insufficient_quota"}}'),
+  "K9: quota-exhaustion codes stay SOFT (r187 doctrine: drained window resets, never demotes)"
+);
+ok(
+  isSoftRelayFailure('{"code": "rate_limit_exceeded"}'),
+  "K9: code rate_limit_exceeded → SOFT"
+);
+ok(
+  !isDeadlyRelayFailure('{"type":"invalid_request_error","message":"Missing required parameter: model"}') &&
+    !isSoftRelayFailure('{"type":"invalid_request_error","message":"Missing required parameter: model"}'),
+  "K9: generic invalid_request_error stays HARD (bad params are re-dialable, never a corpse)"
+);
+ok(
+  !isAuthRelayFailure('{"code":"invalid_request_error"}') && !isDeadlyRelayFailure('{"code":"invalid_request_error"}'),
+  "K9: the generic type must NOT sink the key family (explicit-list discipline)"
+);
+ok(
+  !isDeadlyRelayFailure('{"code":"method_not_allowed"}') && !isSoftRelayFailure('{"code":"method_not_allowed"}'),
+  "K9: codes outside the vocabulary stay HARD (no over-reach)"
+);
+ok(isDeadlyRelayFailure("This model is currently in maintenance"), "K9: text-keyword classification unregressed");
+
 console.log(`\nK-series (relay taxonomy): ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
