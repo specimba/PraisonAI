@@ -5614,3 +5614,30 @@ Verification result: PASS
 Open risks: (1) resolveServerDial (single-slot) is still exported and used as the per-slot prober — two resolvers now exist; a follow-up could fold the single-slot path into the scan for one canonical entry point. (2) Slot ordering depends on createdAt, which the vault card never displays — a tie or backdated row is invisible to the user; consider showing slot age. (3) User confirmation still pending since r189 — 17 rounds.
 Blockers: none
 Next recommended action: r208 — (1) FIRST read any user report. (2) Backlog: user-facing diagnostics summary card aggregating the r192–r207 instruments; run-panel header variant of the router chip (surface without expanding history); fold resolveServerDial single-slot path into the slots scan (one canonical resolver); show vault slot age in the card. (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 30 / lane 24 / executor 26 green.
+---
+Task ID: 424432 — r208 (the Automation pulse: r192–r207 diagnostics in one glance)
+Agent: main (platform dev)
+Task: r207 handoff — user-facing diagnostics summary card aggregating the r192–r207 instruments. No user report present (18 rounds pending confirmation).
+
+Work Log:
+- Shipped the "Automation pulse": a 4-cell strip at the top of the ServerAutopilot panel (top of Workflow Studio, always visible) that answers "is anything on fire?" without reading every dedicated strip.
+- Cell 1 Schedules: active registry count + breaker-parked (disabled with failStreak ≥ 3 — r192/r204 parity) + plain off (user/orphan-guard), each explained in the tooltip. Cell 2 Server runs · 24h: done✓ / failed✗ / transient-retried↻ / running⟳ over the last day among the 25 most recent rows (title states that honestly, no pretended completeness). Cell 3 Evolution inbox: open/accepted proposal counts read from the SAME zustand store the Evolution Inbox renders from (no double truth — proposals are client-side, not DB). Cell 4 Needs attention: emerald "all clear" or amber item count + tooltip listing the exact conditions (stale >24h rows, breaker-parked, due-but-blocked with humanized lane reason) — the same conditions the panel's strips already render, now counted.
+- Zero API changes: everything aggregates data the panel already polls every 15s (sync GET) plus the client store; failures fall back to "—" states honestly (strip renders only after the first successful sync).
+- Smoke 30 → 34: strip renders, schedules cell counts, inbox regex `\d+ open · \d+ accepted`, attention verdict matches "all clear" or "N item(s)".
+
+Verification: smoke 34/34 (0 page errors); qa:syntax PASS (218 files); qa:tsc exit 0; eslint 0 (2 touched files); B 40/40; K 84/84; executor QA 26/26; lane QA 24/24; root 200.
+Snapshot pushed → fork/main (0b15e354e).
+
+Stage Summary:
+- A returning user now gets one honest aggregate of every automation diagnostic built since r192 — schedules, 24h server-run outcomes, evolution inbox depth, and an attention verdict — each number backed by (and explained by) its dedicated surface.
+
+Round Handoff:
+Round ID: r209
+Task owner: main (platform dev)
+Scope completed: Automation pulse strip (ServerAutopilot panel) + smoke 34.
+User-visible changes: Workflow Studio's autopilot panel opens with a 4-cell pulse: schedules active/parked/off, 24h server-run outcomes, evolution inbox counts, and an attention verdict with per-condition tooltips.
+Verification steps: node scripts/qa-r186-smoke.mjs → 34/34; bun run qa:syntax → PASS; bun run qa:tsc → 0; bunx eslint <touched> → 0; B 40 / K 84 / executor 26 / lane 24; curl root → 200.
+Verification result: PASS
+Open risks: (1) The pulse lives inside the ServerAutopilot panel — visible only on Workflow Studio; a Settings-page variant could surface it where vault keys are managed. (2) "Server runs · 24h" depends on the sync GET's take:25 window — a chatty day could push 24h-old rows out of the window (tooltip discloses this). (3) The attention cell counts conditions but does not deep-link to the offending strip yet (single click-to-explain is a candidate follow-up). (4) User confirmation still pending since r189 — 18 rounds.
+Blockers: none
+Next recommended action: r209 — (1) FIRST read any user report. (2) Backlog: run-panel header variant of the router chip (surface without expanding history); fold resolveServerDial single-slot path into the slots scan (one canonical resolver); show vault slot age in the vault card; pulse attention cell deep-links to the offending strip. (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 34 / lane 24 / executor 26 green.
