@@ -216,14 +216,23 @@ export function SettingsView() {
 
   function handleExport() {
     try {
+      // r193 (directive e): the full-data export is the file users attach to
+      // bug reports and pass between machines — it must never carry
+      // credentials. Strip the three known key fields from settings; the
+      // provider vault backup (Settings → Providers) stays the sanctioned
+      // way to move keys, and importing an OLD key-bearing export still
+      // restores them (backward compatible).
+      const { apiKey: _apiKey, providerKeys: _providerKeys, typesafeKey: _typesafeKey, ...exportSettings } = settings;
       downloadJson("praisonai-export.json", {
         exportedAt: new Date().toISOString(),
-        settings,
+        settings: exportSettings,
         agents,
         conversations,
         workflows,
       });
-      toast.success("Export downloaded");
+      toast.success("Export downloaded — credentials excluded", {
+        description: "API keys never leave in the full export. Use the provider vault backup to move keys between browsers.",
+      });
     } catch {
       toast.error("Export failed — could not serialize your data.");
     }
