@@ -633,6 +633,9 @@ export async function executeWorkflowRun(
       status: "running",
       startedAt: Date.now(),
       depth: runnerDegraded ? "standard" : (options.depthOverride ?? wf.depth),
+      // r197 (directive d): event provenance — the board's schedule-evidence
+      // chip derives health from these stamped events, not from the badge.
+      source,
       steps,
     });
   }

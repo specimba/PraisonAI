@@ -341,6 +341,14 @@ export interface WorkflowRun {
    * trail. Absent on pre-r186 runs — panels fall back to the workflow's
    * authored depth. */
   depth?: PipelineDepth;
+  /**
+   * r197 (directive d): what launched this run — the scheduler's recurring
+   * tick ("scheduled") or a human click ("manual"). Event provenance: the
+   * board's schedule-evidence chip cites real scheduled events instead of
+   * the badge's promise. Absent on pre-r197 runs — the chip falls back to
+   * schedule.lastRunAt for age-only evidence.
+   */
+  source?: "manual" | "scheduled";
   /** Populated when status = "error" or "blocked" — powers the recovery card. */
   error?: RunErrorInfo;
   /** How many times this run was resumed after a failure/stop. */

@@ -975,6 +975,67 @@ export function WorkflowsView() {
     setRunOpen(true);
   }, []);
 
+  // ── r197 directive (d): scheduler health backed by event IDs ──────────
+  // The green badge states the schedule's PROMISE ("next in 5m"). This
+  // helper derives the EVIDENCE from run events: when the last scheduled
+  // fire actually happened and whether it succeeded. A schedule promising a
+  // fire every 15m whose newest scheduled event is 4h old has a stalled
+  // lane (background-tab HMR death, system sleep) — the exact silent
+  // failure class r189-r192 fight, now visible from the card itself.
+  type ScheduleEvidence = {
+    tone: "missed" | "failing" | "ok";
+    label: string;
+    detail: string;
+  };
+
+  function scheduleEvidence(wf: Workflow, now: number): ScheduleEvidence | null {
+    const sched = wf.schedule;
+    if (!sched || !sched.enabled) return null;
+    // Runs are newest-first (store caps at 12) — the first source-stamped
+    // scheduled run is the newest scheduled event.
+    const lastFire = wf.runs.find((r) => r.source === "scheduled");
+    const interval = Math.max(sched.intervalMs, 60_000);
+    const missedAfter = Math.max(interval * 3, 15 * 60_000);
+    const lastFireAt = lastFire?.startedAt ?? sched.lastRunAt;
+    const age = lastFireAt != null ? now - lastFireAt : null;
+    const agoLabel =
+      age == null
+        ? null
+        : (age >= 120 * 60_000
+            ? `${Math.round(age / 3_600_000)}h`
+            : `${Math.max(0, Math.round(age / 60_000))}m`);
+    if (age != null && age > missedAfter) {
+      return {
+        tone: "missed",
+        label: `no fire in ${agoLabel}`,
+        detail: `Interval promises a fire every ${fmtIntervalShort(interval)} but the newest scheduled event is ${agoLabel} old${
+          lastFire
+            ? ` (run ${lastFire.id} · ${new Date(lastFire.startedAt).toLocaleTimeString()} · ${lastFire.status})`
+            : " (schedule.lastRunAt only — pre-r197 history carries no event provenance)"
+        }. If this tab is open, the scheduler lane is stalled: background-tab HMR death, system sleep, or a run blocking the queue. Check the amber App-updated pill and refresh.`,
+      };
+    }
+    if (lastFire) {
+      const failed = lastFire.status === "error" || lastFire.status === "blocked";
+      const when = `run ${lastFire.id} · ${new Date(lastFire.startedAt).toLocaleTimeString()} · ${lastFire.status}`;
+      if (failed) {
+        return {
+          tone: "failing",
+          label: `last fire ${agoLabel} ago · ${lastFire.status}`,
+          detail: `Evidence: ${when}.${
+            lastFire.error?.message ? ` ${lastFire.error.message.slice(0, 140)}` : ""
+          }${(sched.failStreak ?? 0) >= 2 ? ` ${sched.failStreak} consecutive failures.` : ""}`,
+        };
+      }
+      return {
+        tone: "ok",
+        label: `last fire ${agoLabel} ago · ${lastFire.status}`,
+        detail: `Evidence: ${when}. The schedule's promise ("next ${fmtIn(sched.nextRunAt)}") is backed by a real event.`,
+      };
+    }
+    return null; // no evidence at all — freshly scheduled or history wiped
+  }
+
   /** One-click resume for an auto-paused schedule (inverse of the runner's failStreak auto-pause). */
   const resumeSchedule = (wf: Workflow) => {
     if (!wf.schedule) return;
@@ -1643,6 +1704,35 @@ export function WorkflowsView() {
                           </span>
                         );
                        })()}
+                      {(() => {
+                        // r197 (directive d): event-evidence chip — sits beside
+                        // the promise badge and states what actually happened,
+                        // citing the run event that backs the claim.
+                        const ev = scheduleEvidence(wf, Date.now());
+                        if (!ev) return null;
+                        const toneCls =
+                          ev.tone === "missed"
+                            ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400"
+                            : ev.tone === "failing"
+                              ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                              : "border-border bg-muted/40 text-muted-foreground";
+                        const dotCls =
+                          ev.tone === "missed"
+                            ? "bg-red-500"
+                            : ev.tone === "failing"
+                              ? "bg-amber-500"
+                              : "bg-emerald-500";
+                        return (
+                          <span
+                            title={ev.detail}
+                            data-testid="schedule-evidence-chip"
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium ${toneCls}`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${dotCls}`} />
+                            {ev.label}
+                          </span>
+                        );
+                      })()}
                       {wf.schedule && !wf.schedule.enabled && wf.schedule.autoResumeAt != null && (
                         // r171: congestion backoff chip — distinct from the red
                         // manual-pause chip because this state heals itself.
