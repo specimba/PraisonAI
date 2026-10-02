@@ -989,6 +989,29 @@ export function WorkflowsView() {
     });
   };
 
+  // r192: board-level breaker visibility — the per-card red chip is easy to
+  // miss when a relay lane goes down and parks several schedules at once; the
+  // board then "stops working" with no top-level explanation. The banner is
+  // self-limiting: it exists only while a breaker pause is real, and any
+  // resume (chip or bulk) clears it — no dismiss button hiding live state.
+  const breakerPaused = workflows.filter(
+    (wf) => wf.schedule && !wf.schedule.enabled && wf.schedule.autoResumeAt == null && (wf.schedule.failStreak ?? 0) >= 2
+  );
+  const congestionBackoff = workflows.filter(
+    (wf) => wf.schedule && !wf.schedule.enabled && wf.schedule.autoResumeAt != null
+  );
+  const maxStreak = breakerPaused.reduce((m, wf) => Math.max(m, wf.schedule?.failStreak ?? 0), 0);
+  const resumeAllPaused = () => {
+    const n = breakerPaused.length;
+    breakerPaused.forEach((wf) => {
+      if (!wf.schedule) return;
+      updateWf(wf.id, {
+        schedule: { ...wf.schedule, enabled: true, failStreak: 0, autoResumeAt: undefined, autoResumeTrips: 0, nextRunAt: undefined },
+      });
+    });
+    toast.success(`Resumed ${n} schedule${n === 1 ? "" : "s"} — failure counters reset, firing on the next tick`);
+  };
+
   // r77: schedule deferral audit — the historical half of the amber
   // "blocked by run" chip (see lib/schedule-skips.ts). Parsed per render;
   // the trail is ≤20 tiny entries, so this is cheaper than memo plumbing.
@@ -1246,6 +1269,31 @@ export function WorkflowsView() {
             }
           />
         ) : (
+          <>
+          {breakerPaused.length > 0 && (
+            <Alert className="border-red-500/30 bg-red-500/5">
+              <ShieldAlert className="h-4 w-4 text-red-500" />
+              <AlertTitle className="text-red-600 dark:text-red-400">
+                Lane degraded — {breakerPaused.length} schedule{breakerPaused.length === 1 ? "" : "s"} auto-paused by the failure breaker
+              </AlertTitle>
+              <AlertDescription className="flex flex-wrap items-center gap-2 text-red-600/90 dark:text-red-400/90">
+                <span>
+                  {breakerPaused.slice(0, 3).map((wf) => `“${wf.name}”`).join(" · ")}
+                  {breakerPaused.length > 3 ? ` +${breakerPaused.length - 3} more` : ""} failed {maxStreak} runs in a row — the breaker paused them instead of burning more quota. Fix each card's error, or resume straight away.
+                  {congestionBackoff.length > 0 ? ` ${congestionBackoff.length} more in 429 backoff (self-resuming).` : ""}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 border-red-500/40 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                  onClick={resumeAllPaused}
+                >
+                  <RotateCcw className="mr-1 h-3 w-3" />
+                  Resume all
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {workflows.map((wf) => {
               const lastRun = wf.runs[0];
@@ -1682,6 +1730,7 @@ export function WorkflowsView() {
               );
             })}
           </div>
+          </>
         )}
       </div>
 
