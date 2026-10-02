@@ -15,6 +15,19 @@
 // { append: true } option in current bun-types, and silent truncation would
 // destroy the forensic call log this file exists to keep.
 import { appendFile } from "node:fs/promises";
+
+// r202: minimal local ambient — keeps `tsc --noEmit --incremental false`
+// (the qa:tsc fresh gate) at ZERO errors without pulling @types/bun into the
+// Next app's type graph. Same pattern as scripts/qa-syntax-sweep.ts; this
+// file's single Bun API surface is Bun.serve below.
+declare const Bun: {
+  serve(options: {
+    port: number;
+    idleTimeout?: number;
+    fetch(req: Request): Response | Promise<Response>;
+  }): unknown;
+};
+
 const port = Number(process.argv[2] ?? 4319);
 
 // v5 (18:23 round): CORS everywhere — the browser-direct lane fetches this
