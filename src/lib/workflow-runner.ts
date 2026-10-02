@@ -16,7 +16,7 @@ import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { maxParks, parkDelayMs, resolvePark, type ParkKind } from "@/lib/park-policy";
 import { resolveLlm } from "@/lib/llm-config";
 import { decide, SYSTEMONE_GATE_CONFIDENCE } from "@/lib/systemone";
-import { buildRelayWire, recordRelayHopResult, type RelayTaskFit, type RelayWireHop } from "@/lib/relay";
+import { buildRelayWire, recordRelayStatusLine, stripRelayMarkers, type RelayTaskFit, type RelayWireHop } from "@/lib/relay";
 import {
   buildConversationalContext,
   buildReviewContext,
@@ -1123,13 +1123,11 @@ export async function executeWorkflowRun(
           {
             onStatus: (m) => {
               if (/Model relay:/i.test(m)) {
-                relayNotes.push(m);
-                // Feed the rotator's health memory: [hop:x] = x failed,
-                // [hopok:x] = x answered after a rotation.
-                const failHop = /\[hop:([^\]]+)\]/.exec(m);
-                if (failHop) recordRelayHopResult(failHop[1], false, m.replace(/\s*\[hop:[^\]]+\]\s*$/, ""));
-                const okHop = /\[hopok:([^\]]+)\]/.exec(m);
-                if (okHop) recordRelayHopResult(okHop[1], true);
+                // r188: one shared wire parser — the server's verdict marker
+                // ([hopdead]/[hopauth]/[hopsoft]) overrides the 90-char
+                // display-text guess, and notes stay marker-free.
+                recordRelayStatusLine(m);
+                relayNotes.push(stripRelayMarkers(m));
               }
             },
             onToken: (t) => {

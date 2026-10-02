@@ -246,6 +246,12 @@ export function isSoftRelayFailure(error?: string): boolean {
   return !!error && SOFT_RE.test(error);
 }
 
+/** Auth-class death — the KEY is rejected, so every hop sharing it is equally
+ * dead (r187 family stamping). Exported so the server can label the wire (r188). */
+export function isAuthRelayFailure(error?: string): boolean {
+  return !!error && AUTH_RE.test(error);
+}
+
 /** Permanent-for-this-hop rejection (auth / region / tier / maintenance).
  * These hops are dead until their cause changes — hours, not minutes. */
 export function isDeadlyRelayFailure(error?: string): boolean {
@@ -283,8 +289,16 @@ function saveHealth(h: RelayHealth): void {
   }
 }
 
-/** Record one hop outcome (called from the rotation status lines the server emits). */
-export function recordRelayHopResult(key: string, ok: boolean, error?: string): void {
+/** Record one hop outcome (called from the rotation status lines the server emits).
+ * `verdict` (r188) is the server's classification from the FULL upstream error —
+ * it overrides display-text classification, which only ever sees the 90-char
+ * `shortError` fragment and can miss a keyword buried past the cut. */
+export function recordRelayHopResult(
+  key: string,
+  ok: boolean,
+  error?: string,
+  verdict?: "dead" | "auth" | "soft",
+): void {
   if (!key || key === "auto::builtin") return;
   const h = loadHealth();
   const e = h[key] ?? { ok: 0, fail: 0 };
@@ -297,13 +311,18 @@ export function recordRelayHopResult(key: string, ok: boolean, error?: string): 
   } else {
     e.fail += 1;
     e.lastFailAt = Date.now();
-    e.soft = isSoftRelayFailure(error);
-    e.dead = isDeadlyRelayFailure(error);
+    e.soft = verdict === "soft" || (!verdict && isSoftRelayFailure(error));
+    e.dead = verdict === "dead" || verdict === "auth" || (!verdict && isDeadlyRelayFailure(error));
     if (error) e.lastError = error.slice(0, 160);
     // OrcaRouter rate limits are WORKSPACE-wide (all keys share one bucket —
     // docs.orcarouter.ai/operations/rate-limits): one lane's 429 means every
-    // orca lane is throttled, so stamp them all.
-    if (e.soft && key.startsWith("orcarouter::") && error && /\b429\b|rate.?limit/i.test(error)) {
+    // orca lane is throttled, so stamp them all. A server "soft" verdict counts:
+    // the 429 keyword itself may sit past the display truncation cut.
+    if (
+      e.soft &&
+      key.startsWith("orcarouter::") &&
+      (verdict === "soft" || (error && /\b429\b|rate.?limit/i.test(error)))
+    ) {
       for (const k of Object.keys(h)) {
         if (k.startsWith("orcarouter::") && k !== key) {
           h[k] = {
@@ -318,8 +337,14 @@ export function recordRelayHopResult(key: string, ok: boolean, error?: string): 
     // r187: an AUTH-class death (401 / rejected key) means EVERY hop sharing
     // that provider's key is equally dead — the key travels with the request,
     // not the model. Stamp the whole provider family so the ladder skips the
-    // corpse instead of re-learning it one hop at a time.
-    if (e.dead && error && AUTH_RE.test(error) && key.includes("::")) {
+    // corpse instead of re-learning it one hop at a time. An "auth" verdict
+    // (r188) stamps the family even when the truncated display text hides the
+    // keyword — the server saw the full error.
+    if (
+      e.dead &&
+      (verdict === "auth" || (error && AUTH_RE.test(error))) &&
+      key.includes("::")
+    ) {
       const pid = key.slice(0, key.indexOf("::"));
       for (const k of Object.keys(h)) {
         if (k.startsWith(`${pid}::`) && k !== key) {
@@ -341,6 +366,59 @@ export function recordRelayHopResult(key: string, ok: boolean, error?: string): 
 /** Health snapshot for the settings card. */
 export function relayHealthSnapshot(): RelayHealth {
   return loadHealth();
+}
+
+// ─── r188: the relay status wire — one parser for every consumer ─────────────
+// The server (agent-engine) classifies each rotation failure from the FULL
+// upstream error and labels the line with a verdict marker; clients used to
+// re-classify from the display text, which is a 90-char `shortError` fragment
+// and can hide the tier/region/auth keyword inside a JSON error envelope.
+// Markers: [hop:x] failed · [hopok:x] answered · [hopdead]/[hopauth]/[hopsoft].
+
+/** Strip every relay marker from a status line — display / error-text form. */
+export function stripRelayMarkers(m: string): string {
+  return m.replace(/\s*\[hop[a-z]*(?::[^\]]+)?\]/g, "").trim();
+}
+
+export interface ParsedRelayStatus {
+  ok: boolean;
+  key: string;
+  /** Display text minus all markers — the best error text available client-side. */
+  error: string;
+  /** Server's verdict from the full upstream error; undefined on legacy lines
+   * without a marker → consumers fall back to display-text classification. */
+  verdict?: "dead" | "auth" | "soft";
+}
+
+/** Parse one relay status line into a hop outcome. Returns null for non-relay
+ * lines and for marker-less failures (nothing to record). */
+export function parseRelayStatusLine(m: string): ParsedRelayStatus | null {
+  if (!/Model relay:/i.test(m)) return null;
+  const okHop = /\[hopok:([^\]]+)\]/.exec(m);
+  if (okHop) return { ok: true, key: okHop[1], error: stripRelayMarkers(m) };
+  const failHop = /\[hop:([^\]]+)\]/.exec(m);
+  if (!failHop) return null;
+  return {
+    ok: false,
+    key: failHop[1],
+    error: stripRelayMarkers(m),
+    verdict: /\[hopauth\]/.test(m)
+      ? "auth"
+      : /\[hopdead\]/.test(m)
+        ? "dead"
+        : /\[hopsoft\]/.test(m)
+          ? "soft"
+          : undefined,
+  };
+}
+
+/** Feed the rotator's memory from a raw status line. Chat view and workflow
+ * runner both call this — one wire format, one parser, no parallel truth. */
+export function recordRelayStatusLine(m: string): ParsedRelayStatus | null {
+  const p = parseRelayStatusLine(m);
+  if (!p) return null;
+  recordRelayHopResult(p.key, p.ok, p.error, p.verdict);
+  return p;
 }
 
 // ─── Health badge (r73): the rotator's memory, surfaced in model pickers ──────

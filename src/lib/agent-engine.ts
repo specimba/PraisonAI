@@ -13,6 +13,7 @@
 // 400 fallback, tool-call-as-text salvage with grace rounds + digest fallback.
 
 import { CUSTOM_FALLBACK_MODEL, MAX_ITERATIONS_DEFAULT } from "./constants";
+import { isAuthRelayFailure, isDeadlyRelayFailure, isSoftRelayFailure } from "./relay";
 import {
   buildToolDefs,
   fenceToolOutputForModel,
@@ -467,9 +468,20 @@ export async function runRelayedCustom(
       const next = hops[i + 1];
       // [hop:…] marker is consumed by the client's relay health memory — it
       // demotes recently-failed hops in future chains (Genius-rotator memory).
+      // r188: the verdict marker is classified HERE from the FULL upstream
+      // error — the client only sees the 90-char shortError fragment, which
+      // can hide the tier/region/auth keyword inside a JSON error envelope
+      // and misfile a corpse as "hard" (re-dialed every turn). auth ⇒ the
+      // whole provider family is stamped dead; dead ⇒ hop-scoped; soft ⇒
+      // capacity noise, never demotes.
+      const fullErr = err instanceof Error ? err.message : String(err);
+      const dead = isDeadlyRelayFailure(fullErr);
+      const soft = !dead && isSoftRelayFailure(fullErr);
+      const auth = dead && isAuthRelayFailure(fullErr);
+      const verdictMarker = auth ? " [hopauth]" : dead ? " [hopdead]" : soft ? " [hopsoft]" : "";
       send({
         type: "status",
-        message: `Model relay: ${hop.label ?? hop.model} failed (${shortError(err)}) — rotating to ${next.label ?? next.model}…${hop.key ? ` [hop:${hop.key}]` : ""}`,
+        message: `Model relay: ${hop.label ?? hop.model} failed (${shortError(err)}) — rotating to ${next.label ?? next.model}…${hop.key ? ` [hop:${hop.key}]${verdictMarker}` : ""}`,
       });
     }
   }

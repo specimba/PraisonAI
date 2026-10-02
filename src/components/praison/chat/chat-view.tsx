@@ -32,7 +32,7 @@ import { MemoryDialog } from "@/components/praison/chat/memory-dialog";
 import { MessageItem } from "@/components/praison/chat/message-item";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { resolveExplicitLlm, resolveLlm } from "@/lib/llm-config";
-import { buildRelayWire, recordRelayHopResult } from "@/lib/relay";
+import { buildRelayWire, recordRelayStatusLine, stripRelayMarkers } from "@/lib/relay";
 import {
   DEFAULT_TTS_VOICE,
   MAX_CONTEXT_MESSAGES,
@@ -323,13 +323,13 @@ export function ChatView() {
             },
             onStatus: (m) => {
               // Relay rotation trace: feed the rotator's health memory and
-              // surface a clean status line (marker stripped).
+              // surface a clean status line. r188: one shared wire parser —
+              // the server's verdict marker ([hopdead]/[hopauth]/[hopsoft],
+              // classified from the FULL upstream error) overrides the
+              // 90-char display-text guess.
               if (/Model relay:/i.test(m)) {
-                const failHop = /\[hop:([^\]]+)\]/.exec(m);
-                if (failHop) recordRelayHopResult(failHop[1], false, m.replace(/\s*\[hop:[^\]]+\]\s*$/, ""));
-                const okHop = /\[hopok:([^\]]+)\]/.exec(m);
-                if (okHop) recordRelayHopResult(okHop[1], true);
-                setStatusLine(m.replace(/\s*\[hop(?:ok)?:[^\]]+\]\s*$/, ""));
+                recordRelayStatusLine(m);
+                setStatusLine(stripRelayMarkers(m));
               }
             },
           }
