@@ -5284,3 +5284,30 @@ Verification result: PASS
 Open risks: (1) The changelog is static — future rounds must remember to append their entries (rotation risk: the panel silently goes stale exactly like the tab it diagnoses). Mitigation candidate: generate from a ROUNDS constant the worklog append could touch. (2) The smoke's Settings navigation clicks the first "Settings" button — if the shell grows another same-labeled control, the assertion may need a scoped locator. (3) User confirmation still pending (5 rounds); all instrumentation now ships with its own user manual.
 Blockers: none
 Next recommended action: r196 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): event-ID scheduler health (directive d); proposal-reason polish naming the leading branch when exploitation fires; import-dialog "credentials excluded" hint. (3) Add the r195 entry to whats-fixed FIXES (one card: "the panel you are reading") OR wire the panel to a shared ROUNDS constant so future rounds stay honest.
+
+---
+Task ID: 424432 — r196 (import can no longer wipe API keys — scrubbed-export hole closed)
+Agent: main (platform development — hourly dev round)
+Task: r195 handoff backlog: import-dialog "credentials excluded" hint (r193 item 3, carried 7 rounds) + add r195 card to the whats-fixed panel. No user report this fire (6th round).
+
+Work Log:
+- REAL BUG FOUND while implementing the "hint": the r173 import dialog still told users "settings, provider keys and relay order also come from the file" — false for r193+ scrubbed exports — and worse, applyPendingImport replaced settings wholesale, so importing a scrubbed export silently WIPED this browser's apiKey/providerKeys/typesafeKey. That is an AUTH-error factory: exactly the pathology class the user has been fighting, one import away.
+- SHIPPED — credential-aware import (r196): (1) `fileCredentialPresence()` module helper classifies which of the three credential fields the file actually carries (non-empty string / non-empty object); absence is treated as "the file cannot speak for it" (r193 scrubbing artifact), never as "exporter had none". (2) applyPendingImport builds a FRESH merged settings object — any credential field the file is silent on keeps this browser's live value; key-bearing old exports still replace keys wholesale (backward compatible, r193 doctrine intact). (3) Dialog copy is now truthful per-case (all present / partial / none) + the r193-item-3 amber "No credentials in this export" note (role=note) pointing at the provider vault backup as the sanctioned key-migration path, with a browser-has-no-keys variant. (4) `data-testid="full-import-input"` on the file input for future smoke hooks.
+- Process note: eslint react-hooks/immutability rejected the first draft (mutating importedSettings, which aliases pendingImport state) — rebuilt as a conditional-spread fresh object; the rule earned its keep.
+- Changelog honesty (handoff item 3): whats-fixed FIXES gained the r195 card ("this panel — the receipt for the invisible rounds") and the r196 card with a lookFor pointing at the amber note; header range r186-r196.
+- Verification: tsc clean; eslint 0 on touched files; smoke 9/9 (0 page errors); root 200 (checked at round start).
+- Snapshot pushed → fork/main (7fd34e429).
+
+Stage Summary:
+- Importing a r193+ scrubbed export used to destroy the browser's provider keys silently; now the keys survive any field the file is silent on, and the confirm dialog says exactly what will happen instead of lying. The r193 export-scrubbing epic is now closed end-to-end: export scrubs (r193), import preserves (r196), vault backup remains the only key-bearing export.
+
+Round Handoff:
+Round ID: r197
+Task owner: main (platform dev)
+Scope completed: credential-aware import (fileCredentialPresence + fresh-object merge in applyPendingImport) + truthful per-case dialog copy + amber no-credentials note + data-testid hook + r195/r196 changelog cards.
+User-visible changes: importing a scrubbed export keeps this browser's API keys; the import confirm dialog states the credential disposition and shows an amber note when the export carries none.
+Verification steps: bunx tsc --noEmit → clean; bunx eslint (settings-view, whats-fixed) → 0; node scripts/qa-r186-smoke.mjs → 9/9; curl root → 200.
+Verification result: PASS
+Open risks: (1) The import-dialog flow has NO smoke assertion yet — Playwright setInputFiles on [data-testid="full-import-input"] with a scrubbed fixture + assert the amber note is the obvious next QA increment (dialog had no coverage before either). (2) Keep-on-silent is a semantic choice: a file from a genuinely key-less browser will NOT clear the target browser's keys (per-field, only absent fields keep local values) — judged safe-by-default; Clear all data remains the way to zero keys. (3) Partial-credential files (hand-edited) get per-field disposition copy — tested only by reading, not by QA. (4) User confirmation still pending since r189 — 6 rounds; the instrumentation + its manual (whats-fixed) are all shipped and idle.
+Blockers: none
+Next recommended action: r197 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): smoke assertion for the import flow (setInputFiles scrubbed fixture → amber note → Cancel; cheap, closes risk 1); event-ID scheduler health (directive d, carried 10+ rounds); proposal-reason polish naming the leading branch when exploitation fires. (3) If no user paste by r198, consider making the r189 StaleBuildGuard pill MORE assertive (e.g. auto-toast on visibility change) — the user may simply never see toasts from a background tab.
