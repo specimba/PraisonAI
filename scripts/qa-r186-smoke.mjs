@@ -196,24 +196,35 @@ ok(
 await page.locator('[aria-label="Runs board layout"]').first().click().catch(() => {});
 await page.waitForTimeout(800);
 await page.locator('button[data-wf-card="wf-qa-ev-ok"]').first().click().catch(() => {});
-await page.waitForTimeout(1200); // panel sheet open + history rows render
-// r206: run history is a Collapsible closed by default — expand it so the
-// per-run chips (novelty, evidence, router) mount.
-await page.locator("button", { hasText: "Run history" }).first().click().catch(() => {});
-await page.waitForTimeout(600);
-const spawnChip = page
+await page.waitForTimeout(1200); // panel sheet open
+// r209: the HEADER variant — the router decision renders the moment the
+// panel opens for the sourced run (wf-qa-ev-ok has exactly one run, the
+// sourced one) — no history expansion needed.
+const headerChip = page
   .locator('[aria-label="This run triggered an Evolution variation proposal"]')
   .first();
 ok(
-  await spawnChip.isVisible().catch(() => false),
-  "run-history router chip renders for the run that triggered a variation (r206)"
+  await headerChip.isVisible().catch(() => false),
+  "header router chip renders immediately on panel open, history still collapsed (r209)"
 );
-const spawnTip = (await spawnChip.getAttribute("title").catch(() => "")) ?? "";
+const spawnTip = (await headerChip.getAttribute("title").catch(() => "")) ?? "";
 ok(
   /QA router citation/.test(spawnTip) &&
     /a practical, execution-oriented angle/.test(spawnTip) &&
     /open in the spawn inbox/.test(spawnTip),
-  "router chip tooltip cites reason + recovered branch + inbox status (r206)"
+  "router chip tooltip cites reason + recovered branch + inbox status (r206/r209)"
+);
+// r206 history variant: expanding Run history mounts the row chip too —
+// same shared composition, so the panel now shows the decision in both places.
+await page.locator("button", { hasText: "Run history" }).first().click().catch(() => {});
+await page.waitForTimeout(600);
+const routerChipCount = await page
+  .locator('[aria-label="This run triggered an Evolution variation proposal"]')
+  .count()
+  .catch(() => 0);
+ok(
+  routerChipCount >= 2,
+  `run-history row chip adds a second router chip (total ${routerChipCount}) (r206/r209)`
 );
 await page.keyboard.press("Escape").catch(() => {});
 await page.waitForTimeout(500); // sheet close before the board round-trips

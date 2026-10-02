@@ -83,7 +83,7 @@ import {
   runErrorKindLabel,
 } from "@/lib/workflow-runner";
 import { SCHEDULE_INTERVALS } from "@/lib/constants";
-import type { Workflow, WorkflowRunStep } from "@/lib/types";
+import type { SpawnProposal, Workflow, WorkflowRunStep } from "@/lib/types";
 import { TOOL_META } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DepthChip } from "@/components/praison/atoms";
@@ -598,6 +598,44 @@ function RunRecoveryCard({
   );
 }
 
+// ─── r206/r209: the router-decision chip, one composition two placements ────
+// Rendered when a SpawnProposal links back to a run via sourceRunId. The
+// r206 placement is the run-history row; r209 adds the panel HEADER so the
+// decision is visible the moment the panel opens for the triggering run —
+// no history expansion needed. Shared here so the two can never drift.
+function RunRouterChip({
+  prop,
+  workflows,
+}: {
+  prop: SpawnProposal;
+  workflows: Workflow[];
+}) {
+  const angle = angleOfProposal(prop.goal);
+  const spawnedName = prop.spawnedWorkflowId
+    ? workflows.find((w) => w.id === prop.spawnedWorkflowId)?.name
+    : undefined;
+  const statusLine =
+    prop.status === "accepted"
+      ? `accepted → "${spawnedName ?? prop.spawnedWorkflowId}"`
+      : prop.status === "dismissed"
+        ? "dismissed in the spawn inbox"
+        : "open in the spawn inbox";
+  return (
+    <span
+      title={`This run's low novelty triggered an Evolution variation.\nRouter: ${prop.reason}\nBranch: ${angle ? `"${angle}"` : "embedded in the proposal goal"}\nStatus: ${statusLine}`}
+      aria-label="This run triggered an Evolution variation proposal"
+      className={cn(
+        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+        prop.status === "dismissed"
+          ? "bg-muted text-muted-foreground"
+          : "bg-violet-500/15 text-violet-600 dark:text-violet-400"
+      )}
+    >
+      🧬 → variation
+    </span>
+  );
+}
+
 interface WorkflowRunPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -640,6 +678,11 @@ export function WorkflowRunPanel({
   const viewedRun = viewingRunId
     ? liveWorkflow?.runs.find((r) => r.id === viewingRunId)
     : undefined;
+  // r209: header variant — the router decision for the run the panel is
+  // OPEN on, visible without expanding history.
+  const viewedProposal = viewedRun
+    ? proposals.find((p) => p.sourceRunId === viewedRun.id) ?? null
+    : null;
   // Stop must survive navigation: after a remount the local abort handle is
   // gone, so derive "in flight" from the followed run and fall back to the
   // runner's live controller registry when stopping.
@@ -912,38 +955,13 @@ export function WorkflowRunPanel({
                   </span>
                 )}
                 {(() => {
-                  // r206: the router's decision now follows the run in BOTH
+                  // r206: the router's decision follows the run in BOTH
                   // directions — the spawned card carries the lineage chip
                   // (r203); the SOURCE run gets this chip citing the same
-                  // evidence. No new persistence: the proposal already links
-                  // back via sourceRunId, and its r199 reason text already
-                  // cites mode/leader/avg-novelty/sample-count verbatim.
+                  // evidence (composition shared with the r209 header chip).
                   const prop = proposals.find((p) => p.sourceRunId === r.id);
                   if (!prop) return null;
-                  const angle = angleOfProposal(prop.goal);
-                  const spawnedName = prop.spawnedWorkflowId
-                    ? workflows.find((w) => w.id === prop.spawnedWorkflowId)?.name
-                    : undefined;
-                  const statusLine =
-                    prop.status === "accepted"
-                      ? `accepted → "${spawnedName ?? prop.spawnedWorkflowId}"`
-                      : prop.status === "dismissed"
-                        ? "dismissed in the spawn inbox"
-                        : "open in the spawn inbox";
-                  return (
-                    <span
-                      title={`This run's low novelty triggered an Evolution variation.\nRouter: ${prop.reason}\nBranch: ${angle ? `"${angle}"` : "embedded in the proposal goal"}\nStatus: ${statusLine}`}
-                      aria-label="This run triggered an Evolution variation proposal"
-                      className={cn(
-                        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                        prop.status === "dismissed"
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-violet-500/15 text-violet-600 dark:text-violet-400"
-                      )}
-                    >
-                      🧬 → variation
-                    </span>
-                  );
+                  return <RunRouterChip prop={prop} workflows={workflows} />;
                 })()}
                 <span className="shrink-0 text-[11px] text-muted-foreground">
                   {fmtRel(r.startedAt)}
@@ -1081,6 +1099,11 @@ export function WorkflowRunPanel({
                 with (stamped by the runner) — a degraded fire reads "Standard"
                 here instead of lying with the workflow's authored "Deep". */}
             <DepthChip depth={viewedRun?.depth ?? liveWorkflow?.depth} />
+            {/* r209: the header router chip — same evidence as the history-row
+                chip, surfaced the moment the panel opens for this run. */}
+            {viewedProposal && (
+              <RunRouterChip prop={viewedProposal} workflows={workflows} />
+            )}
             {scheduleEnabled && (
               <span
                 title={`Recurring schedule · next ${fmtIn(schedule?.nextRunAt)}`}
