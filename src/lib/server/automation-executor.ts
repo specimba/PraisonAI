@@ -51,12 +51,17 @@ interface ResolvedDial {
 }
 
 /**
- * Resolve the dial endpoint for the server lane from ONE vault slot.
+ * r211: module-private single-slot probe — the per-slot semantics live here so
+ * there is exactly ONE dial resolver. Until r211 this logic was ALSO exported
+ * as resolveServerDial, giving dial semantics two surfaces that could drift;
+ * the exported surface is now resolveServerDialFromSlots alone (the lane QA
+ * exercises per-slot semantics through 1-element scans).
+ *
  * Returns null (with a machine-readable reason in `why`) when the slot's
  * opt-in key cannot be paired with a real registry endpoint — the executor
  * never invents endpoints or falls back to implicit credentials.
  */
-export function resolveServerDial(
+function probeSlotDial(
   vaultEntry: { provider: string; key: string } | null,
 ): { dial: ResolvedDial } | { dial: null; why: "no-vault-key" | "no-resolvable-provider" } {
   if (!vaultEntry || !vaultEntry.key.trim()) return { dial: null, why: "no-vault-key" };
@@ -80,6 +85,8 @@ export function resolveServerDial(
 }
 
 /**
+ * THE canonical server-lane resolver (r211: the single-slot probe above is
+ * folded in as a private helper — one exported surface, no drift possible).
  * r207: resolve the dial from ALL vault slots, oldest first — the first slot
  * that RESOLVES wins. Before this, tickOnce() read only the single oldest
  * slot, so a legacy builtin slot poisoned the lane even when a perfectly
@@ -102,7 +109,7 @@ export function resolveServerDialFromSlots(
   for (const slot of list) {
     if (!slot.key.trim()) continue; // empty slot: skip, keep scanning
     sawKey = true;
-    const resolved = resolveServerDial(slot);
+    const resolved = probeSlotDial(slot);
     if (resolved.dial) return { dial: resolved.dial, slot };
   }
   return { dial: null, why: sawKey ? "no-resolvable-provider" : "no-vault-key" };

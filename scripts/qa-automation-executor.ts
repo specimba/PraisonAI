@@ -17,7 +17,6 @@
 import { db } from "../src/lib/db";
 import {
   tickOnce,
-  resolveServerDial,
   resolveServerDialFromSlots,
   executeWorkflow,
   type TickResult,
@@ -137,25 +136,26 @@ try {
     data: { nextRunAt: new Date(Date.now() + 365 * 24 * 3_600_000) },
   });
 
-  // 1. resolveServerDial unit paths (pure, no dialing)
+  // 1. per-slot unit paths (pure, no dialing) — r211: probed through the ONE
+  // canonical resolver (1-element scans) after the resolveServerDial fold.
   ok(
-    resolveServerDial(null).dial === null &&
-      (resolveServerDial(null) as { why: string }).why === "no-vault-key",
-    "resolveServerDial: no vault entry → no-vault-key",
+    resolveServerDialFromSlots(null).dial === null &&
+      (resolveServerDialFromSlots(null) as { why: string }).why === "no-vault-key",
+    "fromSlots(1-slot probe): no vault entry → no-vault-key",
   );
   ok(
-    resolveServerDial({ provider: "builtin", key: "sk-x" }).dial === null &&
-      (resolveServerDial({ provider: "builtin", key: "sk-x" }) as { why: string }).why ===
+    resolveServerDialFromSlots([{ provider: "builtin", key: "sk-x" }]).dial === null &&
+      (resolveServerDialFromSlots([{ provider: "builtin", key: "sk-x" }]) as { why: string }).why ===
         "no-resolvable-provider",
-    "resolveServerDial: builtin slot is skipped honestly (never guessed)",
+    "fromSlots(1-slot probe): builtin slot is skipped honestly (never guessed)",
   );
-  const resolvedOk = resolveServerDial({ provider: PROVIDER, key: " sk-qa-space-key " });
+  const resolvedOk = resolveServerDialFromSlots([{ provider: PROVIDER, key: " sk-qa-space-key " }]);
   ok(
     resolvedOk.dial !== null &&
       resolvedOk.dial.url.endsWith("/chat/completions") &&
       resolvedOk.dial.key === "sk-qa-space-key" &&
       resolvedOk.dial.model.length > 0,
-    "resolveServerDial: registry provider resolves baseUrl + model id + trimmed key",
+    "fromSlots(1-slot probe): registry provider resolves baseUrl + model id + trimmed key",
   );
 
   // 1b. r207: resolveServerDialFromSlots — first RESOLVABLE slot wins.
@@ -295,7 +295,7 @@ try {
   await resetFixture();
   await db.automationWorkflow.update({ where: { id: WF_ID }, data: { stepsJson: "{corrupt", task: "" } });
   const empty = await db.automationWorkflow.findUnique({ where: { id: WF_ID } });
-  const dial = resolveServerDial({ provider: PROVIDER, key: "sk-qa-fake" }).dial!;
+  const dial = resolveServerDialFromSlots([{ provider: PROVIDER, key: "sk-qa-fake" }]).dial!;
   const guard = await executeWorkflow(
     { id: WF_ID, name: empty!.name, task: empty!.task, stepsJson: empty!.stepsJson, intervalMs: empty!.intervalMs },
     dial,

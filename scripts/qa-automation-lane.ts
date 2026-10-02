@@ -2,7 +2,7 @@
 // Three layers, one script:
 //   1. Pure unit tests for computeStaleRegistry (the >24h trap) and
 //      humanizeLaneReason.
-//   2. Pure unit tests for resolveServerDial — the executor's exact dial
+//   2. Pure unit tests for resolveServerDialFromSlots — the executor's exact dial
 //      resolution, no network, no dials.
 //   3. Live route contract: GET /api/automation/sync must report an
 //      executorLane that MIRRORS the executor (first vault row, registry
@@ -21,7 +21,7 @@ import {
   pickExecutorSlot,
   type ExecutorLaneState,
 } from "../src/lib/automation-lane";
-import { resolveServerDial, resolveServerDialFromSlots } from "../src/lib/server/automation-executor";
+import { resolveServerDialFromSlots } from "../src/lib/server/automation-executor";
 import { PrismaClient } from "@prisma/client";
 
 let pass = 0, fail = 0;
@@ -57,15 +57,16 @@ console.log("— humanizeLaneReason —");
 ok(humanizeLaneReason("no-vault-key") === "no vault key is stored", "no-vault-key sentence");
 ok(humanizeLaneReason("no-resolvable-provider").includes("built-in engine slot"), "no-resolvable-provider sentence names the builtin skip");
 
-console.log("— resolveServerDial (executor semantics, no network) —");
-const r1 = resolveServerDial(null);
-ok(!r1.dial && r1.why === "no-vault-key", "no vault entry → no-vault-key");
-const r2 = resolveServerDial({ provider: "builtin", key: "sk-x" });
+console.log("— resolveServerDialFromSlots per-slot semantics (r211: one canonical resolver — single-slot probes run through the same exported surface) —");
+const r1 = resolveServerDialFromSlots(null);
+ok(!r1.dial && r1.why === "no-vault-key", "no slots at all → no-vault-key");
+const r2 = resolveServerDialFromSlots([{ provider: "builtin", key: "sk-x" }]);
 ok(!r2.dial && r2.why === "no-resolvable-provider", "builtin slot → no-resolvable-provider (executor skips it)");
-const r3 = resolveServerDial({ provider: "vyce", key: " sk-vyce-real-key-123456 " });
+const r3 = resolveServerDialFromSlots([{ provider: "vyce", key: " sk-vyce-real-key-123456 " }]);
 ok(!!r3.dial && r3.dial.providerLabel === "Vyce AI", "registry provider resolves with label");
 ok(r3.dial?.url === "https://vyceai.com/v1/chat/completions", "dial URL pairs registry baseUrl with /chat/completions");
 ok(r3.dial?.key === "sk-vyce-real-key-123456", "key trimmed, never reformatted");
+ok(!!r3.dial && r3.slot.provider === "vyce", "chosen slot rides the dial (mask knows exactly which key)");
 
 console.log("— r210: pickExecutorSlot (card ⇄ executor dial parity) —");
 // The card wires providerById as isResolvable; the QA wires fixture booleans.

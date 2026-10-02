@@ -5698,3 +5698,29 @@ Verification result: PASS
 Open risks: parallel-instance duplication (two agents rotating the same backlog — ALWAYS diff against fork/main before implementing a handoff item); watcher data lost to the rollback (empty tracker until the next real sync); r142 real-world validation still pending.
 Blockers: none
 Next recommended action: r211 — (1) FIRST read any user report. (2) Backlog from the r209 handoff (verify against fork/main first): fold resolveServerDial single-slot path into the slots scan (one canonical resolver); vault slot age in the vault card; pulse attention deep-links; per-workflow variation-count badge. (3) Standing: tsc + eslint every round; keep the round's QA suite green.
+
+---
+Task ID: 424432 — r211
+Agent: main (platform development — hourly dev round)
+Task: r210 handoff — (1) no user report attached. (2) Backlog item #1 after fork-diff check: fold the single-slot dial probe into the slots scan (ONE canonical resolver). (3) Standing: tsc + eslint.
+
+Work Log:
+- Start-of-round discipline (the r210 lesson, now routine): fetched fork FIRST — local == fork/main == b9ad48e32, zero divergence, no parallel-instance work to collide with. Health 200. No user report.
+- Implemented the r209-handoff refactor: `resolveServerDial` (single-slot, exported) is folded into `resolveServerDialFromSlots` as the module-private `probeSlotDial`. The exported surface is now exactly ONE dial resolver — the "lane never lies" doctrine loses a second surface that could drift; per-slot semantics are reachable only through the same function the executor and the sync-GET lane mirror call.
+- QA ported to the single surface, not deleted: qa-automation-lane.ts per-slot unit cases now run as 1-element scans (same assertions: no-vault-key / builtin skip / trimmed key + label + URL) plus a new assertion that the chosen slot rides the dial (mask-contract parity). qa-automation-executor.ts's three unit probes and the corrupt-steps guard's dial construction likewise go through `resolveServerDialFromSlots`.
+- Self-caught process slip: my first call-site sweep used `rg ... | head -12` and truncated the executor QA's own import of the removed export — the first executor-QA run failed on the stale import. Caught by the QA run itself (not silently), fixed, re-run green. Lesson recorded: enumerate ALL matches before editing an export.
+- VERIFIED: qa-automation-executor.ts → 26/26 (vault/registry/heartbeat/run fixture snapshotted and restored byte-for-byte); qa-automation-lane.ts → 38/38 (live sync-route mirror layer included); tsc --noEmit → 0 src errors; eslint (executor + both QA scripts) → 0.
+
+Stage Summary:
+- The executor's dial semantics now have exactly one exported resolver; the r207 slot-promotion behavior is unchanged and re-proven by the same 26 executor assertions (promotion, stability, skip-scan, honest aggregation) through the single surface.
+
+Round Handoff:
+Round ID: r212
+Task owner: main (platform dev)
+Scope completed: canonical-resolver fold (probeSlotDial private; one exported dial surface) + both QA suites ported; snapshot pushed.
+User-visible changes: none (behavior-identical refactor — the r207 promotion/skip semantics re-verified 26/26).
+Verification steps: bun scripts/qa-automation-executor.ts → 26/26; bun scripts/qa-automation-lane.ts → 38/38; bunx tsc --noEmit → 0 src errors; bunx eslint → 0.
+Verification result: PASS
+Open risks: parallel-instance duplication (diff fork/main first — held clean this round); r142 real-world validation still pending; watcher data still empty since the rollback until a real sync.
+Blockers: none
+Next recommended action: r212 — (1) FIRST read any user report. (2) Backlog (diff fork/main first): vault slot age shown in the vault card (createdAt order is real but invisible); pulse attention cell deep-links to the offending strip; per-workflow variation-count header badge. (3) Standing: tsc + eslint; keep executor 26 / lane 38 / tracker-mirror 17 green.
