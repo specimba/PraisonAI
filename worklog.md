@@ -5232,3 +5232,29 @@ Verification result: PASS
 Open risks: (1) Free-text secrets pasted into conversations still ride along in exports (no reliable scrub; documented, not fixed). (2) The smoke seed writes praison-workflows unconditionally — if a future persist-version bump changes the shape, the seeded rehydration silently no-ops and the banner assertions fail loudly (good failure mode). (3) r189 stale-tab confirmation STILL pending — no user paste since the guard shipped (3 rounds).
 Blockers: none
 Next recommended action: r194 — (1) FIRST read any user report: banner/violet chip in a paste → stale-tab theory confirmed; 11-step runs with chip visible → audit persisted store schedule shape. (2) Backlog (rotate surfaces): structured error-code mapping for the relay taxonomy (r188 risk 2 — JSON "code":"insufficient_quota" without matching text falls through to hard today); event-ID scheduler health; proposal-reason polish naming the leading branch when exploitation fires. (3) Consider surfacing a "credentials excluded" hint next to the import dialog when a scrubbed export is imported (users may wonder where their keys went).
+
+---
+Task ID: 424432 — r194 (relay taxonomy reads structured error codes — r188 risk 2 closed)
+Agent: main (platform development — hourly dev round)
+Task: r193 handoff backlog top item: structured error-code mapping for the relay taxonomy. No user report this fire (stale-tab confirmation pending, 4 rounds).
+
+Work Log:
+- GAP (r188 risk 2, verified in relay.ts): the three verdict predicates were text-only. A provider envelope like {"error":{"message":"Request failed","code":"model_not_found"}} carries no keyword the regexes see — the corpse was misfiled "hard" (5-min cooldown) and re-dialed every turn: the exact re-dial loop the user has been fighting. Codes like permission_denied / account_deactivated / region_not_supported / subscription_required all fell to hard.
+- SHIPPED — code-field mapping (r194): three explicit-code regexes (CODED_SOFT/DEADLY/AUTH) match verdicts inside the envelope's "code" OR "type" field (whitespace-tolerant), OR'd into the existing text predicates — wire format unchanged, engine/runner/chat untouched (they call the same three functions). Discipline choices: EXPLICIT code lists (generic "invalid_request_error" — bad params/bad JSON — must NOT stamp dead or sink the key family); auth codes ⊆ deadly codes (the engine gates auth on dead first, so family stamping fires); quota-exhaustion codes (insufficient_quota) stay SOFT per the r187 doctrine (drained window resets, never demotes — billing_hard_limit kept out of dead for consistency).
+- QA: K-series 73 → 84. New K9 (11 assertions): model_not_found keyword-less → DEAD; authentication_error/account_deactivated → DEAD+AUTH; permission_denied → DEAD not AUTH (hop-scoped); region codes (with colon-space); insufficient_quota/rate_limit_exceeded → SOFT; negative controls — invalid_request_error and method_not_allowed stay HARD (no over-reach, no family sink); text-keyword path unregressed.
+- Verification: K 84/84; B 37/37; smoke 8/8 (0 page errors); tsc clean; eslint 0 (relay.ts + QA); root 200.
+- Snapshot pushed → fork/main (4adcc4c3b).
+
+Stage Summary:
+- The taxonomy now speaks the providers' native dialect: when the message is useless but the envelope's code says model_not_found, the hop dies for hours instead of being re-dialed all night. Family stamping (auth codes) and soft precedence (quota codes) inherit the r187/r188 doctrine unchanged.
+
+Round Handoff:
+Round ID: r195
+Task owner: main (platform dev)
+Scope completed: structured error-code mapping (CODED_SOFT/DEADLY/AUTH) wired into the three verdict predicates + K9 QA (11 assertions).
+User-visible changes: hops rejected via JSON error codes without informative messages (model_not_found, permission_denied, account_deactivated, region codes, subscription_required) are now skipped for hours instead of re-dialed every turn; generic bad-request errors still rotate normally.
+Verification steps: bun run scripts/qa-relay-taxonomy.ts → 84/84; bun run scripts/qa-spawn-branches.ts → 37/37; node scripts/qa-r186-smoke.mjs → 8/8; tsc → clean; eslint → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) The code vocabulary is explicit-by-design — an exotic provider code not in the lists still falls to hard (documented extension point: add to CODED_DEADLY_RE after confirming it is truly permanent). (2) Codes are matched inside ANY "code"/"type" string value — an error MESSAGE that embeds a literal quoted {"code":"..."} fragment would classify from it (acceptable: the fragment came from the provider anyway). (3) r189 stale-tab confirmation STILL pending — 4 rounds without a user paste; the instrumentation (violet chip, stale-build pill, lane-degraded banner) is all in place and idle.
+Blockers: none
+Next recommended action: r195 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): event-ID scheduler health (directive d); proposal-reason polish naming the leading branch when exploitation fires; import-dialog "credentials excluded" hint for scrubbed exports (r193 item 3). (3) If no user paste arrives by r197, consider a proactive user-facing changelog note (Settings or README section) summarizing r186-r194 fixes so the user knows what to look for on the board.
