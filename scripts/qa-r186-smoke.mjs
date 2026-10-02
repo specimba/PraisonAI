@@ -2,6 +2,8 @@
 // r192: breaker banner round-trip. r195: changelog freshness proof.
 // r196: import dialog credential honesty + keep-on-silent round-trip.
 // r197: event-backed schedule-evidence chips (red missed / amber error / green ok).
+// r201: StaleBuildGuard assertiveness — foreground re-poll, re-toast (one id),
+// tab-title ping.
 import { chromium } from "playwright";
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
@@ -193,6 +195,59 @@ ok(
   !(await page.locator(dialogSel).first().isVisible().catch(() => false)),
   "Cancel aborts the import (no reload, no write)"
 );
+
+// r201: StaleBuildGuard assertiveness (fresh context, no seeds — the guard
+// is isolated from the board assertions above). Route /api/version with a
+// controllable stamp: the mount poll adopts "boot-a" as baseline, then the
+// stamp flips to "boot-b" and a visibilitychange (foreground return) must
+// re-poll IMMEDIATELY (r201 upgrade #1 — not the clamped 60s interval),
+// surface the sticky toast + pill, ping the tab title (#3), and a second
+// foreground return must reuse the same toast id (#2 — replace, not stack).
+const guardCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+const gp = await guardCtx.newPage();
+let verHits = 0;
+await gp.route("**/api/version", (route) => {
+  verHits++;
+  return route.fulfill({ json: { stamp: verHits <= 1 ? "boot-a" : "boot-b" } });
+});
+await gp.goto(BASE, { waitUntil: "domcontentloaded" }).catch(() => {});
+await gp.waitForTimeout(2500); // mount poll adopts "boot-a" as the baseline
+ok(
+  !(await gp.locator('[data-testid="stale-build-pill"]').isVisible().catch(() => false)),
+  "guard silent while the server stamp is unchanged since load"
+);
+await gp.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+await gp.waitForTimeout(1200);
+ok(
+  await gp.locator('[data-testid="stale-build-pill"]').isVisible().catch(() => false),
+  "foreground return re-polls the stamp immediately → stale pill appears (r201)"
+);
+const guardToast = await gp.locator("[data-sonner-toast]").first().innerText().catch(() => "");
+ok(
+  /App updated|old code/i.test(guardToast),
+  "sticky stale toast fires on the visibility-detected change"
+);
+ok(
+  (await gp.title()).includes("🔄"),
+  "tab title pings while stale (visible in the tab strip)"
+);
+await gp.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+// The page may carry unrelated app toasts (e.g. the AIHubMix announcement),
+// so the no-spam contract counts only STALE-build toasts: a re-assert with
+// the same sonner id must replace in place — exactly one, always.
+let settledCount = -1;
+for (let i = 0; i < 12; i++) {
+  settledCount = await gp
+    .locator("[data-sonner-toast]", { hasText: "App updated" })
+    .count();
+  if (settledCount === 1) break;
+  await gp.waitForTimeout(400);
+}
+ok(
+  settledCount === 1,
+  "re-assert on second foreground return reuses one toast id (no stack spam)"
+);
+await guardCtx.close();
 
 // r196 keep-behavior round-trip (must run LAST — it reloads the page):
 // seed a local credential, import the scrubbed file for real, confirm the
