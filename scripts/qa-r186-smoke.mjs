@@ -1,4 +1,7 @@
 // r186 browser smoke: workflows board renders + run panel depth chip reads stamped depth.
+// r192: breaker banner round-trip. r195: changelog freshness proof.
+// r196: import dialog credential honesty + keep-on-silent round-trip.
+// r197: event-backed schedule-evidence chips (red missed / amber error / green ok).
 import { chromium } from "playwright";
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
@@ -14,23 +17,77 @@ page.on("pageerror", (e) => errors.push(String(e)));
 // no autoResumeAt, failStreak 3) — the r192 board banner must explain the
 // parked board, and "Resume all" must re-arm the schedule in the persisted
 // store. Seeded pre-navigation so zustand persist rehydrates it.
+//
+// r197: three more workflows with ENABLED schedules exercise the
+// event-evidence chip's three tones. nextRunAt is pushed into the future so
+// the smoke's own scheduler tick does not fire them mid-assertion:
+//   wf-qa-ev-missed — last scheduled fire 5h ago (interval 1h → 3× window
+//                     blown) → RED "no fire in 5h"
+//   wf-qa-ev-error  — last scheduled fire failed 20m ago → AMBER
+//   wf-qa-ev-ok     — last scheduled fire done 10m ago → muted green
 await page.addInitScript(() => {
+  const now = Date.now();
+  const hour = 3_600_000;
+  const mkRun = (id, wfId, wfName, source, status, startedAt) => ({
+    id,
+    workflowId: wfId,
+    workflowName: wfName,
+    task: "seeded task",
+    status,
+    startedAt,
+    finishedAt: startedAt + 60_000,
+    source,
+    steps: [],
+  });
   localStorage.setItem("praison-workflows", JSON.stringify({
     state: {
-      workflows: [{
-        id: "wf-qa-paused",
-        name: "QA Paused Pipeline",
-        description: "seeded by qa-r186-smoke",
-        steps: [{ id: "s1", agentId: "a1", label: "Seeded step", instruction: "say hi" }],
-        runs: [],
-        createdAt: Date.now() - 1000,
-        updatedAt: Date.now() - 1000,
-        schedule: { enabled: false, intervalMs: 3600000, failStreak: 3, task: "seeded task" },
-      }],
+      workflows: [
+        {
+          id: "wf-qa-paused",
+          name: "QA Paused Pipeline",
+          description: "seeded by qa-r186-smoke",
+          steps: [{ id: "s1", agentId: "a1", label: "Seeded step", instruction: "say hi" }],
+          runs: [],
+          createdAt: now - 1000,
+          updatedAt: now - 1000,
+          schedule: { enabled: false, intervalMs: 3600000, failStreak: 3, task: "seeded task" },
+        },
+        {
+          id: "wf-qa-ev-missed",
+          name: "QA Evidence Missed",
+          description: "seeded by qa-r186-smoke (r197 red)",
+          steps: [{ id: "s1", agentId: "a1", label: "Seeded step", instruction: "say hi" }],
+          runs: [mkRun("run-qa-ev-missed-1", "wf-qa-ev-missed", "QA Evidence Missed", "scheduled", "done", now - 5 * hour)],
+          createdAt: now - 2 * day(),
+          updatedAt: now,
+          schedule: { enabled: true, intervalMs: hour, lastRunAt: now - 5 * hour, nextRunAt: now + hour, task: "seeded task" },
+        },
+        {
+          id: "wf-qa-ev-error",
+          name: "QA Evidence Error",
+          description: "seeded by qa-r186-smoke (r197 amber)",
+          steps: [{ id: "s1", agentId: "a1", label: "Seeded step", instruction: "say hi" }],
+          runs: [mkRun("run-qa-ev-error-1", "wf-qa-ev-error", "QA Evidence Error", "scheduled", "error", now - 20 * 60_000)],
+          createdAt: now - 2 * day(),
+          updatedAt: now,
+          schedule: { enabled: true, intervalMs: hour, failStreak: 2, lastRunAt: now - 20 * 60_000, nextRunAt: now + hour, task: "seeded task" },
+        },
+        {
+          id: "wf-qa-ev-ok",
+          name: "QA Evidence Ok",
+          description: "seeded by qa-r186-smoke (r197 green)",
+          steps: [{ id: "s1", agentId: "a1", label: "Seeded step", instruction: "say hi" }],
+          runs: [mkRun("run-qa-ev-ok-1", "wf-qa-ev-ok", "QA Evidence Ok", "scheduled", "done", now - 10 * 60_000)],
+          createdAt: now - 2 * day(),
+          updatedAt: now,
+          schedule: { enabled: true, intervalMs: hour, lastRunAt: now - 10 * 60_000, nextRunAt: now + hour, task: "seeded task" },
+        },
+      ],
       proposals: [],
     },
     version: 0,
   }));
+  function day() { return 24 * 3_600_000; }
 });
 
 try {
@@ -53,6 +110,24 @@ ok(/Evolution ledger|Pipelines|Runs board/i.test(body), "board sections render")
 // The chip text itself appears inside the run panel sheet; assert the component
 // vocabulary is present in the bundle-driven page (rendered when a panel opens).
 ok(/Deep|Standard|Quick/.test(body), "depth vocabulary present on board (cards/chips)");
+
+// r197: event-evidence chips — health from stamped run events, not promises.
+const chip = page.locator('[data-testid="schedule-evidence-chip"]');
+ok(
+  await chip.filter({ hasText: "no fire in" }).first().isVisible().catch(() => false),
+  "evidence chip RED 'no fire in 5h' renders for the stale-schedule seed"
+);
+ok(
+  await chip.filter({ hasText: "· error" }).first().isVisible().catch(() => false),
+  "evidence chip AMBER 'last fire · error' renders for the failing seed"
+);
+ok(
+  await chip.filter({ hasText: "· done" }).first().isVisible().catch(() => false),
+  "evidence chip muted-green 'last fire · done' renders for the ok seed"
+);
+// Directive (d) literal ask: the tooltip cites the backing run event ID.
+const okTip = await chip.filter({ hasText: "· done" }).first().getAttribute("title").catch(() => "");
+ok(/run run-qa-ev-ok-1/.test(okTip ?? ""), "chip tooltip cites the backing run event id");
 
 ok(errors.length === 0, `no page errors (${errors.length})`);
 if (errors.length) console.log(errors.slice(0, 3).join("\n"));
@@ -81,6 +156,68 @@ ok(
   /What.s fixed recently/i.test(await page.locator("body").innerText()),
   "Settings → What's fixed changelog renders (r195+ bundle proof)"
 );
+
+// r196: import confirm dialog — a scrubbed export must state its credential
+// disposition honestly (amber note + "keys are kept" copy) and Cancel must
+// abort without writing or reloading.
+const scrubbedFile = {
+  name: "scrubbed-export.json",
+  mimeType: "application/json",
+  buffer: Buffer.from(JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    settings: { seeded: true, temperature: 0.55 },
+    agents: [],
+    conversations: [],
+    workflows: [],
+  })),
+};
+const importInput = page.locator('[data-testid="full-import-input"]');
+await importInput.setInputFiles(scrubbedFile);
+await page.waitForTimeout(600);
+const dialogSel = "text=Replace current data with this import?";
+ok(
+  await page.locator(dialogSel).first().isVisible().catch(() => false),
+  "import confirm dialog opens for a picked scrubbed file"
+);
+ok(
+  await page.locator("text=No credentials in this export").first().isVisible().catch(() => false),
+  "amber 'No credentials in this export' note renders for a scrubbed file"
+);
+ok(
+  /Provider keys in this browser are kept/.test(await page.locator("body").innerText()),
+  "dialog copy states keys are kept when the file carries none"
+);
+await page.locator("button", { hasText: "Cancel" }).first().click();
+await page.waitForTimeout(300);
+ok(
+  !(await page.locator(dialogSel).first().isVisible().catch(() => false)),
+  "Cancel aborts the import (no reload, no write)"
+);
+
+// r196 keep-behavior round-trip (must run LAST — it reloads the page):
+// seed a local credential, import the scrubbed file for real, confirm the
+// replace — the file's settings must apply AND the local key must survive.
+await page.evaluate(() => {
+  localStorage.setItem("praison-settings", JSON.stringify({
+    state: { settings: { apiKey: "sk-qa-keep-me", temperature: 0.7, seeded: true } },
+    version: 0,
+  }));
+});
+await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+await page.waitForTimeout(2000);
+// navigate back to Settings and pick the file again post-reload
+await page.locator("button", { hasText: "Settings" }).first().click().catch(() => {});
+await page.waitForTimeout(1000);
+await importInput.setInputFiles(scrubbedFile);
+await page.waitForTimeout(600);
+await page.locator("button", { hasText: "Replace & reload" }).first().click();
+await page.waitForTimeout(3000); // import writes + location.reload()
+const storedSettings = JSON.parse(
+  (await page.evaluate(() => localStorage.getItem("praison-settings"))) ?? "{}"
+);
+const st = storedSettings?.state?.settings ?? {};
+ok(st.apiKey === "sk-qa-keep-me", "keep-behavior: local apiKey survives the scrubbed import");
+ok(st.temperature === 0.55, "keep-behavior: file settings applied (temperature from file)");
 
 await browser.close();
 console.log(`\n${pass}/${pass + fail} browser smoke assertions passed`);
