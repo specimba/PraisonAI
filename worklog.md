@@ -5558,3 +5558,31 @@ Verification result: PASS
 Open risks: (1) The executor's oldest-vault-slot-wins rule is surfaced honestly but is still a blunt rule — promoting a newer provider requires removing the older slot (the card says so); an executor-side "prefer resolvable slot" tweak is a candidate follow-up. (2) The stale-registry note can't fire from live data yet (Morning Briefing crosses 24h overdue at ~15:33Z today) — unit tests + predicate cover it meanwhile. (3) smoke chip assertions are defensive across the three honest lane states, so a vault key stored by the user changes which state the smoke sees (all three accepted). (4) User confirmation still pending since r189 — 15 rounds; all diagnostics now idle-in-place awaiting a real user visit.
 Blockers: none
 Next recommended action: r206 — (1) FIRST read any user report. (2) Backlog: run-panel tooltip exposing a single run's router-angle decision (r203 lineage follow-up); user-facing diagnostics summary card aggregating the r192–r205 instruments; executor-side "prefer resolvable vault slot" promotion rule + QA. (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 28 / executor 17 / lane 24 green.
+---
+Task ID: 424432 — r206 (the router's decision now follows the run that triggered it)
+Agent: main (platform dev)
+Task: r205 handoff — run-panel tooltip exposing a single run's router-angle decision (r203 lineage follow-up). No user report present (16 rounds pending confirmation).
+
+Work Log:
+- r203 put the lineage chip on the SPAWNED workflow card; the SOURCE run — the one whose low novelty actually triggered the router — still showed only its 🧬 novelty % with no consequence. Closed that loop: every run-history row in WorkflowRunPanel now renders a violet "🧬 → variation" chip when a SpawnProposal links back via sourceRunId.
+- Zero new persistence: the proposal already carries sourceRunId; its r199 reason text already cites the router decision verbatim (mode/leader/avg-novelty/sample-count); angleOfProposal() recovers the branch from the proposal goal. The tooltip composes all four facts: trigger sentence + "Router: <reason>" + "Branch: \"<angle>\"" + "Status: open in the spawn inbox | accepted → \"<spawned name>\" | dismissed". Dismissed proposals render muted instead of violet.
+- Smoke round-trip (26→30): seeded an open follow-up proposal sourced from run-qa-ev-ok-1 with the ANGLES string embedded verbatim in its goal; asserts the chip renders and the tooltip cites reason + recovered branch + inbox status.
+- Two real UI facts surfaced by writing the smoke (kept as assertions): (1) the Runs board kanban only renders in the "Runs board" layout — the smoke must toggle [aria-label="Runs board layout"] before clicking a run row, and switch back to "Card grid layout" afterward or the r192 breaker banner (grid-only) silently stops rendering; (2) run history is a Collapsible closed by default — per-run chips only exist after expanding "Run history". Both walk-throughs now encode the real user path: board layout → run row → expand history → chip.
+- Debug method: a throwaway playwright script (deleted after use) proved the full path — board toggle → 2 kanban rows → panel opens → history expands → chip count 1 — before touching the smoke again.
+
+Verification: smoke 30/30 (0 page errors); qa:syntax PASS (218 files); qa:tsc exit 0; eslint 0 (workflow-run-panel.tsx); B 40/40; K 84/84; lane QA 24/24; executor QA 17/17; root 200.
+Snapshot pushed → fork/main (45e1dc08a).
+
+Stage Summary:
+- The evolution loop is now navigable end-to-end from the run that triggered it: run row → "🧬 → variation" chip → tooltip (router decision) → spawned card's r203 lineage chip. Same evidence, both directions, no schema change.
+
+Round Handoff:
+Round ID: r207
+Task owner: main (platform dev)
+Scope completed: source-run router chip in WorkflowRunPanel history rows + smoke 30 (kanban-layout and history-collapse walk-through encoded).
+User-visible changes: opening a run panel and expanding history now shows which runs triggered Evolution variations and why the router picked the branch — including open/accepted/dismissed status.
+Verification steps: node scripts/qa-r186-smoke.mjs → 30/30; bun run qa:syntax → PASS; bun run qa:tsc → 0; bunx eslint <touched> → 0; B 40 / K 84 / lane 24 / executor 17; curl root → 200.
+Verification result: PASS
+Open risks: (1) The chip renders only after expanding run history (collapsed by default) — discoverable but one click deep; a per-run header variant could surface it sooner. (2) The board-layout round-trip in the smoke depends on two aria-labels ("Runs board layout", "Card grid layout") — renaming them breaks the smoke loudly (acceptable). (3) User confirmation still pending since r189 — 16 rounds; the full evolution evidence chain (novelty chip → router chip → lineage chip → ledger) is now in place awaiting a real user visit.
+Blockers: none
+Next recommended action: r207 — (1) FIRST read any user report. (2) Backlog: user-facing diagnostics summary card aggregating the r192–r206 instruments; executor-side "prefer resolvable vault slot" promotion rule + QA; run-panel header variant of the router chip (surface without expanding history). (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 30 / lane 24 / executor 17 green.
