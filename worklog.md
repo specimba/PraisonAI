@@ -5180,3 +5180,29 @@ Verification result: PASS
 Open risks: (1) Outcome novelty is the spawned pipeline's LATEST scored run only — a branch whose first variation was brilliant but later stalled carries that stale score until a newer run lands (router averaging across proposals of the same branch partially self-corrects). (2) Exploitation needs ≥2 branches with novelty samples AND equal usage to fire — with usage skewed, exploration dominates by design; real signal accrues slowly. (3) r189's stale-tab/violet-chip confirmation from the user is STILL pending — no paste since the guard shipped; if the next paste shows 11-step runs with the chip visible, audit persisted store schedule shape.
 Blockers: none
 Next recommended action: r192 — (1) FIRST read any user report: violet "deep paused · firing standard" chip + 5-step runs → stale-tab theory confirmed; chip + 11-step runs → audit persisted zustand store vs live (schedule shape migration) as prime suspect. (2) Backlog (rotate surfaces): "lane degraded — schedules auto-paused" banner (carried r187→r191, visibility for a paused board the user can't explain); structured error-code mapping for the relay taxonomy (r188 risk 2); event-ID scheduler health; credential scrubbing from exports. (3) Optional router polish: surface the led branch in the proposal reason ("leading branch by past outcome novelty") when exploitation actually fires.
+
+---
+Task ID: 424432 — r192 ("lane degraded — schedules auto-paused" board banner shipped)
+Agent: main (platform development — hourly dev round)
+Task: r191 handoff backlog item carried since r187: board-level visibility for breaker-paused schedules ("visibility beats a paused board the user can't explain"). No new user paste this fire (r189 violet-chip / stale-tab confirmation still pending).
+
+Work Log:
+- GAP: the runner's breaker (r156/r171) auto-pauses schedules after ≥3 consecutive failures (2 for rate-limit) and per-card chips show it (amber backoff / red "auto-paused · click to resume" / violet deep-paused), but when a relay lane goes down and parks SEVERAL schedules at once, the board shows no top-level explanation — it just looks dead.
+- SHIPPED — board banner (r192): red Alert above the workflow cards grid whenever ≥1 schedule sits in an honest breaker pause (enabled:false ∧ autoResumeAt==null ∧ failStreak≥2 — the exact predicate of the red card chip). Title "Lane degraded — N schedule(s) auto-paused by the failure breaker"; body names up to 3 workflows (+N more), cites the worst failStreak, appends "M more in 429 backoff (self-resuming)" when congestion parks exist, and offers a one-click "Resume all" (bulk resume mirrors resumeSchedule semantics: enabled + failStreak 0 + autoResumeAt/Trips cleared + nextRunAt cleared, ONE summary toast instead of N).
+- Design choice: deliberately NO dismiss button — the banner is self-limiting (exists only while a breaker pause is real; any resume clears it), so it can't hide live state.
+- Verification: tsc clean (pre-existing scripts/hang-server.ts only); eslint 0; qa-r186-smoke 5/5 (board renders, 0 page errors); B-series 37/37 (no regression); root 200.
+- Snapshot pushed → fork/main (739e69e1a).
+
+Stage Summary:
+- A board full of paused schedules now explains itself at the top: which lane tripped, how many schedules parked, the failure streak that did it, and a single click to re-arm everything. Closes the r187→r191 visibility backlog item.
+
+Round Handoff:
+Round ID: r193
+Task owner: main (platform dev)
+Scope completed: "Lane degraded" board banner + bulk "Resume all" + congestion-backoff cross-reference.
+User-visible changes: boards with breaker-paused schedules carry a red explanation banner with a one-click bulk resume; congestion backoffs are distinguished from honest pauses.
+Verification steps: tsc; eslint (workflows-view); node scripts/qa-r186-smoke.mjs → 5/5; bun run scripts/qa-spawn-branches.ts → 37/37; curl root → 200.
+Verification result: PASS
+Open risks: (1) The banner's render path with REAL paused schedules was not browser-QA'd this round (the smoke board has no paused schedules seeded) — JSX/type safety is covered by tsc+smoke, but a seed-the-store browser test asserting the banner text is queued. (2) resumeAllPaused bypasses the per-card toast in favor of one summary — a user watching for per-workflow confirmations will only see the aggregate. (3) r189 stale-tab confirmation STILL pending — no paste since the guard shipped.
+Blockers: none
+Next recommended action: r193 — (1) FIRST read any user report: banner or violet chip in a paste → confirm stale-tab theory; 11-step runs with chip visible → audit persisted store schedule shape. (2) Queued QA: extend qa-r186-smoke with a seeded paused schedule (persisted zustand localStorage) asserting the banner renders + "Resume all" re-enables it. (3) Backlog (rotate surfaces): structured error-code mapping for the relay taxonomy (r188 risk 2); event-ID scheduler health; credential scrubbing from exports; proposal-reason polish naming the leading branch when exploitation fires.
