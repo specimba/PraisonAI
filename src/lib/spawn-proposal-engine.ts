@@ -92,7 +92,26 @@ const avg = (xs: number[] | undefined): number =>
  * Empty history collapses to the legacy hash pick, so old behavior survives
  * as the cold-start tie-break.
  */
-export function pickVariationAngle(taskExcerpt: string, history: AngleHistoryEntry[] = []): string {
+export type AngleDecision = {
+  angle: string;
+  /** How the router decided: "exploitation" = best past outcome novelty among
+   * the least-used branches; "exploration" = least-used with no scored
+   * history (hash tie-break); "cold-start" = legacy hash pick. */
+  mode: "exploitation" | "exploration" | "cold-start";
+  /** When exploitation fired: the branch that led and its evidence. */
+  leader?: { angle: string; avgNovelty: number; samples: number };
+};
+
+/**
+ * r199: decision-aware router — same selection as pickVariationAngle, but it
+ * also reports HOW it decided so the proposal reason can cite the evidence
+ * ("exploiting the leading branch, avg X% novelty over N scored variations").
+ * pickVariationAngle keeps its string signature for existing callers/QA.
+ */
+export function pickVariationAngleWithReason(
+  taskExcerpt: string,
+  history: AngleHistoryEntry[] = []
+): AngleDecision {
   const usage = new Map<string, number>(ANGLES.map((a) => [a, 0]));
   const noveltySamples = new Map<string, number[]>();
   for (const h of history) {
@@ -110,10 +129,27 @@ export function pickVariationAngle(taskExcerpt: string, history: AngleHistoryEnt
     const scored = candidates.filter((a) => (noveltySamples.get(a)?.length ?? 0) > 0);
     if (scored.length > 0) {
       scored.sort((a, b) => avg(noveltySamples.get(b)) - avg(noveltySamples.get(a)));
-      return scored[0];
+      const leader = scored[0];
+      const samples = noveltySamples.get(leader) ?? [];
+      return {
+        angle: leader,
+        mode: "exploitation",
+        leader: { angle: leader, avgNovelty: avg(samples), samples: samples.length },
+      };
     }
+    // r199 FIX: the cold-start line had been corrupt in git history —
+    // "return candidatesashIndex(taskExcerpt) % candidates.length];" — an
+    // undefined symbol plus a stray bracket. Every toolchain (tsc incremental
+    // cache, bun transpiler cache, Next dev module cache) served its CACHED
+    // parse of the pre-corruption code, so nothing ever flagged it, but any
+    // fresh parse (clean clone, CI, deploy build) would have failed to compile.
+    return { angle: candidates[hashIndex(taskExcerpt) % candidates.length], mode: "exploration" };
   }
-  return candidates[hashIndex(taskExcerpt) % candidates.length];
+  return { angle: candidates[hashIndex(taskExcerpt) % candidates.length], mode: "cold-start" };
+}
+
+export function pickVariationAngle(taskExcerpt: string, history: AngleHistoryEntry[] = []): string {
+  return pickVariationAngleWithReason(taskExcerpt, history).angle;
 }
 
 export interface MaybeProposeSpawnInput {
@@ -180,13 +216,22 @@ export function buildVariationProposal(
     input.taskExcerpt.trim().replace(/\s+/g, " ").slice(0, 220) ||
     input.sourceWorkflowName;
   const threshold = input.threshold ?? NOVELTY_SPAWN_THRESHOLD;
-  const angle = pickVariationAngle(base, input.angleHistory);
+  // r199: the reason names the router's DECISION, not just the rotation count.
+  const decision = pickVariationAngleWithReason(base, input.angleHistory);
+  const angle = decision.angle;
   const prior = input.angleHistory?.length ?? 0;
   const coreReason = input.manual
     ? input.novelty != null
       ? `Manually requested — latest run scored ${Math.round(input.novelty)}% novelty (below the ${threshold}% stall threshold)`
       : "Manually requested variation — the user asked Evolution for a fresh angle"
     : `Novelty stalled at ${Math.round(input.novelty ?? 0)}% — recent runs of this pipeline produce near-duplicate output, so a fresh angle is proposed`;
+  const decisionNote =
+    decision.mode === "exploitation" && decision.leader
+      ? `the router is exploiting the leading branch — "${decision.leader.angle}" averaged ${Math.round(decision.leader.avgNovelty)}% novelty across ${decision.leader.samples} scored variation${decision.leader.samples === 1 ? "" : "s"}`
+      : decision.mode === "exploration"
+        ? "the router is exploring — every scored branch is exhausted, so the least-tried angle gets its turn"
+        : "";
+  const rotationNote = `branch rotated after ${prior} prior proposal${prior === 1 ? "" : "s"} for this pipeline`;
   return {
     id: crypto.randomUUID(),
     createdAt: Date.now(),
@@ -194,7 +239,7 @@ export function buildVariationProposal(
     goal: `${base} — approach it from ${angle}`,
     reason:
       prior > 0
-        ? `${coreReason} — branch rotated after ${prior} prior proposal${prior === 1 ? "" : "s"} for this pipeline (repeating the old angle would replay the same search trajectory)`
+        ? `${coreReason} — ${decisionNote || rotationNote} (repeating the old angle would replay the same search trajectory)`
         : coreReason,
     sourceWorkflowId: input.sourceWorkflowId,
     sourceWorkflowName: input.sourceWorkflowName,

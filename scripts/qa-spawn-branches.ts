@@ -93,7 +93,28 @@ const rotated = buildVariationProposal({
 });
 ok(ANGLES.some((a) => rotated.goal.endsWith(`approach it from ${a}`)), "rotated goal still names a valid branch");
 ok(rotated.goal !== stalled.goal, "two uses of the legacy branch force a DIFFERENT goal angle");
-ok(rotated.reason.includes("branch rotated after 2 prior proposals"), "rotation note carries the prior-proposal count");
+ok(rotated.reason.includes("the router is exploring"), "exploration mode names the router decision in the reason (unscored history)");
+// r199: exploitation fires name the leading branch and its outcome evidence.
+const exploit = buildVariationProposal({
+  sourceWorkflowId: "wf-x",
+  sourceWorkflowName: "x",
+  sourceRunId: "r",
+  taskExcerpt: TASK,
+  novelty: 20,
+  angleHistory: [
+    { angle: ANGLES[0], novelty: 30 },
+    { angle: ANGLES[1], novelty: 85 },
+    { angle: ANGLES[1], novelty: 90 },
+    { angle: ANGLES[2], novelty: 10 },
+    { angle: ANGLES[3], novelty: 95 },
+  ],
+});
+ok(exploit.goal.endsWith(`approach it from ${ANGLES[3]}`), "exploitation picks the best-scoring least-used branch");
+ok(exploit.reason.includes("exploiting the leading branch"), "exploitation reason names the leading branch");
+ok(
+  exploit.reason.includes("95% novelty across 1 scored variation"),
+  "exploitation reason cites avg novelty + sample count"
+);
 
 console.log("B6 — maybeProposeSpawn: gates intact, history flows through");
 ok(maybeProposeSpawn({
@@ -120,7 +141,11 @@ ok(/buildAngleHistory/.test(runnerSrc) && /latestScoredNovelty/.test(runnerSrc),
 ok(/buildAngleHistory/.test(viewSrc) && /latestScoredNovelty/.test(viewSrc), "manual 'Suggest variation' uses the shared join too");
 ok(!/angleOfProposal\(p\.goal\)/.test(runnerSrc) && !/angleOfProposal\(p\.goal\)/.test(viewSrc), "no consumer re-implements the join (single decision point)");
 ok(/for \(const w of st\.workflows\)/.test(runnerSrc) && /for \(const w of workflows\)/.test(viewSrc), "both call sites score from the live workflows store, not stale props");
-ok(/pickVariationAngle\(base, input\.angleHistory\)/.test(src), "builder routes through pickVariationAngle (single decision point)");
+ok(
+  /pickVariationAngleWithReason\(base, input\.angleHistory\)/.test(src) &&
+    /return pickVariationAngleWithReason\(taskExcerpt, history\)\.angle/.test(src),
+  "builder + public router both route through the single decision point (r199)"
+);
 ok(!/hashPick/.test(src), "legacy hashPick name is gone (replaced by index tie-break)");
 
 console.log("B8 — r191 outcome-novelty join: proposals × spawned pipelines");
