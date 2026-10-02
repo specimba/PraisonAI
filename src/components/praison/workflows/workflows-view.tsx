@@ -63,7 +63,7 @@ import {
   useWorkflowsStore,
 } from "@/lib/stores";
 import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
-import { buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
+import { angleOfProposal, buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { useSettingsStore } from "@/lib/stores";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, resolveStepRole, roleMatchesAgent, uid } from "@/lib/helpers";
 import { resolveLlm } from "@/lib/llm-config";
@@ -315,6 +315,12 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
                   <button
                     title={`Propose a variation of "${wf.name}" to the Evolution Inbox — latest run stalled at ${n}%`}
                     onClick={() => {
+                      // r190: feed the branch router the pipeline's proposal
+                      // history so manual suggestions rotate angles too.
+                      const angleHistory = proposals
+                        .filter((p) => p.sourceWorkflowId === wf.id)
+                        .map((p) => ({ angle: angleOfProposal(p.goal) ?? "" }))
+                        .filter((e) => e.angle !== "");
                       addProposal(
                         buildVariationProposal({
                           sourceWorkflowId: wf.id,
@@ -327,6 +333,7 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
                           novelty: n,
                           threshold,
                           manual: true,
+                          angleHistory,
                         })
                       );
                       toast.success("Variation proposed — waiting in the Evolution Inbox", {

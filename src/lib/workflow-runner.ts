@@ -11,7 +11,7 @@ import {
   rateLimitResumeDelayMs,
   MAX_AUTO_RESUME_TRIPS,
 } from "@/lib/gateway-cadence";
-import { maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
+import { angleOfProposal, maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { maxParks, parkDelayMs, resolvePark, type ParkKind } from "@/lib/park-policy";
 import { resolveLlm } from "@/lib/llm-config";
@@ -763,6 +763,13 @@ export async function executeWorkflowRun(
           liveWf2?.steps[0]?.instruction ||
           liveWf2?.steps.map((s) => s.label).join(" → ") ||
           wf.name;
+        // r190 branch router (arXiv:2609.37834): every past proposal for this
+        // source is a search-history sample — the router rotates to a
+        // complementary angle instead of hashing the same one forever.
+        const angleHistory = st.proposals
+          .filter((p) => p.sourceWorkflowId === wf.id)
+          .map((p) => ({ angle: angleOfProposal(p.goal) ?? "" }))
+          .filter((e) => e.angle !== "");
         const proposal = maybeProposeSpawn({
           status,
           novelty,
@@ -772,6 +779,7 @@ export async function executeWorkflowRun(
           sourceWorkflowName: wf.name,
           sourceRunId: runId,
           taskExcerpt,
+          angleHistory,
         });
         if (proposal) {
           st.addProposal(proposal);
