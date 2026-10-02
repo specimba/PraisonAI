@@ -5641,3 +5641,29 @@ Verification result: PASS
 Open risks: (1) The pulse lives inside the ServerAutopilot panel — visible only on Workflow Studio; a Settings-page variant could surface it where vault keys are managed. (2) "Server runs · 24h" depends on the sync GET's take:25 window — a chatty day could push 24h-old rows out of the window (tooltip discloses this). (3) The attention cell counts conditions but does not deep-link to the offending strip yet (single click-to-explain is a candidate follow-up). (4) User confirmation still pending since r189 — 18 rounds.
 Blockers: none
 Next recommended action: r209 — (1) FIRST read any user report. (2) Backlog: run-panel header variant of the router chip (surface without expanding history); fold resolveServerDial single-slot path into the slots scan (one canonical resolver); show vault slot age in the vault card; pulse attention cell deep-links to the offending strip. (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 34 / lane 24 / executor 26 green.
+---
+Task ID: 424432 — r209 (the router decision greets you at the panel header)
+Agent: main (platform dev)
+Task: r208 handoff — run-panel header variant of the router chip (surface without expanding history). No user report present (19 rounds pending confirmation).
+
+Work Log:
+- r206's router chip lived only in run-history rows, behind a Collapsible closed by default — the decision evidence was one click deep. r209 promotes it: the run panel HEADER now renders the same violet "🧬 → variation" chip the moment the panel opens for a run that sourced a proposal (via viewedRun → sourceRunId lookup).
+- Refactor: the chip composition (angleOfProposal recovery + router reason + inbox status + dismissed-muted styling) was extracted into a shared module-level RunRouterChip — header and history row are one component, two placements, so they can never drift. History row shrank from a 30-line IIFE to a 4-line lookup + render. No new persistence, no API changes.
+- Smoke restructured to encode the real discovery path: header chip must be visible with history STILL COLLAPSED (r209), tooltip intact (reason + recovered branch + inbox status), and expanding Run history adds the second instance (count 2) proving both placements coexist. 34 → 35 assertions.
+
+Verification: smoke 35/35 (0 page errors); qa:syntax PASS (218 files); qa:tsc exit 0; eslint 0 (2 touched files); B 40/40; K 84/84; executor QA 26/26; lane QA 24/24; root 200.
+Snapshot pushed → fork/main (e9291761f).
+
+Stage Summary:
+- The evolution evidence chain is now zero-click from the trigger: open a run panel → the router decision is in the header; expand history → the same chip per row; the spawned card carries the r203 lineage chip. One composition everywhere.
+
+Round Handoff:
+Round ID: r210
+Task owner: main (platform dev)
+Scope completed: shared RunRouterChip + panel-header placement + smoke 35.
+User-visible changes: opening a run that triggered an Evolution variation shows the violet router chip immediately in the panel header — reason, branch, and inbox status on hover, no history expansion needed.
+Verification steps: node scripts/qa-r186-smoke.mjs → 35/35; bun run qa:syntax → PASS; bun run qa:tsc → 0; bunx eslint <touched> → 0; B 40 / K 84 / executor 26 / lane 24; curl root → 200.
+Verification result: PASS
+Open risks: (1) The header chip renders only when the panel is opened ON the sourced run — panels opened on other runs show nothing (correct, but a per-workflow "N variations sourced from this pipeline" header badge could aggregate across runs). (2) The evolution ledger remains the only surface listing dismissed proposals; the chip shows dismissal state but the inbox hides handled rows by design. (3) User confirmation still pending since r189 — 19 rounds.
+Blockers: none
+Next recommended action: r210 — (1) FIRST read any user report. (2) Backlog: fold resolveServerDial single-slot path into the slots scan (one canonical resolver); show vault slot age in the vault card; pulse attention cell deep-links to the offending strip; per-workflow variation-count header badge. (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 35 / lane 24 / executor 26 green.
