@@ -5473,3 +5473,29 @@ Verification result: PASS
 Open risks: (1) qa:tsc costs ~9s per run vs ~2s incremental — fine for per-round use, but if the tree grows much larger a scoped variant may be needed. (2) The ambient Bun.serve shape is minimal — if hang-server grows more Bun API usage (Bun.write etc.), extend the declaration rather than silently casting. (3) User confirmation still pending since r189 — 12 rounds; every diagnostic surface (evidence chips, stale pill + title ping, degraded banner, changelog) is live and unconfirmed.
 Blockers: none
 Next recommended action: r203 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): proposal-reason exposure — r199's decision-aware router reasons could surface in the run panel / Evolution ledger tooltips (spawn-proposal-engine + workflows-view, keep smoke 24 green); Local Automation Vault epic continuation (r123+); StaleBuildGuard as a smoke-documented surface is done, so consider a user-facing "diagnostics" summary card aggregating the r192–r201 instruments in one place. (3) Standing: bun run qa:syntax + bun run qa:tsc every round; keep B 40 / K 84 / smoke 24 green.
+
+---
+Task ID: 424432 — r203 (Evolution lineage: the router's decision evidence now follows the spawned workflow)
+Agent: main (platform development — hourly dev round)
+Task: r202 handoff backlog item 1 — proposal-reason exposure. r199's decision-aware router reasons were only visible while a proposal sat OPEN in the inbox; accepting it moved the evidence into a formatted description string and the card/run surfaces never cited it again. No user report this fire (13th round).
+
+Work Log:
+- SHIPPED — structured lineage (directive (c) spirit applied to Evolution spawns): Workflow.evolution = { proposalId, sourceWorkflowId, sourceWorkflowName, reason, acceptedAt } stamped at accept-time in the Evolution Inbox accept() (next to the legacy description string, which stays for searchability). The spawned workflow's card now renders a violet "Evolution spawn" chip whose tooltip cites the FULL router decision ("exploiting the leading branch — <angle> averaged N% novelty across M scored variations" / exploration wording) + source workflow + accepted-at time. Claim (this workflow exists) stays linkable to its source (why) after the inbox row is gone.
+- Smoke 24 → 26: the wf-qa-ev-ok seed carries an evolution block with a real r199-shaped reason; assertions prove the chip renders AND its tooltip cites both the decision phrase and the source workflow name.
+- Tooling forensics (worth remembering): mid-round, grep/sed/git-diff displays of the smoke seed showed `runs: kRun(...)` with NO kRun definition anywhere — the exact shape of r199's corruption class, suggesting a collision or rot. Byte-level od -c on the line showed the real content is `runs: [mkRun(...)]` — healthy. ROOT CAUSE: the tool-result pipeline swallows `[m` sequences (ANSI SGR-reset fragments) in displayed file text, silently rendering `[mkRun` as `kRun`. Lesson: when displayed code looks corrupted but runtime passes, verify with od -c / hexdump before believing it; byte-level output bypasses the artifact. Smoke 26/26 with 0 page errors confirms the file was never broken.
+- Verification: bun run qa:syntax → PASS (213 files); bun run qa:tsc → 0 errors; bunx eslint (types, workflows-view, smoke) → 0; B 40/40; K 84/84; smoke 26/26; root 200 at round start.
+- Snapshot pushed → fork/main (ea536dd17).
+
+Stage Summary:
+- The r199 → r203 chain is closed end-to-end: the branch router makes a decision (with numbers), the proposal states it in the inbox, and now the spawned workflow carries that decision as structured data + a card chip forever. Evolution spawns are self-documenting lineage, not orphaned pipelines with a buried description string.
+
+Round Handoff:
+Round ID: r204
+Task owner: main (platform dev)
+Scope completed: Workflow.evolution lineage field + accept-time stamping + card chip with decision tooltip; smoke 26; ANSI-display-artifact forensics documented.
+User-visible changes: workflows spawned from the Evolution Inbox now show a violet "Evolution spawn" chip on their card; hovering it explains exactly why the router proposed this branch (angle, avg novelty, sample count, parent workflow, accepted date).
+Verification steps: node scripts/qa-r186-smoke.mjs → 26/26; bun run qa:syntax → PASS; bun run qa:tsc → 0; bunx eslint → 0; B 40 / K 84; curl root → 200.
+Verification result: PASS
+Open risks: (1) Pre-r203 spawned workflows have no evolution field — their cards show no chip (honest absence); re-spawning or a backfill script could add it if the user wants history. (2) The full-export/import path serializes workflows wholesale, so evolution rides along; if a future import sanitizer whitelists fields, lineage must be added to the whitelist. (3) The [m display artifact means displayed file text in tool results is not byte-truth for ANY agent on this box — byte-verify before corruption conclusions. (4) User confirmation still pending since r189 — 13 rounds.
+Blockers: none
+Next recommended action: r204 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): user-facing "diagnostics" summary card aggregating the r192–r203 instruments (banner, evidence chips, stale pill, lineage) in one place — or Local Automation Vault epic continuation (r123+); run-panel tooltip surfacing the angle decision on individual runs (runs know their workflow's lineage now). (3) Standing: bun run qa:syntax + qa:tsc; keep B 40 / K 84 / smoke 26 green.
