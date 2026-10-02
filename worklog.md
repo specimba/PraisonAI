@@ -5418,3 +5418,32 @@ Verification result: PASS
 Open risks: (1) The sweep checks SYNTAX only — semantic rot (undefined symbols that happen to parse, e.g. a renamed import) is still tsc's job; the r199 bomb had both classes and only the syntax half would have been caught fresh. A fresh full tsc (incremental false) could be a follow-up variant if paranoia warrants. (2) JS-family files get only the TS-parser opinion (bun loader skipped for .js to avoid false context errors) — acceptable, the bomb was TSX. (3) User confirmation still pending since r189 — 10 rounds; every diagnostic surface (red/amber/green evidence chips, stale pill, degraded banner, purple chip) is live and idle.
 Blockers: none
 Next recommended action: r201 — (1) FIRST read any user report: a red "no fire in Xh" or amber "last fire · error" chip on a real card = the stalled-lane detector caught it; check the cited run id. (2) Backlog (rotate surfaces): directive (c) claim-to-source evidence ledger; StaleBuildGuard visibility auto-toast (no paste 10 rounds); consider `tsc --noEmit --incremental false` one-shot as the semantic twin of this round's sweep. (3) Standing: `bun run qa:syntax` in every round's verification; keep B 40 / K 84 / smoke 19 green.
+
+---
+Task ID: 424432 — r201 (StaleBuildGuard assertiveness: the stale-tab signal is now impossible to miss)
+Agent: main (platform development — hourly dev round)
+Task: r196 handoff item 3 (deferred 3×) — make the r189 StaleBuildGuard MORE assertive on visibility change ("the user may simply never see toasts from a background tab"). No user report this fire (11th round). Also closed an archaeology item: the handoff's "directive (c)" reference was STALE — grep proved directive items (a)–(e) are ALL shipped ((a) r182 roleId fields, (b) r183 PARTIAL/BLOCKED, (c) r184 claim-to-source ledger, (d) r197 event-ID scheduler health, (e) r193 credential scrubbing). The canonical directive backlog is EMPTY.
+
+Work Log:
+- StaleBuildGuard upgraded with three self-limited assertiveness layers (src/components/praison/stale-build-guard.tsx):
+  (1) Foreground return = immediate re-poll: background tabs clamp timers to >=1/min, so the r189 guard could sit up to a minute on a stale stamp after the user returns — now visibilitychange→visible polls /api/version instantly.
+  (2) Re-toast on every foreground return while stale (same sonner id "stale-build" → replaces in place, never stacks). If the user dismissed the sticky toast while away, the situation (tab running old scheduler/relay code) is still true — re-showing is honest, not nagging.
+  (3) Tab-title ping while stale: two 🔄-prefixed variants alternate every 2s, so the tab strip itself signals even when the page is buried behind other windows; original title restored on unmount/reload.
+- Smoke 19 → 24: new isolated context routes /api/version with a controllable stamp (boot-a baseline → boot-b flip) and asserts the full contract without clock manipulation: silence while unchanged, immediate re-poll on foreground return → pill, sticky toast text, 🔄 in document.title, and exactly ONE stale toast after a second return (no stack spam).
+- QA debugging honesty: the no-spam assertion failed twice; a DOM probe (scripts/probe-toast.mjs, deleted after use) showed the page carries an UNRELATED app toast ("AIHubMix added — 45 free model lanes") — the guard itself was already correct. Fixed the assertion to count only toasts matching the stale-build text (contract: one stale toast, total count varies with app toasts).
+- Verification: bun run qa:syntax → PASS (213 files); bunx tsc --noEmit → baseline (hang-server only); bunx eslint (guard + smoke) → 0; smoke 24/24 (0 page errors); root 200 at round start.
+- Snapshot pushed → fork/main (6d1f56dbe).
+
+Stage Summary:
+- The r189 stale-tab thesis is now fully actionable: when the user's tab goes stale, the tab strip blinks 🔄, the sticky toast re-asserts on every return, and the amber pill waits bottom-right — the user cannot come back to a stale board without being told why it looks wrong. This was the last unshipped item from the r196 handoff; the directive backlog is confirmed empty.
+
+Round Handoff:
+Round ID: r202
+Task owner: main (platform dev)
+Scope completed: StaleBuildGuard foreground re-poll + re-assert toast + title ping; smoke 24; directive-backlog archaeology (all five items shipped, handoff references corrected).
+User-visible changes: a stale tab now announces itself three ways (title ping in the tab strip, re-asserted sticky toast, amber reload pill) and checks freshness the instant the tab returns to the foreground instead of up to a minute later.
+Verification steps: node scripts/qa-r186-smoke.mjs → 24/24; bun run qa:syntax → PASS; bunx tsc --noEmit → baseline; bunx eslint → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) Title ping ownership: if another surface sets document.title while stale (e.g. chat auto-title), the ping overwrites it every 2s until reload — stale is terminal-until-reload so this is accepted, but a future title-setting feature should know. (2) Re-assert fires on EVERY foreground return while stale — a user who deliberately dismissed the toast and keeps switching tabs sees it again each return; bounded by one toast + instant pill + the fact that reload clears everything. (3) The visibility test relies on headless Chromium dispatching visibilitychange with visibilityState "visible" — stable across recent Playwright, re-verified this round. (4) User confirmation still pending since r189 — 11 rounds.
+Blockers: none
+Next recommended action: r202 — (1) FIRST read any user report: if the user pastes a screenshot showing the 🔄 title/amber pill, the stale-tab theory just got CONFIRMED live. (2) Backlog (fresh queue — the directive list is done): r200's semantic twin `tsc --noEmit --incremental false` one-shot; proposal-reason exposure polish (r199's decision-aware reasons could surface in run panel tooltips); Local Automation Vault epic continuation (r123+). (3) Standing: bun run qa:syntax every round; keep B 40 / K 84 / smoke 24 green.
