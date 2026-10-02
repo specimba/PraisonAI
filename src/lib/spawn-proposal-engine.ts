@@ -36,6 +36,46 @@ export function angleOfProposal(goal: string): string | null {
   return ANGLES.find((a) => goal.includes(a)) ?? null;
 }
 
+/**
+ * Latest scored done-run novelty % for a workflow (runs are newest-first, so
+ * the first scored hit wins). Skips newer unscored/error runs — a run that
+ * finished before the Evolution Layer landed must not erase the last score.
+ */
+export function latestScoredNovelty(
+  runs: Array<{ status: string; novelty?: number }>
+): number | undefined {
+  return runs.find((r) => r.status === "done" && r.novelty != null)?.novelty;
+}
+
+/**
+ * r191: join past proposals for a source workflow to their OUTCOME novelty —
+ * the branch router's exploitation signal (arXiv:2609.37834 "evolving
+ * objectives from search history"). A proposal carries outcome novelty only
+ * when it was ACCEPTED and its spawned pipeline has a scored run: that score
+ * measures whether the branch escaped the stall. Open proposals have no
+ * outcome yet and dismissed ones were never tried — both still count toward
+ * exploration (usage) via their angle, never toward exploitation.
+ */
+export function buildAngleHistory(
+  proposals: Array<
+    Pick<SpawnProposal, "goal" | "sourceWorkflowId" | "status" | "spawnedWorkflowId">
+  >,
+  sourceWorkflowId: string,
+  /** workflow id → latest scored novelty % (see latestScoredNovelty). */
+  scoredNoveltyByWorkflow: ReadonlyMap<string, number>
+): AngleHistoryEntry[] {
+  return proposals
+    .filter((p) => p.sourceWorkflowId === sourceWorkflowId)
+    .map((p) => ({
+      angle: angleOfProposal(p.goal) ?? "",
+      novelty:
+        p.status === "accepted" && p.spawnedWorkflowId
+          ? scoredNoveltyByWorkflow.get(p.spawnedWorkflowId)
+          : undefined,
+    }))
+    .filter((e) => e.angle !== "");
+}
+
 const avg = (xs: number[] | undefined): number =>
   xs && xs.length > 0 ? xs.reduce((s, x) => s + x, 0) / xs.length : 0;
 

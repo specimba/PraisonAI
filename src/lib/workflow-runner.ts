@@ -11,7 +11,7 @@ import {
   rateLimitResumeDelayMs,
   MAX_AUTO_RESUME_TRIPS,
 } from "@/lib/gateway-cadence";
-import { angleOfProposal, maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
+import { buildAngleHistory, latestScoredNovelty, maybeProposeSpawn, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { isAbortError, runAgentChat } from "@/lib/chat-client";
 import { maxParks, parkDelayMs, resolvePark, type ParkKind } from "@/lib/park-policy";
 import { resolveLlm } from "@/lib/llm-config";
@@ -766,10 +766,14 @@ export async function executeWorkflowRun(
         // r190 branch router (arXiv:2609.37834): every past proposal for this
         // source is a search-history sample — the router rotates to a
         // complementary angle instead of hashing the same one forever.
-        const angleHistory = st.proposals
-          .filter((p) => p.sourceWorkflowId === wf.id)
-          .map((p) => ({ angle: angleOfProposal(p.goal) ?? "" }))
-          .filter((e) => e.angle !== "");
+        // r191: accepted proposals join their spawned pipeline's latest
+        // scored novelty, arming the router's exploitation branch.
+        const scoredNovelty = new Map<string, number>();
+        for (const w of st.workflows) {
+          const n = latestScoredNovelty(w.runs);
+          if (n != null) scoredNovelty.set(w.id, n);
+        }
+        const angleHistory = buildAngleHistory(st.proposals, wf.id, scoredNovelty);
         const proposal = maybeProposeSpawn({
           status,
           novelty,

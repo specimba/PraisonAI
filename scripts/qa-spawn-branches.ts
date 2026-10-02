@@ -7,7 +7,9 @@
 import {
   ANGLES,
   angleOfProposal,
+  buildAngleHistory,
   buildVariationProposal,
+  latestScoredNovelty,
   maybeProposeSpawn,
   pickVariationAngle,
   NOVELTY_SPAWN_THRESHOLD,
@@ -113,11 +115,45 @@ const spawned = maybeProposeSpawn({
 });
 ok(spawned != null && spawned.goal !== stalled.goal, "qualifying stall + history → routed proposal (not the hashed repeat)");
 
-console.log("B7 — source wiring: both call sites feed the router");
-ok(/angleOfProposal/.test(runnerSrc) && /angleHistory/.test(runnerSrc), "workflow-runner derives angle history from the proposals store");
-ok(/angleOfProposal/.test(viewSrc) && /angleHistory/.test(viewSrc), "manual 'Suggest variation' feeds the router too");
+console.log("B7 — source wiring: both call sites feed the router via the shared join (r191)");
+ok(/buildAngleHistory/.test(runnerSrc) && /latestScoredNovelty/.test(runnerSrc), "workflow-runner derives angle history via the shared outcome-novelty join");
+ok(/buildAngleHistory/.test(viewSrc) && /latestScoredNovelty/.test(viewSrc), "manual 'Suggest variation' uses the shared join too");
+ok(!/angleOfProposal\(p\.goal\)/.test(runnerSrc) && !/angleOfProposal\(p\.goal\)/.test(viewSrc), "no consumer re-implements the join (single decision point)");
+ok(/for \(const w of st\.workflows\)/.test(runnerSrc) && /for \(const w of workflows\)/.test(viewSrc), "both call sites score from the live workflows store, not stale props");
 ok(/pickVariationAngle\(base, input\.angleHistory\)/.test(src), "builder routes through pickVariationAngle (single decision point)");
 ok(!/hashPick/.test(src), "legacy hashPick name is gone (replaced by index tie-break)");
+
+console.log("B8 — r191 outcome-novelty join: proposals × spawned pipelines");
+ok(latestScoredNovelty([]) === undefined, "no runs → no score");
+ok(latestScoredNovelty([{ status: "error" }, { status: "done", novelty: 41 }]) === 41, "skips newer error runs, finds the last scored done run");
+ok(latestScoredNovelty([{ status: "done" }, { status: "done", novelty: 77 }]) === 77, "newer unscored done run (pre-Evolution) doesn't erase the score");
+ok(latestScoredNovelty([{ status: "done", novelty: 0 }]) === 0, "0% novelty is a real score, not missing");
+const joinProposals = [
+  { goal: `g — approach it from ${ANGLES[0]}`, sourceWorkflowId: "wf-1", status: "accepted" as const, spawnedWorkflowId: "wf-a" },
+  { goal: `g — approach it from ${ANGLES[1]}`, sourceWorkflowId: "wf-1", status: "open" as const },
+  { goal: `g — approach it from ${ANGLES[2]}`, sourceWorkflowId: "wf-1", status: "dismissed" as const },
+  { goal: `g — approach it from ${ANGLES[3]}`, sourceWorkflowId: "wf-2", status: "accepted" as const, spawnedWorkflowId: "wf-b" },
+  { goal: "legacy goal without an angle", sourceWorkflowId: "wf-1", status: "accepted" as const, spawnedWorkflowId: "wf-c" },
+];
+const joinScores = new Map([["wf-a", 80], ["wf-b", 90], ["wf-c", 95]]);
+const joinHist = buildAngleHistory(joinProposals, "wf-1", joinScores);
+ok(joinHist.length === 3, "only the source workflow's proposals enter history");
+ok(joinHist[0].novelty === 80, "accepted + spawned + scored → outcome novelty flows to the branch");
+ok(joinHist[1].novelty === undefined && joinHist[2].novelty === undefined, "open/dismissed proposals count for exploration only — never exploitation");
+ok(joinHist[2].angle === ANGLES[2], "dismissed branch still occupies exploration usage");
+ok(!joinHist.some((e) => e.angle === ""), "angleless/legacy goals are dropped from history");
+ok(buildAngleHistory([{ goal: `g — approach it from ${ANGLES[0]}`, sourceWorkflowId: "s", status: "accepted", spawnedWorkflowId: "wf-gone" }], "s", new Map())[0].novelty === undefined, "accepted but unscored/deleted spawned pipeline → exploration only");
+const e2e = buildAngleHistory(
+  [
+    { goal: `g — approach it from ${ANGLES[0]}`, sourceWorkflowId: "s", status: "accepted" as const, spawnedWorkflowId: "spawn-0" },
+    { goal: `g — approach it from ${ANGLES[1]}`, sourceWorkflowId: "s", status: "accepted" as const, spawnedWorkflowId: "spawn-1" },
+    { goal: `g — approach it from ${ANGLES[2]}`, sourceWorkflowId: "s", status: "accepted" as const, spawnedWorkflowId: "spawn-2" },
+    { goal: `g — approach it from ${ANGLES[3]}`, sourceWorkflowId: "s", status: "accepted" as const, spawnedWorkflowId: "spawn-3" },
+  ],
+  "s",
+  new Map([["spawn-0", 15], ["spawn-1", 88], ["spawn-2", 40], ["spawn-3", 40]])
+);
+ok(pickVariationAngle(TASK, e2e) === ANGLES[1], "end-to-end: router exploits the branch whose spawned pipeline scored highest (88%)");
 
 console.log(`\nB-series (branch router): ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

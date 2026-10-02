@@ -63,7 +63,7 @@ import {
   useWorkflowsStore,
 } from "@/lib/stores";
 import type { SpawnProposal, Workflow, WorkflowStep } from "@/lib/types";
-import { angleOfProposal, buildVariationProposal, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
+import { buildAngleHistory, buildVariationProposal, latestScoredNovelty, NOVELTY_SPAWN_THRESHOLD } from "@/lib/spawn-proposal-engine";
 import { useSettingsStore } from "@/lib/stores";
 import { downloadJson, fmtIn, fmtIntervalShort, fmtRel, resolveStepRole, roleMatchesAgent, uid } from "@/lib/helpers";
 import { resolveLlm } from "@/lib/llm-config";
@@ -317,10 +317,14 @@ function EvolutionLedger({ workflows }: { workflows: Workflow[] }) {
                     onClick={() => {
                       // r190: feed the branch router the pipeline's proposal
                       // history so manual suggestions rotate angles too.
-                      const angleHistory = proposals
-                        .filter((p) => p.sourceWorkflowId === wf.id)
-                        .map((p) => ({ angle: angleOfProposal(p.goal) ?? "" }))
-                        .filter((e) => e.angle !== "");
+                      // r191: accepted proposals join their spawned pipeline's
+                      // latest scored novelty (exploitation branch gets data).
+                      const scoredNovelty = new Map<string, number>();
+                      for (const w of workflows) {
+                        const sn = latestScoredNovelty(w.runs);
+                        if (sn != null) scoredNovelty.set(w.id, sn);
+                      }
+                      const angleHistory = buildAngleHistory(proposals, wf.id, scoredNovelty);
                       addProposal(
                         buildVariationProposal({
                           sourceWorkflowId: wf.id,
