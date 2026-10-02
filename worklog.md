@@ -5206,3 +5206,29 @@ Verification result: PASS
 Open risks: (1) The banner's render path with REAL paused schedules was not browser-QA'd this round (the smoke board has no paused schedules seeded) — JSX/type safety is covered by tsc+smoke, but a seed-the-store browser test asserting the banner text is queued. (2) resumeAllPaused bypasses the per-card toast in favor of one summary — a user watching for per-workflow confirmations will only see the aggregate. (3) r189 stale-tab confirmation STILL pending — no paste since the guard shipped.
 Blockers: none
 Next recommended action: r193 — (1) FIRST read any user report: banner or violet chip in a paste → confirm stale-tab theory; 11-step runs with chip visible → audit persisted store schedule shape. (2) Queued QA: extend qa-r186-smoke with a seeded paused schedule (persisted zustand localStorage) asserting the banner renders + "Resume all" re-enables it. (3) Backlog (rotate surfaces): structured error-code mapping for the relay taxonomy (r188 risk 2); event-ID scheduler health; credential scrubbing from exports; proposal-reason polish naming the leading branch when exploitation fires.
+
+---
+Task ID: 424432 — r193 (export credential scrubbing + banner browser-QA round-trip)
+Agent: main (platform development — hourly dev round)
+Task: r192 handoff: (2) queued smoke extension for the banner (closes risk 1) + backlog directive e "credential scrubbing from exports". No user report this fire.
+
+Work Log:
+- SHIPPED — export scrubbing (directive e, carried r187→r192): the full-data export (Settings → Export, praisonai-export.json) used to embed settings WHOLESALE — settings.apiKey, the entire providerKeys vault, and typesafeKey all left the browser in a file users attach to bug reports. handleExport now strips exactly those three fields (destructure-omit); toast now states "credentials excluded" and points to the provider vault backup as the sanctioned key-migration path. Import side untouched: OLD key-bearing exports still restore keys (backward compatible). Vault backup export intentionally unchanged — it IS the key backup (comment-documented purpose).
+- AUDITED the other export surfaces: agents export clean (Agent type carries no credential fields — model id only); workflow export clean (definitions only, runs dropped); chat/run/compare exports are Markdown of conversation content (user-pasted secrets in message text are out of scope — no reliable scrub for free text).
+- SHIPPED — banner browser-QA (closes r192 risk 1): qa-r186-smoke now seeds praison-workflows localStorage pre-navigation (zustand persist rehydration) with a workflow whose schedule is breaker-paused (enabled:false, no autoResumeAt, failStreak 3). New assertions: banner renders for real paused data → "Resume all" click → persisted store shows schedule.enabled=true → banner cleared. Smoke 5 → 8 assertions.
+- Verification: smoke 8/8 (0 page errors); tsc clean (pre-existing scripts/hang-server.ts only); eslint 0 (settings-view); root 200.
+- Snapshot pushed → fork/main (fa73ddccd).
+
+Stage Summary:
+- The file a user reaches for when things break (full export) can no longer leak the keys that caused the outage conversation in the first place. The r192 banner is now proven end-to-end in a real browser with seeded persisted state — render, bulk resume, persistence, and self-clearing.
+
+Round Handoff:
+Round ID: r194
+Task owner: main (platform dev)
+Scope completed: credential scrubbing on full-data export + banner round-trip QA (smoke 8 assertions).
+User-visible changes: full export downloads without API keys (toast explains why + points to vault backup); banner behavior now browser-verified.
+Verification steps: node scripts/qa-r186-smoke.mjs → 8/8; tsc → clean; eslint (settings-view) → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) Free-text secrets pasted into conversations still ride along in exports (no reliable scrub; documented, not fixed). (2) The smoke seed writes praison-workflows unconditionally — if a future persist-version bump changes the shape, the seeded rehydration silently no-ops and the banner assertions fail loudly (good failure mode). (3) r189 stale-tab confirmation STILL pending — no user paste since the guard shipped (3 rounds).
+Blockers: none
+Next recommended action: r194 — (1) FIRST read any user report: banner/violet chip in a paste → stale-tab theory confirmed; 11-step runs with chip visible → audit persisted store schedule shape. (2) Backlog (rotate surfaces): structured error-code mapping for the relay taxonomy (r188 risk 2 — JSON "code":"insufficient_quota" without matching text falls through to hard today); event-ID scheduler health; proposal-reason polish naming the leading branch when exploitation fires. (3) Consider surfacing a "credentials excluded" hint next to the import dialog when a scrubbed export is imported (users may wonder where their keys went).
