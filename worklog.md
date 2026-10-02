@@ -5391,3 +5391,30 @@ Verification result: PASS
 Open risks: (1) OTHER files may harbor the same class of latent corruption — the r126-era parallel-session collision left orphans once before; a one-shot sweep (fresh-parse every src file via an isolated bun transpile with caches bypassed) is the systematic follow-up. (2) The corrupt line's origin predates the fork's visible history (git log -S found no boundary) — if the upstream repo has good history, a diff could date it; low value now that it is fixed. (3) Reason text for exploitation supersedes the rotation note — no consumer parses reason strings (goals carry the angle), verified by the structural guard. (4) User confirmation still pending since r189 — 9 rounds.
 Blockers: none
 Next recommended action: r200 — (1) FIRST read any user report. (2) TOP: cache-bypassing syntax sweep of all src/scripts files (fresh transpile each, fail loudly on any parse error) — r199 proved the QA net cannot see this failure class; add it as a standing check if it finds nothing. (3) Backlog: directive (c) claim-to-source evidence ledger; StaleBuildGuard visibility auto-toast (no user paste 9 rounds). (4) Keep B 40 / K 84 / smoke 19 green.
+
+---
+Task ID: 424432 — r200 (standing syntax sweep: the QA net can no longer be blinded by caches)
+Agent: main (platform development — hourly dev round)
+Task: r199 handoff TOP item — cache-bypassing syntax sweep of all src/scripts files (fresh transpile each, fail loudly on any parse error), registered as a standing check. No user report this fire (10th round).
+
+Work Log:
+- Shipped scripts/qa-syntax-sweep.ts: fresh-parses every .ts/.tsx/.mts/.cts/.js/.jsx/.mjs under src/ and scripts/ (213 files) through TWO independent cold parsers — the TypeScript compiler API (new SourceFile per file, parseDiagnostics must be empty) and a fresh Bun.Transpiler instance per TS-family file (the exact parser whose cache masked r199's bomb). Zero caching surface: no tsbuildinfo, no module cache, no transpiler cache.
+- Self-test is assertion-guarded: before scanning, the script proves it still detects the literal r199 bomb shape (stray-bracket + undefined-symbol line) via BOTH parsers AND that clean control code produces zero diagnostics. If detection ever regresses, the sweep fails loudly ("checker is blind — refusing to pass") instead of silently passing.
+- Result: 213 files, 0 parse failures — r199's bomb was the only corruption of its class on disk. The one-shot sweep the handoff asked for is now also a repeatable standing check: package.json "qa:syntax".
+- tsc baseline preserved: the first draft imported from "bun" (new TS2307 error); replaced with a minimal local ambient declaration for Bun.Transpiler — no new dependency (avoids @types/bun conflicts with the Next app's DOM/node types), tsc back to the known hang-server.ts-only baseline.
+- Verification: sweep PASS (213/213, self-test awake); bunx tsc --noEmit → only the pre-existing hang-server.ts error; bunx eslint scripts/qa-syntax-sweep.ts → 0; bun run qa:syntax works; root 200 at round start.
+- Snapshot pushed → fork/main (b13828c87).
+
+Stage Summary:
+- The r199 failure class ("file cannot parse, every cached gate passes") now has a permanent detector that runs from a cold parse and proves its own vigilance each run. Future rounds should run `bun run qa:syntax` alongside tsc/eslint whenever verification is claimed — it is fast (<1s) and exits non-zero on any on-disk corruption.
+
+Round Handoff:
+Round ID: r201
+Task owner: main (platform dev)
+Scope completed: cache-bypassing double-parser syntax sweep (213 files) + self-test + package.json qa:syntax standing check.
+User-visible changes: none this round (dev-infrastructure hardening); protects every future round from the r199 corruption class.
+Verification steps: bun run qa:syntax → PASS (213 files, self-test awake); bunx tsc --noEmit → baseline; bunx eslint scripts/qa-syntax-sweep.ts → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) The sweep checks SYNTAX only — semantic rot (undefined symbols that happen to parse, e.g. a renamed import) is still tsc's job; the r199 bomb had both classes and only the syntax half would have been caught fresh. A fresh full tsc (incremental false) could be a follow-up variant if paranoia warrants. (2) JS-family files get only the TS-parser opinion (bun loader skipped for .js to avoid false context errors) — acceptable, the bomb was TSX. (3) User confirmation still pending since r189 — 10 rounds; every diagnostic surface (red/amber/green evidence chips, stale pill, degraded banner, purple chip) is live and idle.
+Blockers: none
+Next recommended action: r201 — (1) FIRST read any user report: a red "no fire in Xh" or amber "last fire · error" chip on a real card = the stalled-lane detector caught it; check the cited run id. (2) Backlog (rotate surfaces): directive (c) claim-to-source evidence ledger; StaleBuildGuard visibility auto-toast (no paste 10 rounds); consider `tsc --noEmit --incremental false` one-shot as the semantic twin of this round's sweep. (3) Standing: `bun run qa:syntax` in every round's verification; keep B 40 / K 84 / smoke 19 green.
