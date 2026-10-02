@@ -5586,3 +5586,31 @@ Verification result: PASS
 Open risks: (1) The chip renders only after expanding run history (collapsed by default) — discoverable but one click deep; a per-run header variant could surface it sooner. (2) The board-layout round-trip in the smoke depends on two aria-labels ("Runs board layout", "Card grid layout") — renaming them breaks the smoke loudly (acceptable). (3) User confirmation still pending since r189 — 16 rounds; the full evolution evidence chain (novelty chip → router chip → lineage chip → ledger) is now in place awaiting a real user visit.
 Blockers: none
 Next recommended action: r207 — (1) FIRST read any user report. (2) Backlog: user-facing diagnostics summary card aggregating the r192–r206 instruments; executor-side "prefer resolvable vault slot" promotion rule + QA; run-panel header variant of the router chip (surface without expanding history). (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 30 / lane 24 / executor 17 green.
+---
+Task ID: 424432 — r207 (the executor promotes resolvable vault slots instead of dying on the oldest)
+Agent: main (platform dev)
+Task: r206 handoff — executor-side "prefer resolvable vault slot" promotion rule + QA (retires r205's top open risk). No user report present (17 rounds pending confirmation).
+
+Work Log:
+- Retired the blunt rule: tickOnce() read only the single OLDEST vault slot, so a legacy builtin slot poisoned the whole closed-tab lane even when a perfectly good registry-provider key sat next to it — the user had to DELETE the old slot to promote a new one (the vault card literally apologized for it).
+- New pure resolver `resolveServerDialFromSlots()` in automation-executor.ts: scans ALL slots oldest-first, dials the FIRST RESOLVABLE one (blank-key and unresolvable slots skipped, scan continues). Reason aggregation stays honest: no slots or all keys blank → "no-vault-key"; keys exist but none pairs with a registry provider → "no-resolvable-provider". The chosen slot is returned WITH the dial so the route masks exactly the key the executor would use.
+- tickOnce() now feeds it every vault row (createdAt asc); the sync-GET executorLane mirror calls the SAME function over the same list — the lane cannot drift from the executor by construction.
+- ExecutorLaneState gained `slotCount`; panel blocked-tooltip now says "N slots scanned — unresolvable slots are skipped" instead of the obsolete "first slot" framing; humanizeLaneReason sentence updated (plural-aware); vault card doctrine text now says storing a new key promotes it without deleting old ones.
+- QA: executor suite 17 → 26 (8 fromSlots unit assertions incl. stability/"oldest resolvable wins" + blank-key skip + reason aggregation; 1 tick integration proving the exact old death shape — builtin oldest + vyce newer → claims and completes). Lane QA 24/24 still green (its substring assertion survives the new sentence).
+
+Verification: executor QA 26/26 (state self-restored); lane QA 24/24 live (builtin-only → blocked, vyce → ready through the real HTTP route); qa:syntax PASS (218 files); qa:tsc exit 0; eslint 0 (6 touched files); B 40/40; K 84/84; smoke 30/30 (0 page errors); curl root → 200.
+Snapshot pushed → fork/main (d96c523c4).
+
+Stage Summary:
+- Storing a registry-provider key in the vault now promotes it immediately, even with a legacy builtin slot present — closed-tab runs dial the oldest RESOLVABLE slot, and every surface (chip, tooltip, vault card) describes that same rule.
+
+Round Handoff:
+Round ID: r208
+Task owner: main (platform dev)
+Scope completed: resolveServerDialFromSlots promotion rule (executor + sync mirror + lane state slotCount + panel/vault-card copy) + executor QA 26.
+User-visible changes: a newly stored provider key works for closed-tab runs without deleting older slots; the blocked-lane tooltip explains slot scanning instead of blaming "the first slot".
+Verification steps: bun scripts/qa-automation-executor.ts → 26/26; bun scripts/qa-automation-lane.ts → 24/24; bun run qa:syntax → PASS; bun run qa:tsc → 0; bunx eslint <touched> → 0; B 40 / K 84 / smoke 30; curl root → 200.
+Verification result: PASS
+Open risks: (1) resolveServerDial (single-slot) is still exported and used as the per-slot prober — two resolvers now exist; a follow-up could fold the single-slot path into the scan for one canonical entry point. (2) Slot ordering depends on createdAt, which the vault card never displays — a tie or backdated row is invisible to the user; consider showing slot age. (3) User confirmation still pending since r189 — 17 rounds.
+Blockers: none
+Next recommended action: r208 — (1) FIRST read any user report. (2) Backlog: user-facing diagnostics summary card aggregating the r192–r207 instruments; run-panel header variant of the router chip (surface without expanding history); fold resolveServerDial single-slot path into the slots scan (one canonical resolver); show vault slot age in the card. (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 30 / lane 24 / executor 26 green.
