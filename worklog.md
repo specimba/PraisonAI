@@ -5311,3 +5311,29 @@ Verification result: PASS
 Open risks: (1) The import-dialog flow has NO smoke assertion yet — Playwright setInputFiles on [data-testid="full-import-input"] with a scrubbed fixture + assert the amber note is the obvious next QA increment (dialog had no coverage before either). (2) Keep-on-silent is a semantic choice: a file from a genuinely key-less browser will NOT clear the target browser's keys (per-field, only absent fields keep local values) — judged safe-by-default; Clear all data remains the way to zero keys. (3) Partial-credential files (hand-edited) get per-field disposition copy — tested only by reading, not by QA. (4) User confirmation still pending since r189 — 6 rounds; the instrumentation + its manual (whats-fixed) are all shipped and idle.
 Blockers: none
 Next recommended action: r197 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): smoke assertion for the import flow (setInputFiles scrubbed fixture → amber note → Cancel; cheap, closes risk 1); event-ID scheduler health (directive d, carried 10+ rounds); proposal-reason polish naming the leading branch when exploitation fires. (3) If no user paste by r198, consider making the r189 StaleBuildGuard pill MORE assertive (e.g. auto-toast on visibility change) — the user may simply never see toasts from a background tab.
+
+---
+Task ID: 424432 — r197 (directive d, part 1: run event provenance + event-backed schedule-evidence chip)
+Agent: main (platform development — hourly dev round)
+Task: r196 handoff backlog top: event-ID scheduler health (directive d, carried r185→r196). No user report this fire (7th round).
+
+Work Log:
+- ROOT GAP (directive d, verified in types.ts/runner): WorkflowRun never recorded HOW it was launched — the runner knew `source: "manual" | "scheduled"` internally but never stamped it on the run record. Without event provenance, "scheduler health" could only ever be badge-shaped promises ("recurring · next in 5m") even when every recent fire died or no fire happened at all.
+- SHIPPED: (1) `WorkflowRun.source?: "manual" | "scheduled"` stamped at run creation in workflow-runner (single choke point, all fire paths covered — resumes keep their original stamp). (2) `scheduleEvidence(wf, now)` in workflows-view derives health from events, rendered as a chip beside the green promise badge: RED "no fire in Xh" when the newest scheduled event is older than max(3×interval, 15m) — a stalled-lane detector (background-tab HMR death, system sleep) in the same failure class as the stale-tab theory; AMBER "last fire Xm ago · error/blocked" citing the failing event (+failStreak, error message excerpt); muted-green "last fire Xm ago · done" proving the promise is backed by a real event. Every state's tooltip CITES THE EVENT ID (run id + time + status) — the literal directive ask: health backed by event IDs, not badges. (3) Pre-r197 history (unstamped runs) falls back to schedule.lastRunAt for missed-fire detection only, and says so in the tooltip ("pre-r197 history carries no event provenance") — no fake claims; fresh schedules with zero evidence show no chip.
+- Deliberate scoping: failed-fire amber state keys off the NEWEST scheduled event; consecutive-failure counting stays with failStreak (already event-fed by the runner). Runs array is capped at 12 — evidence window, not an audit log (the runner's audit trail remains the deep record).
+- Verification: tsc clean; eslint 0 (workflows-view, workflow-runner, types); smoke 9/9 (0 page errors); root 200 at round start.
+- Snapshot pushed → fork/main (861327fa7).
+
+Stage Summary:
+- Schedules now testify instead of promising: each card's chip states when the last scheduled fire actually happened and how it ended, citing the run event that backs the claim — and a schedule whose lane silently died (the exact user pathology since r185) turns red on its own card without needing a user paste to be noticed.
+
+Round Handoff:
+Round ID: r198
+Task owner: main (platform dev)
+Scope completed: WorkflowRun.source provenance stamp (runner choke point) + scheduleEvidence helper + tri-tone event-evidence chip with event-ID tooltips.
+User-visible changes: every enabled schedule card now shows an evidence chip next to the countdown badge: red = no scheduled fire within 3 intervals (stalled lane), amber = last scheduled fire failed, muted green = last fire succeeded; tooltips cite run id + time + status.
+Verification steps: bunx tsc --noEmit → clean; bunx eslint (workflows-view, workflow-runner, types) → 0; node scripts/qa-r186-smoke.mjs → 9/9; curl root → 200.
+Verification result: PASS
+Open risks: (1) Evidence chip has NO smoke assertion — needs a seeded workflow with source-stamped runs (one ok + one stale → assert both chips render); the r196 import-flow smoke increment is also still queued. (2) Missed-fire red requires lastRunAt or a source-stamped run — workflows scheduled before r197 show no chip until their next fire stamps provenance (honest, but the first observation window is blind). (3) Date.now() at render means the chip only refreshes on store-driven re-renders — correct in practice (scheduler ticks mutate stores) but a long-idle board could show a stale age until the next tick. (4) User confirmation still pending since r189 — 7 rounds.
+Blockers: none
+Next recommended action: r198 — (1) FIRST read any user report: a red "no fire in Xh" chip on Continuous Research = the stalled-lane detector caught it live; an amber "last fire · error" chip = check the cited run id. (2) Backlog: smoke assertions for the two new UI surfaces (r196 import dialog + r197 evidence chips); proposal-reason polish naming the leading branch when exploitation fires; directive (c) claim-to-source evidence ledger. (3) If still no user paste by r199, consider the StaleBuildGuard visibility auto-toast (r196 handoff item 3).
