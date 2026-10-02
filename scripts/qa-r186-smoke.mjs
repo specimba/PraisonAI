@@ -93,7 +93,22 @@ await page.addInitScript(() => {
           schedule: { enabled: true, intervalMs: hour, lastRunAt: now - 10 * 60_000, nextRunAt: now + hour, task: "seeded task" },
         },
       ],
-      proposals: [],
+      proposals: [
+        {
+          // r206: a follow-up variation sourced from the seeded wf-qa-ev-ok run
+          // — exercises the run-history router chip. The goal embeds the
+          // ANGLES[2] string verbatim so angleOfProposal() can recover it.
+          id: "prop-qa-run-chip",
+          createdAt: now - 30 * 60_000,
+          status: "open",
+          goal:
+            "QA follow-up — a practical, execution-oriented angle with step-by-step actions (seeded by qa-r186-smoke)",
+          reason: "QA router citation: exploring the least-used branch after 1 prior variation",
+          sourceWorkflowId: "wf-qa-ev-ok",
+          sourceWorkflowName: "QA Evidence Ok",
+          sourceRunId: "run-qa-ev-ok-1",
+        },
+      ],
     },
     version: 0,
   }));
@@ -162,6 +177,39 @@ ok(
   /exploiting the leading branch/.test(evoTip) && /QA Parent Research/.test(evoTip),
   "lineage tooltip cites the router decision reason + source workflow (r203)"
 );
+
+// r206: the SOURCE run of a variation carries the router chip — the same
+// decision evidence, now reachable from the run that triggered it. Open the
+// run panel via the runs-board row for the seeded run, then assert the chip
+// and its tooltip (reason + branch recovered from the goal + inbox status).
+// The kanban renders only in the "Runs board" layout — switch to it first.
+await page.locator('[aria-label="Runs board layout"]').first().click().catch(() => {});
+await page.waitForTimeout(800);
+await page.locator('button[data-wf-card="wf-qa-ev-ok"]').first().click().catch(() => {});
+await page.waitForTimeout(1200); // panel sheet open + history rows render
+// r206: run history is a Collapsible closed by default — expand it so the
+// per-run chips (novelty, evidence, router) mount.
+await page.locator("button", { hasText: "Run history" }).first().click().catch(() => {});
+await page.waitForTimeout(600);
+const spawnChip = page
+  .locator('[aria-label="This run triggered an Evolution variation proposal"]')
+  .first();
+ok(
+  await spawnChip.isVisible().catch(() => false),
+  "run-history router chip renders for the run that triggered a variation (r206)"
+);
+const spawnTip = (await spawnChip.getAttribute("title").catch(() => "")) ?? "";
+ok(
+  /QA router citation/.test(spawnTip) &&
+    /a practical, execution-oriented angle/.test(spawnTip) &&
+    /open in the spawn inbox/.test(spawnTip),
+  "router chip tooltip cites reason + recovered branch + inbox status (r206)"
+);
+await page.keyboard.press("Escape").catch(() => {});
+await page.waitForTimeout(500); // sheet close before the board round-trips
+// Switch back to the card grid — the r192 breaker banner lives there.
+await page.locator('[aria-label="Card grid layout"]').first().click().catch(() => {});
+await page.waitForTimeout(800);
 
 ok(errors.length === 0, `no page errors (${errors.length})`);
 if (errors.length) console.log(errors.slice(0, 3).join("\n"));

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buildEvidenceLedger, formatCiters } from "@/lib/evidence-ledger";
+import { angleOfProposal } from "@/lib/spawn-proposal-engine";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -613,6 +614,9 @@ export function WorkflowRunPanel({
 }: WorkflowRunPanelProps) {
   // Subscribe to workflows so streamed patches re-render this panel
   const workflows = useWorkflowsStore((s) => s.workflows);
+  // r206: spawn proposals link back to the run that triggered them via
+  // sourceRunId — the run panel renders each run's router decision chip.
+  const proposals = useWorkflowsStore((s) => s.proposals);
   const agents = useAgentsStore((s) => s.agents);
 
   const [task, setTask] = React.useState("");
@@ -907,6 +911,40 @@ export function WorkflowRunPanel({
                     🧬 {r.novelty}%
                   </span>
                 )}
+                {(() => {
+                  // r206: the router's decision now follows the run in BOTH
+                  // directions — the spawned card carries the lineage chip
+                  // (r203); the SOURCE run gets this chip citing the same
+                  // evidence. No new persistence: the proposal already links
+                  // back via sourceRunId, and its r199 reason text already
+                  // cites mode/leader/avg-novelty/sample-count verbatim.
+                  const prop = proposals.find((p) => p.sourceRunId === r.id);
+                  if (!prop) return null;
+                  const angle = angleOfProposal(prop.goal);
+                  const spawnedName = prop.spawnedWorkflowId
+                    ? workflows.find((w) => w.id === prop.spawnedWorkflowId)?.name
+                    : undefined;
+                  const statusLine =
+                    prop.status === "accepted"
+                      ? `accepted → "${spawnedName ?? prop.spawnedWorkflowId}"`
+                      : prop.status === "dismissed"
+                        ? "dismissed in the spawn inbox"
+                        : "open in the spawn inbox";
+                  return (
+                    <span
+                      title={`This run's low novelty triggered an Evolution variation.\nRouter: ${prop.reason}\nBranch: ${angle ? `"${angle}"` : "embedded in the proposal goal"}\nStatus: ${statusLine}`}
+                      aria-label="This run triggered an Evolution variation proposal"
+                      className={cn(
+                        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                        prop.status === "dismissed"
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-violet-500/15 text-violet-600 dark:text-violet-400"
+                      )}
+                    >
+                      🧬 → variation
+                    </span>
+                  );
+                })()}
                 <span className="shrink-0 text-[11px] text-muted-foreground">
                   {fmtRel(r.startedAt)}
                 </span>
