@@ -78,6 +78,14 @@ await page.addInitScript(() => {
           id: "wf-qa-ev-ok",
           name: "QA Evidence Ok",
           description: "seeded by qa-r186-smoke (r197 green)",
+          evolution: {
+            proposalId: "prop-qa-1",
+            sourceWorkflowId: "wf-qa-parent",
+            sourceWorkflowName: "QA Parent Research",
+            reason:
+              'the router is exploiting the leading branch — "Deep Compare" averaged 95% novelty across 1 scored variation',
+            acceptedAt: now - day(),
+          },
           steps: [{ id: "s1", agentId: "a1", label: "Seeded step", instruction: "say hi" }],
           runs: [mkRun("run-qa-ev-ok-1", "wf-qa-ev-ok", "QA Evidence Ok", "scheduled", "done", now - 10 * 60_000)],
           createdAt: now - 2 * day(),
@@ -130,6 +138,20 @@ ok(
 // Directive (d) literal ask: the tooltip cites the backing run event ID.
 const okTip = await chip.filter({ hasText: "· done" }).first().getAttribute("title").catch(() => "");
 ok(/run run-qa-ev-ok-1/.test(okTip ?? ""), "chip tooltip cites the backing run event id");
+
+// r203 Evolution lineage: the spawned-workflow card carries a violet chip
+// whose tooltip cites the router's decision reason even after the inbox
+// row is gone (structured Workflow.evolution, stamped at accept-time).
+const evoChip = page.locator("span", { hasText: "Evolution spawn" }).first();
+ok(
+  await evoChip.isVisible().catch(() => false),
+  "Evolution lineage chip renders on the spawned workflow card (r203)"
+);
+const evoTip = (await evoChip.getAttribute("title").catch(() => "")) ?? "";
+ok(
+  /exploiting the leading branch/.test(evoTip) && /QA Parent Research/.test(evoTip),
+  "lineage tooltip cites the router decision reason + source workflow (r203)"
+);
 
 ok(errors.length === 0, `no page errors (${errors.length})`);
 if (errors.length) console.log(errors.slice(0, 3).join("\n"));

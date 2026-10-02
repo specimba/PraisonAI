@@ -752,6 +752,16 @@ function EvolutionInbox() {
       steps,
       depth: "standard",
       runs: [],
+      // r203: structured lineage — the accept-time decision evidence
+      // (router reason with numbers) travels with the workflow, so the
+      // card chip can cite it long after the inbox row is gone.
+      evolution: {
+        proposalId: p.id,
+        sourceWorkflowId: p.sourceWorkflowId,
+        sourceWorkflowName: p.sourceWorkflowName,
+        reason: p.reason,
+        acceptedAt: Date.now(),
+      },
     });
     setProposalStatus(p.id, "accepted", spawnedId);
     toast.success(
@@ -1520,6 +1530,17 @@ export function WorkflowsView() {
 
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
+                      {wf.evolution ? (
+                        <span
+                          title={`Spawned by Evolution ${new Date(
+                            wf.evolution.acceptedAt,
+                          ).toLocaleString()} — ${wf.evolution.reason} (source: ${wf.evolution.sourceWorkflowName})`}
+                          className="inline-flex items-center gap-1 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400"
+                        >
+                          <Lightbulb className="h-3 w-3 shrink-0" />
+                          Evolution spawn
+                        </span>
+                      ) : null}
                       <DepthChip depth={wf.depth} />
                       {(() => {
                         // r125 provider health chip — mirrors resolveLlm 1:1.

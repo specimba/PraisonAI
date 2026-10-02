@@ -382,6 +382,21 @@ export interface Workflow {
   depth?: PipelineDepth;
   /** Recurring in-app schedule (runs fire while the app tab is open). */
   schedule?: WorkflowSchedule;
+  /**
+   * r203: structured lineage for workflows spawned from an Evolution
+   * proposal. Stamped at accept-time so the card's lineage chip keeps
+   * citing the router's decision reason (r199) after the inbox row is
+   * gone — claim (this workflow exists) stays linkable to its source
+   * (why the router proposed it, with numbers). Absent on manually
+   * authored workflows and pre-r203 spawns.
+   */
+  evolution?: {
+    proposalId: string;
+    sourceWorkflowId: string;
+    sourceWorkflowName: string;
+    reason: string;
+    acceptedAt: number;
+  };
 }
 
 /** Interval-based schedule for a workflow. Missed runs (app closed) are skipped. */
