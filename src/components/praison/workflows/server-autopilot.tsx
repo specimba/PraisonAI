@@ -263,7 +263,7 @@ export function ServerAutopilot() {
                 ? `Closed-tab runs dial ${lane.providerLabel} with your stored key ${lane.maskedKey} (Automation vault). Click to manage.`
                 : lane.reason === "no-vault-key"
                   ? "The server executor dials ONLY with a key you store in the Automation vault (BYOK-preserving). No key: due schedules stay queued while the tab is closed. Click to store one."
-                  : `The vault's first slot (${lane.slotProvider}) can't be paired with a server-side endpoint — the built-in gateway is client-side knowledge. Store a registry provider key so closed-tab runs can dial. Click to manage.`
+                  : `No vault slot pairs with a server-side endpoint (${lane.slotCount} slot${lane.slotCount === 1 ? "" : "s"} scanned — the built-in gateway is client-side knowledge and unresolvable slots are skipped). Store a registry provider key so closed-tab runs can dial. Click to manage.`
             }
             aria-label="Headless lane key status"
             className={cn(

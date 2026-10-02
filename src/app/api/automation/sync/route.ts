@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { resolveServerDial } from "@/lib/server/automation-executor";
+import { resolveServerDialFromSlots } from "@/lib/server/automation-executor";
 import { type ExecutorLaneState } from "@/lib/automation-lane";
 
 export const dynamic = "force-dynamic";
@@ -88,40 +88,39 @@ export async function GET() {
       db.automationState.findUnique({ where: { id: "singleton" } }),
       db.automationWorkflow.findMany({ orderBy: { name: "asc" } }),
       db.automationRun.findMany({ orderBy: { startedAt: "desc" }, take: 25 }),
-      // r205: read ALL vault slots — the executor resolves its dial from the
-      // FIRST row (createdAt asc) and requires a registry-provider pairing;
-      // the builtin slot is skipped. Reporting the builtin slot alone (the
-      // r133 read) made the panel claim a lane the executor would refuse.
+      // r205/r207: read ALL vault slots — the executor resolves its dial from
+      // the first RESOLVABLE row (createdAt asc; builtin/empty slots skipped)
+      // and requires a registry-provider pairing. Reporting the builtin slot
+      // alone (the r133 read) made the panel claim a lane the executor refuses.
       db.automationVault.findMany({ orderBy: { createdAt: "asc" } }),
     ]);
     const lastSeen = state?.lastSeenAt?.getTime() ?? 0;
     const mask = (k: string) =>
       k.length > 12 ? `${k.slice(0, 4)}••••${k.slice(-4)}` : "••••••••";
 
-    // r205: executorLane mirrors resolveServerDial exactly — what a due
-    // closed-tab run would do RIGHT NOW. Masked only, never the raw key.
-    const firstSlot = vaultRows[0] ?? null;
-    let executorLane: ExecutorLaneState;
-    if (firstSlot) {
-      const resolved = resolveServerDial({ provider: firstSlot.provider, key: firstSlot.key });
-      executorLane = resolved.dial
-        ? {
-            ready: true,
-            reason: null,
-            providerLabel: resolved.dial.providerLabel,
-            maskedKey: mask(firstSlot.key),
-            slotProvider: firstSlot.provider,
-          }
-        : {
-            ready: false,
-            reason: resolved.why,
-            providerLabel: null,
-            maskedKey: mask(firstSlot.key),
-            slotProvider: firstSlot.provider,
-          };
-    } else {
-      executorLane = { ready: false, reason: "no-vault-key", providerLabel: null, maskedKey: null, slotProvider: null };
-    }
+    // r205/r207: executorLane mirrors resolveServerDialFromSlots exactly —
+    // what a due closed-tab run would do RIGHT NOW, over the same slot list
+    // the executor reads (oldest first, first resolvable wins). Masked only.
+    const resolved = resolveServerDialFromSlots(
+      vaultRows.map((s) => ({ provider: s.provider, key: s.key })),
+    );
+    const executorLane: ExecutorLaneState = resolved.dial
+      ? {
+          ready: true,
+          reason: null,
+          providerLabel: resolved.dial.providerLabel,
+          maskedKey: mask(resolved.slot.key),
+          slotProvider: resolved.slot.provider,
+          slotCount: vaultRows.length,
+        }
+      : {
+          ready: false,
+          reason: resolved.why,
+          providerLabel: null,
+          maskedKey: vaultRows[0] ? mask(vaultRows[0].key) : null,
+          slotProvider: vaultRows[0]?.provider ?? null,
+          slotCount: vaultRows.length,
+        };
 
     const builtinSlot = vaultRows.find((r) => r.provider === "builtin") ?? null;
     return NextResponse.json({

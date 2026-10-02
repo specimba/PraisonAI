@@ -374,8 +374,9 @@ export function AutomationVaultCard() {
           ) : (
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
               No registry-provider key stored — with the tab closed, the executor stands
-              down and due schedules stay queued (honest no-op). The executor reads the
-              OLDEST stored slot; remove older ones to promote a newer provider.
+              down and due schedules stay queued (honest no-op). The executor dials the
+              OLDEST slot that pairs with a registry provider; builtin or unresolvable
+              slots are skipped, so storing a new key promotes it without deleting old ones.
             </p>
           )}
         </div>

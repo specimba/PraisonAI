@@ -1,4 +1,4 @@
-// r204 — Local Automation Vault executor QA: drives tickOnce() directly
+// r204/r207 — Local Automation Vault executor QA: drives tickOnce() directly
 // against the real database (no live server needed) and asserts every
 // contract path. The network dial is MOCKED (deterministic 200 / 401) so the
 // success and failure paths are proven without depending on gateway mood.
@@ -18,6 +18,7 @@ import { db } from "../src/lib/db";
 import {
   tickOnce,
   resolveServerDial,
+  resolveServerDialFromSlots,
   executeWorkflow,
   type TickResult,
 } from "../src/lib/server/automation-executor";
@@ -155,6 +156,78 @@ try {
       resolvedOk.dial.key === "sk-qa-space-key" &&
       resolvedOk.dial.model.length > 0,
     "resolveServerDial: registry provider resolves baseUrl + model id + trimmed key",
+  );
+
+  // 1b. r207: resolveServerDialFromSlots — first RESOLVABLE slot wins.
+  const fs0 = resolveServerDialFromSlots(null);
+  ok(
+    fs0.dial === null && (fs0 as { why: string }).why === "no-vault-key",
+    "fromSlots: null list → no-vault-key (defensive)",
+  );
+  const fs1 = resolveServerDialFromSlots([]);
+  ok(
+    fs1.dial === null && (fs1 as { why: string }).why === "no-vault-key",
+    "fromSlots: empty vault → no-vault-key",
+  );
+  const fs2 = resolveServerDialFromSlots([{ provider: "builtin", key: "sk-x" }]);
+  ok(
+    fs2.dial === null && (fs2 as { why: string }).why === "no-resolvable-provider",
+    "fromSlots: builtin-only vault → no-resolvable-provider (unchanged honesty)",
+  );
+  const fs3 = resolveServerDialFromSlots([
+    { provider: "builtin", key: "sk-legacy" },
+    { provider: PROVIDER, key: "sk-new" },
+  ]);
+  ok(
+    fs3.dial !== null && fs3.slot.provider === PROVIDER && fs3.dial.key === "sk-new",
+    "fromSlots: builtin OLDEST + registry key newer → dials the newer slot (promotion, no delete needed)",
+  );
+  const fs4 = resolveServerDialFromSlots([
+    { provider: PROVIDER, key: "sk-first" },
+    { provider: "builtin", key: "sk-legacy" },
+  ]);
+  ok(
+    fs4.dial !== null && fs4.slot.provider === PROVIDER && fs4.dial.key === "sk-first",
+    "fromSlots: resolvable slot oldest → wins (stable order, not last-resolvable)",
+  );
+  const fs5 = resolveServerDialFromSlots([
+    { provider: PROVIDER, key: "   " },
+    { provider: PROVIDER, key: "sk-blank-first" },
+  ]);
+  ok(
+    fs5.dial !== null && fs5.slot.key === "sk-blank-first",
+    "fromSlots: blank-key slot skipped, scan continues (not a fatal no-vault-key)",
+  );
+  const fs6 = resolveServerDialFromSlots([{ provider: PROVIDER, key: "   " }]);
+  ok(
+    fs6.dial === null && (fs6 as { why: string }).why === "no-vault-key",
+    "fromSlots: only blank-key slots → no-vault-key (honest reason aggregation)",
+  );
+  const fs7 = resolveServerDialFromSlots([
+    { provider: "builtin", key: "sk-legacy" },
+    { provider: "totally-unknown-provider", key: "sk-x" },
+  ]);
+  ok(
+    fs7.dial === null && (fs7 as { why: string }).why === "no-resolvable-provider",
+    "fromSlots: keys exist but none pairs with a registry provider → no-resolvable-provider",
+  );
+
+  // 1c. r207 integration: the OLD executor died here — builtin oldest in the
+  // vault poisoned the whole lane even with a good registry key present.
+  await resetFixture();
+  await db.automationVault.create({
+    data: {
+      provider: "builtin",
+      key: "sk-legacy-builtin",
+      label: "legacy",
+      createdAt: new Date(Date.now() - 60_000), // explicitly OLDER than the vyce slot
+    },
+  });
+  dialStatus = 200;
+  const promoted: TickResult = await tickOnce();
+  ok(
+    promoted.claimed === 1 && promoted.outcome?.status === "done",
+    "tick integration: builtin slot oldest + registry key newer → run claims and completes (r207 promotion)",
   );
 
   // 2. fresh heartbeat → stand down

@@ -14,10 +14,14 @@ export interface ExecutorLaneState {
   reason: ExecutorLaneReason | null;
   /** Registry provider name (e.g. "Vyce AI") when ready. */
   providerLabel: string | null;
-  /** Masked preview of the FIRST vault slot the executor would read. */
+  /** Masked preview of the vault slot the executor would dial
+   *  (r207: the first RESOLVABLE slot, not blindly the oldest). */
   maskedKey: string | null;
-  /** Vault provider id of that first slot (e.g. "builtin" — skipped). */
+  /** Vault provider id of that slot ("builtin" only appears when it is
+   *  the whole story — r207 skips it in favor of a resolvable sibling). */
   slotProvider: string | null;
+  /** r207: total vault slots the executor scanned (drives plural copy). */
+  slotCount: number;
 }
 
 export const STALE_REGISTRY_MS = 24 * 60 * 60 * 1000;
@@ -61,5 +65,5 @@ export function computeStaleRegistry(
 export function humanizeLaneReason(reason: ExecutorLaneReason): string {
   return reason === "no-vault-key"
     ? "no vault key is stored"
-    : "the vault's first slot is the built-in engine slot, which has no server-side endpoint pairing";
+    : "no stored vault slot pairs with a registry provider endpoint (the built-in engine slot's gateway is client-side knowledge, and it is skipped, never guessed)";
 }

@@ -51,10 +51,10 @@ interface ResolvedDial {
 }
 
 /**
- * Resolve the dial endpoint for the server lane from the vault.
- * Returns null (with a machine-readable reason in `why`) when no opt-in key
- * can be paired with a real registry endpoint — the executor never invents
- * endpoints or falls back to implicit credentials.
+ * Resolve the dial endpoint for the server lane from ONE vault slot.
+ * Returns null (with a machine-readable reason in `why`) when the slot's
+ * opt-in key cannot be paired with a real registry endpoint — the executor
+ * never invents endpoints or falls back to implicit credentials.
  */
 export function resolveServerDial(
   vaultEntry: { provider: string; key: string } | null,
@@ -77,6 +77,35 @@ export function resolveServerDial(
       providerLabel: reg.name,
     },
   };
+}
+
+/**
+ * r207: resolve the dial from ALL vault slots, oldest first — the first slot
+ * that RESOLVES wins. Before this, tickOnce() read only the single oldest
+ * slot, so a legacy builtin slot poisoned the lane even when a perfectly
+ * good registry-provider key sat right next to it (the user had to DELETE
+ * the old slot to promote the new one — a blunt rule the vault card had to
+ * apologize for). Unresolvable slots are now skipped, not fatal.
+ *
+ * Reason aggregation stays honest:
+ *   • no slots, or every key empty            → "no-vault-key"
+ *   • keys exist but none pairs with registry → "no-resolvable-provider"
+ * The chosen slot is returned with the dial so the sync-GET lane mirror can
+ * mask exactly the key the executor would use (no index guessing).
+ */
+export type SlotRef = { provider: string; key: string };
+export function resolveServerDialFromSlots(
+  slots: SlotRef[] | null,
+): { dial: ResolvedDial; slot: SlotRef } | { dial: null; why: "no-vault-key" | "no-resolvable-provider" } {
+  const list = Array.isArray(slots) ? slots : [];
+  let sawKey = false;
+  for (const slot of list) {
+    if (!slot.key.trim()) continue; // empty slot: skip, keep scanning
+    sawKey = true;
+    const resolved = resolveServerDial(slot);
+    if (resolved.dial) return { dial: resolved.dial, slot };
+  }
+  return { dial: null, why: sawKey ? "no-resolvable-provider" : "no-vault-key" };
 }
 
 /** One non-streaming OpenAI-compatible chat completion for a single step. */
@@ -229,9 +258,11 @@ export async function tickOnce(now = new Date()): Promise<TickResult> {
   });
   if (due.length === 0) return { claimed: 0, reason: "idle", workflowIds: [] };
 
-  const vaultEntry = await db.automationVault.findFirst({ orderBy: { createdAt: "asc" } });
-  const resolved = resolveServerDial(
-    vaultEntry ? { provider: vaultEntry.provider, key: vaultEntry.key } : null,
+  // r207: ALL slots, oldest first — first RESOLVABLE one wins (a legacy
+  // builtin slot no longer blocks a newer registry-provider key).
+  const vaultSlots = await db.automationVault.findMany({ orderBy: { createdAt: "asc" } });
+  const resolved = resolveServerDialFromSlots(
+    vaultSlots.map((s) => ({ provider: s.provider, key: s.key })),
   );
   if (!resolved.dial) return { claimed: 0, reason: resolved.why, workflowIds: [] };
 
