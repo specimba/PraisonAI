@@ -141,6 +141,16 @@ const laneChip = await page.textContent('[aria-label="Headless lane key status"]
 ok(!!laneChip, "server autopilot lane chip renders (r205)");
 ok(!!laneChip && laneChip.trim().startsWith("server lane: "), `lane chip states executor truth (${(laneChip ?? "").trim()})`);
 
+// r208: the Automation pulse strip — one honest aggregate of the r192–r207
+// diagnostics instruments (schedules/parked, 24h run outcomes, evolution
+// inbox, attention verdict). Renders as soon as the first sync GET lands.
+await page.waitForSelector('[aria-label="Automation pulse"]', { timeout: 15_000 }).catch(() => null);
+const pulseText = (await page.textContent('[aria-label="Automation pulse"]').catch(() => null)) ?? "";
+ok(!!pulseText, "automation pulse strip renders (r208)");
+ok(/Schedules/i.test(pulseText) && /active/.test(pulseText), `pulse counts registry schedules (${pulseText.replace(/\s+/g, " ").trim().slice(0, 80)})`);
+ok(/Evolution inbox/i.test(pulseText) && /\d+\s*open\s*·\s*\d+\s*accepted/.test(pulseText), "pulse aggregates the evolution inbox counts");
+ok(/Needs attention/i.test(pulseText) && /(all clear|\d+ items?)/.test(pulseText), `pulse states the attention verdict (${/Needs attention[\s\S]{0,40}/.exec(pulseText)?.[0]?.replace(/\s+/g, " ").trim() ?? "missing"})`);
+
 // Depth chip fallback: pre-r186 runs have no stamped depth — panel shows authored depth.
 // The chip text itself appears inside the run panel sheet; assert the component
 // vocabulary is present in the bundle-driven page (rendered when a panel opens).

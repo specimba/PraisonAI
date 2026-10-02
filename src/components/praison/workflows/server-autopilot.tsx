@@ -156,6 +156,9 @@ export function ServerAutopilot() {
   // schedule.nextRunAt is the truth for the active lane; the registry is the
   // truth once the server lane is driving.
   const workflows = useWorkflowsStore((s) => s.workflows);
+  // r208: the evolution inbox lives in the client store — the pulse reads it
+  // from the same source the Evolution Inbox renders from (no double truth).
+  const proposals = useWorkflowsStore((s) => s.proposals);
   const localNextByWf = React.useMemo(() => {
     const m = new Map<string, string>();
     for (const w of workflows) {
@@ -196,11 +199,100 @@ export function ServerAutopilot() {
     useUiStore.getState().setSettingsAnchor("vault");
   }, []);
 
+  // ── r208: Automation pulse — the r192–r207 instruments, one glance ────────
+  // Each number below is ALREADY rendered (and explained) by a dedicated
+  // surface in this panel or the inbox; the pulse just aggregates them so a
+  // returning user sees "is anything on fire?" without reading every strip.
+  const openProposals = proposals.filter((p) => p.status === "open").length;
+  const acceptedProposals = proposals.filter((p) => p.status === "accepted").length;
+  const registryRows = state?.registry ?? [];
+  // Breaker-parked (r192/r204 parity): disabled AFTER the 3-strike breaker,
+  // not merely off (user toggle / orphan-guard — those were never failing).
+  const parked = registryRows.filter((r) => !r.enabled && r.failStreak >= 3).length;
+  const off = registryRows.filter((r) => !r.enabled && r.failStreak < 3).length;
+  // Server-run outcomes over the last day (the sync GET ships the 25 most
+  // recent rows — the title says exactly that, no pretended completeness).
+  const dayAgo = Date.now() - 24 * 3_600_000;
+  const runs24 = (state?.runs ?? []).filter((r) => new Date(r.startedAt).getTime() >= dayAgo);
+  const done24 = runs24.filter((r) => r.status === "done").length;
+  const running24 = runs24.filter((r) => r.status === "running").length;
+  const transient24 = runs24.filter((r) => r.status === "error" && TRANSIENT_RE.test(r.error ?? "")).length;
+  const failed24 = runs24.filter((r) => r.status === "error" && !TRANSIENT_RE.test(r.error ?? "")).length;
+  // Attention = the amber conditions the strips below already render, counted.
+  const attention: string[] = [];
+  if (staleRows.length > 0)
+    attention.push(`${staleRows.length} schedule${staleRows.length === 1 ? "" : "s"} >24h with no lane driving`);
+  if (parked > 0)
+    attention.push(`${parked} schedule${parked === 1 ? "" : "s"} parked by the failure breaker`);
+  if (driving && laneBlocked && dueQuietCount > 0)
+    attention.push(`${dueQuietCount} due run${dueQuietCount === 1 ? "" : "s"} blocked: ${humanizeLaneReason(blockedReason ?? "no-vault-key")}`);
+
   return (
     <section
       aria-label="Server autopilot"
       className="rounded-xl border border-sky-500/25 bg-sky-500/[0.04] p-4"
     >
+      {state ? (
+        <div
+          aria-label="Automation pulse"
+          title="One-glance aggregation of the automation diagnostics: registry schedules, recent server-run outcomes, the evolution inbox, and anything needing attention. Each number is explained by its dedicated surface below."
+          className="mb-3 grid grid-cols-2 gap-1.5 lg:grid-cols-4"
+        >
+          <div
+            title="Enabled schedules in the local registry. “Parked” = disabled by the 3-strike failure breaker; “off” = disabled by you or the orphan guard (never failing)."
+            className="rounded-lg border border-sky-500/15 bg-background/40 px-2 py-1.5"
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Schedules</p>
+            <p className="mt-0.5 text-xs font-semibold tabular-nums text-sky-200">
+              {active.length} active{parked > 0 ? ` · ${parked} parked` : ""}
+              {off > 0 ? ` · ${off} off` : ""}
+            </p>
+          </div>
+          <div
+            title={`Server-lane run outcomes started in the last 24h (among the 25 most recent rows): ${done24} done, ${failed24} failed, ${transient24} transient-retried, ${running24} running.`}
+            className="rounded-lg border border-sky-500/15 bg-background/40 px-2 py-1.5"
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Server runs · 24h</p>
+            <p className="mt-0.5 text-xs font-semibold tabular-nums text-sky-200">
+              {runs24.length === 0
+                ? "none yet"
+                : `${done24}✓${failed24 > 0 ? ` ${failed24}✗` : ""}${transient24 > 0 ? ` ${transient24}↻` : ""}${running24 > 0 ? ` ${running24}⟳` : ""}`}
+            </p>
+          </div>
+          <div
+            title="Evolution-layer proposals: open = waiting in the inbox (spawned from low-novelty runs), accepted = became real pipelines."
+            className="rounded-lg border border-violet-500/15 bg-background/40 px-2 py-1.5"
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Evolution inbox</p>
+            <p className="mt-0.5 text-xs font-semibold tabular-nums text-violet-300">
+              {openProposals} open · {acceptedProposals} accepted
+            </p>
+          </div>
+          <div
+            title={
+              attention.length > 0
+                ? attention.join("; ")
+                : "No stale schedules, no breaker-parked pipelines, and the closed-tab lane is not blocking due runs."
+            }
+            className={cn(
+              "rounded-lg border bg-background/40 px-2 py-1.5",
+              attention.length > 0
+                ? "border-amber-500/30"
+                : "border-emerald-500/25"
+            )}
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Needs attention</p>
+            <p
+              className={cn(
+                "mt-0.5 text-xs font-semibold tabular-nums",
+                attention.length > 0 ? "text-amber-300" : "text-emerald-400"
+              )}
+            >
+              {attention.length === 0 ? "all clear" : `${attention.length} item${attention.length === 1 ? "" : "s"}`}
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <RadioTower className="h-4 w-4 shrink-0 text-sky-400" aria-hidden />
         <h3 className="text-sm font-semibold leading-none">Server autopilot</h3>
