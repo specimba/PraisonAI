@@ -5337,3 +5337,31 @@ Verification result: PASS
 Open risks: (1) Evidence chip has NO smoke assertion — needs a seeded workflow with source-stamped runs (one ok + one stale → assert both chips render); the r196 import-flow smoke increment is also still queued. (2) Missed-fire red requires lastRunAt or a source-stamped run — workflows scheduled before r197 show no chip until their next fire stamps provenance (honest, but the first observation window is blind). (3) Date.now() at render means the chip only refreshes on store-driven re-renders — correct in practice (scheduler ticks mutate stores) but a long-idle board could show a stale age until the next tick. (4) User confirmation still pending since r189 — 7 rounds.
 Blockers: none
 Next recommended action: r198 — (1) FIRST read any user report: a red "no fire in Xh" chip on Continuous Research = the stalled-lane detector caught it live; an amber "last fire · error" chip = check the cited run id. (2) Backlog: smoke assertions for the two new UI surfaces (r196 import dialog + r197 evidence chips); proposal-reason polish naming the leading branch when exploitation fires; directive (c) claim-to-source evidence ledger. (3) If still no user paste by r199, consider the StaleBuildGuard visibility auto-toast (r196 handoff item 3).
+
+---
+Task ID: 424432 — r198 (QA net closed over both new surfaces: 19-assertion smoke)
+Agent: main (platform development — hourly dev round)
+Task: r197 handoff top item: smoke assertions for the r196 import dialog and the r197 evidence chips (both shipped with zero coverage). No user report this fire (8th round).
+
+Work Log:
+- Smoke 9 → 19 assertions, one seed upgrade, zero src changes (pure QA round):
+  (1) Seed now carries three ENABLED-schedule workflows with source-stamped runs — wf-qa-ev-missed (last fire 5h ago vs 1h interval → RED "no fire in 5h"), wf-qa-ev-error (last fire errored 20m ago → AMBER), wf-qa-ev-ok (done 10m ago → muted green). nextRunAt pushed into the future so the smoke's own scheduler tick can't fire them mid-assertion (flake guard).
+  (2) r197 chip assertions: all three tones render on the board + the tooltip cites the backing run event id (directive d literal ask: "run run-qa-ev-ok-1").
+  (3) r196 dialog assertions: setInputFiles with a scrubbed fixture on [data-testid="full-import-input"] → dialog opens, amber "No credentials in this export" note renders, copy states "Provider keys in this browser are kept", Cancel aborts cleanly.
+  (4) Keep-behavior END-TO-END (runs last — it reloads): seed praison-settings with apiKey sk-qa-keep-me + temperature 0.7 via one-time evaluate (NOT addInitScript, which would overwrite on reload), re-pick the scrubbed file (temperature 0.55), click "Replace & reload", assert after reload: apiKey SURVIVED + temperature === 0.55 (file applied). Both sides of the r196 contract proven in a real browser.
+- Verification: smoke 19/19 (0 page errors); eslint 0 on the smoke; root 200 at round start; no src changes → tsc untouched-surface (r197 baseline stands).
+- Snapshot pushed → fork/main (13dd24e9c).
+
+Stage Summary:
+- Every UI surface shipped since r192 now has browser coverage: banner round-trip, changelog proof, import-dialog honesty, keep-on-silent credentials, and the three evidence-chip tones with event-ID citations. The QA suite asserts user-visible behavior end-to-end (localStorage → hydration → render → persist), not implementation details.
+
+Round Handoff:
+Round ID: r199
+Task owner: main (platform dev)
+Scope completed: smoke 9→19 (three-tone evidence chips + event-ID tooltip + import dialog honesty + keep-behavior round-trip with reload).
+User-visible changes: none this round (QA hardening); the covered surfaces are r196/r197's.
+Verification steps: node scripts/qa-r186-smoke.mjs → 19/19; bunx eslint scripts/qa-r186-smoke.mjs → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) The keep round-trip asserts localStorage directly after reload — if a future persist-version migration reshapes praison-settings, the assertion will fail loudly (good failure mode, same as the r193 seed note). (2) Chip age labels ("5h", "10m") depend on seed-time Date.now() — sub-minute drift across the smoke cannot flip an assertion (rounding is coarse). (3) User confirmation still pending since r189 — 8 rounds; the red "no fire" chip is the surface most likely to catch the stalled lane on the user's real board without them reporting anything.
+Blockers: none
+Next recommended action: r199 — (1) FIRST read any user report: red "no fire in Xh" chip or amber "last fire · error" chip on a real card = the detector caught the lane; check the cited run id. (2) Backlog (rotate surfaces): proposal-reason polish naming the leading branch when exploitation fires (spawn-proposal-engine.ts — untouched since r191); directive (c) claim-to-source evidence ledger; StaleBuildGuard visibility auto-toast if no paste by r199 (r196 handoff item 3). (3) Keep the smoke's 19 green in every future round that touches workflows-view or settings-view.
