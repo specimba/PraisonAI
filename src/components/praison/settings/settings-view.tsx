@@ -53,6 +53,7 @@ import {
   TTS_VOICES,
 } from "@/lib/constants";
 import { downloadJson } from "@/lib/helpers";
+import { WhatsFixedSection } from "@/components/praison/settings/whats-fixed";
 import {
   useAgentsStore,
   useConversationsStore,
@@ -125,6 +126,7 @@ function sanitizeWorkflow(raw: unknown): Workflow | null {
 
 /** Sticky section-nav — ids must match the wrapper elements below. */
 const SETTINGS_SECTIONS = [
+  { id: "whats-fixed", label: "What's fixed" },
   { id: "usage", label: "Usage" },
   { id: "providers", label: "Providers" },
   { id: "local-models", label: "Local models" },
@@ -412,6 +414,10 @@ export function SettingsView() {
           </nav>
 
           {/* ── Usage dashboard ──────────────────────────────────────── */}
+          <div id="whats-fixed" className="scroll-mt-14">
+            <WhatsFixedSection />
+          </div>
+
           <div id="usage" className="scroll-mt-14">
             <UsageDashboard />
           </div>

@@ -3,7 +3,7 @@ import { chromium } from "playwright";
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
 let pass = 0, fail = 0;
-const ok = (c, m) => { console.log(`${c ? "  ✓" : "  ✗"} ${m}`); c ? pass++ : fail++; };
+const ok = (c, m) => { console.log(`${c ? "  ✓" : "  ✗"} ${m}`); if (c) pass++; else fail++; };
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -72,6 +72,15 @@ if (bannerVisible) {
     "banner clears after the bulk resume (self-limiting, no stale warning)"
   );
 }
+
+// r195: in-app changelog — Settings → "What's fixed" renders. The section
+// doubles as a freshness proof: it only exists in r195+ bundles.
+await page.locator("button", { hasText: "Settings" }).first().click().catch(() => {});
+await page.waitForTimeout(1200);
+ok(
+  /What.s fixed recently/i.test(await page.locator("body").innerText()),
+  "Settings → What's fixed changelog renders (r195+ bundle proof)"
+);
 
 await browser.close();
 console.log(`\n${pass}/${pass + fail} browser smoke assertions passed`);
