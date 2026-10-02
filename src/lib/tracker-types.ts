@@ -61,6 +61,43 @@ export const TRACKER_CACHE_KEY = "praison-tracker-cache";
 export const TRACKER_LAST_SEEN_KEY = "praison-tracker-lastseen";
 export const TRACKER_SYNC_TTL_MS = 4 * 60 * 60_000;
 
+// r210: pure mirror parser — the boot path must DISTINGUISH "no cache yet"
+// from "cache row unreadable" so the latter can be healed (removed) instead of
+// silently re-failing every boot. Kept DOM-free so a bun QA exercises it
+// directly. Shallow shape check by design: structural corruption is what the
+// boot path needs to detect, not per-field validation.
+export type TrackerMirrorBoot =
+  | { kind: "data"; data: TrackerData }
+  | { kind: "corrupted" }
+  | { kind: "empty" };
+
+export function parseTrackerMirror(raw: string | null): TrackerMirrorBoot {
+  if (raw == null) return { kind: "empty" };
+  let c: { at?: number; tracked?: TrackedModelRow[]; events?: TrackerEventRow[]; lastSyncAt?: string | null };
+  try {
+    c = JSON.parse(raw);
+  } catch {
+    return { kind: "corrupted" };
+  }
+  if (!c || typeof c !== "object" || !Array.isArray(c.tracked)) return { kind: "corrupted" };
+  return {
+    kind: "data",
+    data: {
+      tracked: c.tracked,
+      signals: [],
+      events: Array.isArray(c.events) ? c.events : [],
+      sources: [],
+      status: {
+        lastSyncAt: typeof c.lastSyncAt === "string" ? c.lastSyncAt : null,
+        stale: Date.now() - (typeof c.at === "number" ? c.at : NaN) > TRACKER_SYNC_TTL_MS,
+        nextForceEligibleAt: 0,
+        newWindowHours: 48,
+        syncTtlHours: 4,
+      },
+    },
+  };
+}
+
 /** Provider display metadata for tracker rows (glyphs shared with the relay). */
 export const TRACKER_PROVIDER_META: Record<string, { label: string; glyph: string }> = {
   vyce: { label: "Vyce AI", glyph: "◈" },

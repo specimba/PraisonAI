@@ -5667,3 +5667,34 @@ Verification result: PASS
 Open risks: (1) The header chip renders only when the panel is opened ON the sourced run — panels opened on other runs show nothing (correct, but a per-workflow "N variations sourced from this pipeline" header badge could aggregate across runs). (2) The evolution ledger remains the only surface listing dismissed proposals; the chip shows dismissal state but the inbox hides handled rows by design. (3) User confirmation still pending since r189 — 19 rounds.
 Blockers: none
 Next recommended action: r210 — (1) FIRST read any user report. (2) Backlog: fold resolveServerDial single-slot path into the slots scan (one canonical resolver); show vault slot age in the vault card; pulse attention cell deep-links to the offending strip; per-workflow variation-count header badge. (3) Standing: qa:syntax + qa:tsc every round; keep B 40 / K 84 / smoke 35 / lane 24 / executor 26 green.
+
+---
+Task ID: 424432 — r210
+Agent: main (platform development — hourly dev round)
+Task: r209 handoff — (1) FIRST read any user report (none attached). (2) Backlog: fold resolveServerDial single-slot path into the slots scan; vault slot age; pulse deep-links; variation-count badge. (3) Standing: qa:syntax + qa:tsc every round.
+
+Work Log:
+- INCIDENT, found before any feature work: health curl → 000 (server down). Worklog tail ended at r150, and the r209 commit (e9291761f) was absent from local git. Ground truth: this sandbox's filesystem had been ROLLED BACK to its Sep-30 state — ~60 rounds of local history (r151–r209) were gone from disk. The origin remote (NEXUS_WebGUI_HARNESS) is an unrelated lineage (its own r-numbering, r50) — not a recovery source.
+- RECOVERY: the fork remote held the lost lineage — fork/main ran through e9291761f (r209) up to f75ab0acf (Oct-2 snapshot), pushed by the parallel instance (which had also preserved our local r150 state as branch backup/rollback-lineage-4d35112ad). Local main was reset --hard to fork/main (the pre-reset snapshot commit e75ebe711 — which briefly captured this round's first tracker attempt — remains reachable in the reflog; nothing of value was dropped).
+- ANTI-DUPLICATION check before re-shipping: the lost rounds had already done an r151 error-handling pass on model-ticker (fetch-fail backoff-retry 5s/15s/60s + throw on !res.ok) and an r175 watermark-dedup (lastSeenRef against overlapping refreshes). My first (rolled-back-lineage) tracker fix duplicated a subset of that — discarded. Verified what fork/main still LACKED and shipped only the genuine deltas.
+- SHIPPED (src/lib/tracker-types.ts + src/components/praison/tracker/model-ticker.tsx + scripts/qa-tracker-mirror.ts):
+  1. parseTrackerMirror(raw) — pure, DOM-free three-way mirror parser (data / corrupted / empty) replacing the boot path's silent JSON.parse-or-null. Shallow shape check by design.
+  2. Corrupt-mirror healing: the boot effect now removes an unreadable cache row (it previously re-failed EVERY boot forever, invisibly), logs the heal, and shows a one-shot amber note in the tracker panel ("cache mirror was corrupt — healed, rebuilding from live data"). The r151 retry system remains the sole owner of fetch-failure UX — no overlap.
+  3. NaN-poison guard on the last-seen watermark: a malformed event createdAt previously drove Math.max to NaN, and lastSeen="NaN" (now also cached in the r175 ref) silently killed every future "new model" toast. Number.isFinite guards on both the reduce accumulator and the ref assignment.
+  - QA: scripts/qa-tracker-mirror.ts (bun) — 17 assertions on the parser contract (garbage/null/array/string roots → corrupted; empty → empty; round-trip; defaults; stale computation).
+- ENVIRONMENT CASUALTIES repaired (all rollback fallout, not code): node_modules was missing the lightningcss linux binary (bun install + .next cache clear + one dev-server restart → root 200); the SQLite DB file/schema was gone (bunx prisma db push → /api/tracker 200; watcher DATA itself is unrecoverable — fresh empty tables).
+- VERIFIED: bun scripts/qa-tracker-mirror.ts → 17/17; tsc --noEmit → 0 src errors (pre-existing errors only in scripts/hang-server.ts + skills/*, untouched); eslint on both touched src files → 0; live: root 200, /api/tracker 200 with a valid empty-snapshot payload.
+
+Stage Summary:
+- The sandbox rollback is fully healed: lineage recovered from the fork, environment repaired, and the round still shipped a real product improvement (corrupt-cache healing + toast-watermark NaN guard) that the parallel lineage had NOT already done. Local and fork/main are re-converged; the duplicate-work risk between parallel instances is now documented in this section.
+
+Round Handoff:
+Round ID: r211
+Task owner: main (platform dev)
+Scope completed: rollback incident recovery (r151–r209 lineage restored from fork/main) + tracker corrupt-mirror healing + NaN watermark guard + parser QA; env repairs (lightningcss, .next cache, prisma schema).
+User-visible changes: a corrupt tracker mirror self-heals on boot with an explicit amber panel note instead of silently disabling the boot paint forever; malformed event timestamps can no longer permanently kill "new model" toasts.
+Verification steps: bun scripts/qa-tracker-mirror.ts → 17/17; bunx tsc --noEmit → 0 src errors; bunx eslint (both touched files) → 0; curl root → 200; curl /api/tracker → 200.
+Verification result: PASS
+Open risks: parallel-instance duplication (two agents rotating the same backlog — ALWAYS diff against fork/main before implementing a handoff item); watcher data lost to the rollback (empty tracker until the next real sync); r142 real-world validation still pending.
+Blockers: none
+Next recommended action: r211 — (1) FIRST read any user report. (2) Backlog from the r209 handoff (verify against fork/main first): fold resolveServerDial single-slot path into the slots scan (one canonical resolver); vault slot age in the vault card; pulse attention deep-links; per-workflow variation-count badge. (3) Standing: tsc + eslint every round; keep the round's QA suite green.

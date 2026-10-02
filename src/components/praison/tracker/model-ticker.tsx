@@ -16,9 +16,10 @@ import {
   fmtCtx,
   fmtPrice,
   providerMeta,
+  parseTrackerMirror,
   TRACKER_CACHE_KEY,
   TRACKER_LAST_SEEN_KEY,
-  TRACKER_SYNC_TTL_MS,
+  type TrackerMirrorBoot,
   type TrackedModelRow,
   type TrackerData,
 } from "@/lib/tracker-types";
@@ -35,26 +36,15 @@ import {
 
 const POLL_MS = 15 * 60_000;
 
-function loadCache(): TrackerData | null {
+// r210: boot paint DISTINGUISHES "no cache" from "corrupt cache" via
+// parseTrackerMirror (tracker-types). A corrupt mirror row used to be
+// swallowed forever (silent catch re-failing every boot, zero diagnosis); the
+// boot effect heals it by removing the bad row and says so.
+function bootFromMirror(): TrackerMirrorBoot {
   try {
-    const raw = localStorage.getItem(TRACKER_CACHE_KEY);
-    if (!raw) return null;
-    const c = JSON.parse(raw) as { at: number; tracked: TrackedModelRow[]; events: TrackerData["events"]; lastSyncAt: string | null };
-    return {
-      tracked: c.tracked ?? [],
-      signals: [],
-      events: c.events ?? [],
-      sources: [],
-      status: {
-        lastSyncAt: c.lastSyncAt ?? null,
-        stale: Date.now() - c.at > TRACKER_SYNC_TTL_MS,
-        nextForceEligibleAt: 0,
-        newWindowHours: 48,
-        syncTtlHours: 4,
-      },
-    };
+    return parseTrackerMirror(localStorage.getItem(TRACKER_CACHE_KEY));
   } catch {
-    return null;
+    return { kind: "corrupted" }; // localStorage itself unavailable (private mode)
   }
 }
 
@@ -81,6 +71,10 @@ export function ModelTicker() {
   const [data, setData] = React.useState<TrackerData | null>(null);
   const [syncing, setSyncing] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  // r210: one-shot amber note for the corrupt-mirror heal (rare, surprising,
+  // and previously invisible). The r151 retry system owns the failure UX for
+  // fetches; this state only reports the healed boot.
+  const [syncNote, setSyncNote] = React.useState<string | null>(null);
 
   const setView = useUiStore((s) => s.setView);
   const activeId = useConversationsStore((s) => s.activeId);
@@ -127,8 +121,15 @@ export function ModelTicker() {
             action: { label: "Open radar", onClick: () => useUiStore.getState().setView("radar") },
           });
         }
-        const newest = fresh.events.reduce((acc, e) => Math.max(acc, new Date(e.createdAt).getTime()), lastSeen || Date.now());
-        lastSeenRef.current = newest;
+        const newest = fresh.events.reduce((acc, e) => {
+          // r210: NaN guard — a malformed createdAt previously poisoned
+          // Math.max into NaN, and lastSeen="NaN" (plus the r175 ref, which
+          // would cache the NaN for the whole page load) silently killed
+          // every future toast.
+          const t = new Date(e.createdAt).getTime();
+          return Number.isFinite(t) ? Math.max(acc, t) : acc;
+        }, Number.isFinite(lastSeen) ? lastSeen : Date.now());
+        if (Number.isFinite(newest)) lastSeenRef.current = newest;
         localStorage.setItem(TRACKER_LAST_SEEN_KEY, String(newest));
       } catch {
         /* best-effort announcements */
@@ -196,8 +197,18 @@ export function ModelTicker() {
 
   // Boot: instant paint from the mirror, then live fetch + poll.
   React.useEffect(() => {
-    const cached = loadCache();
-    if (cached) setData(cached);
+    const boot = bootFromMirror();
+    if (boot.kind === "data") setData(boot.data);
+    if (boot.kind === "corrupted") {
+      // r210: heal — remove the unreadable row so it can't re-fail every boot.
+      try {
+        localStorage.removeItem(TRACKER_CACHE_KEY);
+      } catch {
+        /* private mode — nothing more we can do */
+      }
+      console.warn("[tracker] cache mirror unreadable — healed (removed corrupt row), rebuilding from live");
+      setSyncNote("cache mirror was corrupt — healed, rebuilding from live data");
+    }
     void refresh(true);
     const iv = setInterval(() => void refresh(true), POLL_MS);
     const onVis = () => {
@@ -324,6 +335,7 @@ export function ModelTicker() {
               <p className="text-[13px] font-semibold leading-tight">Free &amp; new model radar</p>
               <p className="text-[10.5px] text-muted-foreground">
                 Watcher polls every 4-8h · synced {syncedRel} · {data.tracked.length} lanes watched
+                {syncNote && <span className="text-amber-600 dark:text-amber-400"> · {syncNote}</span>}
               </p>
             </div>
           </div>
