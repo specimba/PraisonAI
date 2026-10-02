@@ -5100,3 +5100,28 @@ Verification result: PASS
 Open risks: (1) Verdict markers are additive — any external consumer pattern-matching the old exact wire string would see the new suffix (in-repo: only the two shared-parser consumers, both updated). (2) Dead/auth verdicts remain English-message-based at the server: structured error CODES (e.g. JSON "code":"insufficient_quota") without matching text still fall through to hard — a code-field mapping is the next taxonomy step. (3) The workspace-wide orcarouter stamp flips only lanes already known to the rotator (by design; unknown lanes learn on first dial).
 Blockers: none
 Next recommended action: r189 — (1) FIRST read any user report: check whether relay rotation traces now skip blocked lanes faster (no repeated tier/region/auth lines for the same model within one run). (2) Backlog: "lane degraded — schedules auto-paused after N attempts" banner (carried from r187/r188 handoffs; visibility beats a paused board the user can't explain); structured error-code mapping for the taxonomy (risk 2); event-ID scheduler health (directive d); credential scrubbing from exports (directive e). Rotate surfaces.
+---
+Task ID: 424432 — r189 (USER REPORT: Continuous Research still dying 0/11 deep ×3 — shipped stale-tab guard + self-diagnosing chips)
+Agent: main (platform development — hourly dev round)
+Task: USER REPORT (paste of the Workflows board): Continuous Research shows three more 0/11 fast deaths (36m/50m/2h ago, ~3min each) AFTER r186 — depth degradation appears to not fire. User directive: "fixing the agent works" FIRST, then check arxiv.org/abs/2609.37834 for improvements.
+
+Work Log:
+- DIAGNOSIS: re-audited the whole degradation path in the CURRENT bundle — runner choke point (runnerDegraded: depthOverride undefined ∧ source scheduled ∧ deep ∧ failStreak≥2, wf re-read fresh from store), scheduler fire (passes source:"scheduled", depthOverride "standard"|undefined), failStreak bookkeeping (error/blocked increment, done resets, wholesale zustand persist + visibilitychange flush). All sound. Remaining explanation: the TAB runs a bundle loaded before r185/r186 — dev HMR dies silently in throttled background tabs, and in-tab schedules keep firing OLD code for hours. This also silently disables r187/r188 relay fixes. (Cannot be proven remotely; made it VISIBLE instead.)
+- SHIPPED — stale-tab guard: /api/version returns a code-freshness stamp (boot id : newest mtime under src/, 5s cache — any src edit or server restart moves it; verified live: stamp moved after a touch). New StaleBuildGuard client component polls every 60s; on change: one sticky sonner toast ("App updated — this tab runs old code… refresh") + a floating amber pill (bottom-right, click = reload) until the user reloads.
+- SHIPPED — self-diagnosing board: deep workflow with failStreak ≥ 2 now shows a violet "deep paused · firing standard" chip on the card (tooltip carries the streak AND the stale-bundle hint), next to the existing backoff/auto-paused chips. Next board paste proves at a glance whether degradation armed.
+- Verification: tsc clean (pre-existing scripts/hang-server.ts only); eslint 0 on 4 touched files; /api/version stable then moving exactly on edit; qa-r186-smoke 5/5 (0 page errors); root 200.
+- Snapshot pushed → fork/main (572a14f64).
+
+Stage Summary:
+- "Shipped but the app behaves the same" now has a loud failure mode: the tab tells the user it's stale and one click fixes it. The board also shows the degradation state the runner is actually using. If the user refreshes and the next scheduled fire STILL shows 11 steps with the violet chip visible, THAT would falsify the stale-tab theory and point at the store — instrumented for exactly that discrimination.
+
+Round Handoff:
+Round ID: r190
+Task owner: main (platform dev)
+Scope completed: /api/version freshness endpoint + StaleBuildGuard (toast + reload pill) + "deep paused · firing standard" card chip.
+User-visible changes: stale tabs announce themselves (toast + pill); degraded deep pipelines are visibly labeled on the board.
+Verification steps: tsc; eslint (4 files); curl /api/version ×3 (stable, then moved after src edit); node scripts/qa-r186-smoke.mjs → 5/5; curl root → 200.
+Verification result: PASS
+Open risks: (1) The guard polls every 60s — a tab opened <60s before a refresh-pill click may re-toast after reload if another edit lands mid-flight (benign). (2) The stamp scans src/ recursively per 5s-cache miss — negligible on this tree size. (3) Root cause of the user's 0/11 is still UNCONFIRMED (stale tab is the leading theory); the new chips exist to confirm/falsify on the next paste. (4) The three ~3-min 0/11 deaths had NO error-kind chip — if they persist after a confirmed-fresh tab, pull the run rows' error field for the real cause.
+Blockers: none
+Next recommended action: r190 — (1) FIRST read any user report: if the board now shows the violet chip AND 5-step runs → stale-tab theory confirmed, case closed; if chip visible but 11-step runs persist → audit the persisted store vs live store (schedule shape migration) as the prime suspect. (2) USER DIRECTIVE queued: fetch https://arxiv.org/abs/2609.37834 ("Close refreshed before start") via web-reader and mine it for concrete runner/relay improvements — user said to do this after the agent works, which is now instrumented. (3) Backlog: "lane degraded" banner, structured error-code mapping for the taxonomy, event-ID scheduler health, credential scrubbing.
