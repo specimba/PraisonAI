@@ -54,6 +54,41 @@ import {
 } from "@/lib/constants";
 import { downloadJson } from "@/lib/helpers";
 import { WhatsFixedSection } from "@/components/praison/settings/whats-fixed";
+
+// ── r196 credential presence ──────────────────────────────────────────────
+// r193 strips the three credential fields from every full-data export, so
+// an absent/empty field in an import file means "the file cannot speak for
+// this" — NOT "the exporting browser had none". applyPendingImport keeps
+// this browser's value for any field the file is silent on, and the confirm
+// dialog states the disposition instead of claiming keys come from the file.
+type FileCredentialPresence = {
+  apiKey: boolean;
+  providerKeys: boolean;
+  typesafeKey: boolean;
+  any: boolean;
+  all: boolean;
+};
+
+function fileCredentialPresence(
+  raw: Record<string, unknown> | null | undefined,
+): FileCredentialPresence {
+  const apiKey = typeof raw?.apiKey === "string" && raw.apiKey.trim().length > 0;
+  const providerKeys =
+    !!raw?.providerKeys &&
+    typeof raw.providerKeys === "object" &&
+    !Array.isArray(raw.providerKeys) &&
+    Object.keys(raw.providerKeys).length > 0;
+  const typesafeKey =
+    typeof raw?.typesafeKey === "string" && raw.typesafeKey.trim().length > 0;
+  const any = apiKey || providerKeys || typesafeKey;
+  return {
+    apiKey,
+    providerKeys,
+    typesafeKey,
+    any,
+    all: apiKey && providerKeys && typesafeKey,
+  };
+}
 import {
   useAgentsStore,
   useConversationsStore,
@@ -202,6 +237,14 @@ export function SettingsView() {
     [conversations]
   );
 
+  // r196: does THIS browser hold any credentials? Only shapes the import
+  // dialog copy — the keep-behavior in applyPendingImport is unconditional.
+  const localHasCredentials = Boolean(
+    (settings.apiKey && settings.apiKey.trim().length > 0) ||
+      (settings.providerKeys && Object.keys(settings.providerKeys).length > 0) ||
+      (settings.typesafeKey && settings.typesafeKey.trim().length > 0),
+  );
+
   // r173: a full-data import replaces every entity in this browser — and it
   // used to do that silently (the r169 deferred risk; r164 dirty-guard
   // doctrine says destructive replaces get a confirmation). The file is now
@@ -214,6 +257,9 @@ export function SettingsView() {
     cleanWorkflows: Workflow[];
     importedSettings: typeof DEFAULT_SETTINGS;
     skipped: number;
+    // r196: which credential fields the FILE carries — r193 scrubbing makes
+    // absence ambiguous, so the dialog must not read it as "no keys".
+    fileCreds: FileCredentialPresence;
   } | null>(null);
 
   function handleExport() {
@@ -285,10 +331,14 @@ export function SettingsView() {
         (workflowsRaw.length - cleanWorkflows.length);
       // A malformed settings payload must not poison the store — merge only
       // real objects over the defaults.
-      const importedSettings =
+      const rawSettings =
         bundle.settings && typeof bundle.settings === "object" && !Array.isArray(bundle.settings)
-          ? { ...DEFAULT_SETTINGS, ...(bundle.settings as object), seeded: true }
-          : { ...DEFAULT_SETTINGS, seeded: true };
+          ? (bundle.settings as Record<string, unknown>)
+          : null;
+      const importedSettings = { ...DEFAULT_SETTINGS, ...(rawSettings ?? {}), seeded: true };
+      // r196: record which credential fields the file actually carries
+      // BEFORE the dialog opens — a scrubbed export must not read as "no keys".
+      const fileCreds = fileCredentialPresence(rawSettings);
       // Nothing is written yet — the confirm gate decides (r173).
       setPendingImport({
         cleanAgents,
@@ -296,6 +346,7 @@ export function SettingsView() {
         cleanWorkflows,
         importedSettings,
         skipped,
+        fileCreds,
       });
     };
     reader.onerror = () => toast.error("Import failed — could not read the selected file.");
@@ -305,8 +356,25 @@ export function SettingsView() {
   // r173: runs only after the user confirms the replace dialog.
   function applyPendingImport() {
     if (!pendingImport) return;
-    const { cleanAgents, cleanConversations, cleanWorkflows, importedSettings, skipped } =
-      pendingImport;
+    const {
+      cleanAgents,
+      cleanConversations,
+      cleanWorkflows,
+      importedSettings,
+      skipped,
+      fileCreds,
+    } = pendingImport;
+    // r196: a scrubbed export cannot speak for credentials — absence is an
+    // artifact of r193 sanitization, not evidence the exporter had none.
+    // Any credential field the file is silent on keeps this browser's value,
+    // so importing a r193+ export no longer wipes the relay into AUTH errors.
+    // Built as a FRESH object — pendingImport state is never mutated.
+    const finalSettings: typeof DEFAULT_SETTINGS = {
+      ...importedSettings,
+      ...(!fileCreds.apiKey && { apiKey: settings.apiKey }),
+      ...(!fileCreds.providerKeys && { providerKeys: settings.providerKeys }),
+      ...(!fileCreds.typesafeKey && { typesafeKey: settings.typesafeKey }),
+    };
     try {
       localStorage.setItem(
         "praison-agents",
@@ -328,7 +396,7 @@ export function SettingsView() {
       );
       localStorage.setItem(
         "praison-settings",
-        JSON.stringify({ state: { settings: importedSettings }, version: 0 })
+        JSON.stringify({ state: { settings: finalSettings }, version: 0 })
       );
     } catch {
       toast.error("Import failed — could not write to localStorage.");
@@ -717,6 +785,7 @@ export function SettingsView() {
                 </Button>
                 <input
                   ref={fileInputRef}
+                  data-testid="full-import-input"
                   type="file"
                   accept=".json,application/json"
                   className="sr-only"
@@ -752,9 +821,29 @@ export function SettingsView() {
                           } will be skipped)`
                         : ""}
                       . Importing replaces all of it — nothing is merged or backed up — and
-                      settings, provider keys and relay order also come from the file.
+                      settings and relay order come from the file.{" "}
+                      {pendingImport &&
+                        (pendingImport.fileCreds.any
+                          ? pendingImport.fileCreds.all
+                            ? "Provider keys also come from the file."
+                            : "Credential fields missing from the file keep this browser's values."
+                          : "Provider keys in this browser are kept — the export carries none.")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
+                  {pendingImport && !pendingImport.fileCreds.any && (
+                    <p
+                      role="note"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-700 dark:text-amber-400"
+                    >
+                      <span className="font-medium">No credentials in this export. </span>
+                      r193+ exports strip API keys
+                      {localHasCredentials
+                        ? " — your provider keys here are preserved."
+                        : " — and this browser has none configured yet."}{" "}
+                      To move keys between browsers, use the provider vault backup (Settings →
+                      Providers) — it is the only export that carries keys.
+                    </p>
+                  )}
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={applyPendingImport}>

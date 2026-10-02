@@ -71,6 +71,20 @@ const FIXES: FixNote[] = [
     detail:
       "model_not_found / permission_denied / account_deactivated / region codes inside JSON envelopes now classify correctly even when the message text is uninformative — corpses stop being re-dialed all night.",
   },
+  {
+    round: "r195",
+    title: "This panel — the receipt for the invisible rounds",
+    detail:
+      "Nine rounds of pipeline repairs landed while boards could look unchanged. Settings now leads with what changed and the exact board evidence to check, so fixes stop living only in git. Reading this panel proves the tab runs current code.",
+  },
+  {
+    round: "r196",
+    title: "Imports can no longer wipe your API keys",
+    detail:
+      "Since r193 exports carry no credentials — but importing one still replaced settings wholesale, silently clearing this browser's provider keys. Import now keeps every credential field the file is silent on, and the confirm dialog states exactly what happens to keys.",
+    lookFor:
+      'the amber "No credentials in this export" note inside the import confirm dialog',
+  },
 ];
 
 export function WhatsFixedSection() {
@@ -79,7 +93,7 @@ export function WhatsFixedSection() {
       <CardHeader className="pb-3">
         <CardTitle>What&apos;s fixed recently</CardTitle>
         <CardDescription>
-          r186-r195 shipped pipeline &amp; relay repairs while boards can look unchanged (background
+          r186-r196 shipped pipeline &amp; relay repairs while boards can look unchanged (background
           tabs stop hot-reloading). If you can read this section, this tab already runs current code
           — otherwise an amber refresh pill appears within a minute.
         </CardDescription>
