@@ -23,6 +23,9 @@ export async function GET() {
         label: r.label,
         maskedKey: maskKey(r.key),
         updatedAt: r.updatedAt,
+        // r210: slot age is functionally meaningful — the executor dials the
+        // OLDEST resolvable slot (r207), so the card must show createdAt.
+        createdAt: r.createdAt,
       })),
     });
   } catch (e) {

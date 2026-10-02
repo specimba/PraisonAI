@@ -67,3 +67,51 @@ export function humanizeLaneReason(reason: ExecutorLaneReason): string {
     ? "no vault key is stored"
     : "no stored vault slot pairs with a registry provider endpoint (the built-in engine slot's gateway is client-side knowledge, and it is skipped, never guessed)";
 }
+
+// ─── r210: vault-slot dial truth (card ⇄ executor parity) ───────────────────
+// Since r207 the executor dials the OLDEST RESOLVABLE slot — slot age became
+// functionally meaningful, so the vault card must show it. The pure helpers
+// live here so the card and the QA share one definition of "which slot would
+// the executor dial first" (mirrors resolveServerDialFromSlots, no drift).
+
+export interface SlotDialInfo {
+  provider: string;
+  /** Masked preview — presence implies a stored key (POST enforces non-empty). */
+  maskedKey?: string | null;
+  createdAt: string;
+}
+
+/**
+ * The slot the executor would dial first: oldest createdAt among slots that
+ * have a key AND pass the caller's resolvability check (provider pairs with
+ * a registry endpoint). Null when no slot qualifies. `isResolvable` is
+ * injected so this module stays pure (the card wires providerById; QA wires
+ * fixture booleans).
+ */
+export function pickExecutorSlot<T extends SlotDialInfo>(
+  slots: T[],
+  isResolvable: (provider: string) => boolean,
+): T | null {
+  const ordered = [...slots].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  for (const slot of ordered) {
+    if (!slot.maskedKey) continue; // empty slot: skip, keep scanning
+    if (!isResolvable(slot.provider)) continue; // builtin/unknown: skipped, not fatal
+    return slot;
+  }
+  return null;
+}
+
+/** Compact honest age for a vault slot ("just now" / "5m ago" / "3h ago" / "2d ago"). */
+export function fmtSlotAge(iso: string, now: number = Date.now()): string {
+  const ms = now - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}

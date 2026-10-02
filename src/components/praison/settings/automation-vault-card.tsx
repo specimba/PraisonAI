@@ -33,12 +33,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FREE_PROVIDERS, providerById } from "@/lib/providers";
+import { fmtSlotAge, pickExecutorSlot } from "@/lib/automation-lane";
+import { cn } from "@/lib/utils";
 
 interface VaultSlot {
   provider: string;
   label: string | null;
   maskedKey: string;
   updatedAt: string;
+  /** r210: dial-order input — the executor dials the OLDEST resolvable slot
+   *  (the vault GET ships this since r210; required for pickExecutorSlot). */
+  createdAt: string;
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -86,11 +91,19 @@ export function AutomationVaultCard() {
 
   const builtin = slots.find((s) => s.provider === "builtin");
   // r205: registry-provider slots are what the server executor actually
-  // reads (first created wins); the builtin slot above is legacy client-lane.
+  // reads; the builtin slot above is legacy client-lane.
   const [laneProvider, setLaneProvider] = React.useState(FREE_PROVIDERS[0]?.id ?? "");
   const [laneKey, setLaneKey] = React.useState("");
   const [laneSaving, setLaneSaving] = React.useState(false);
-  const laneSlots = slots.filter((s) => s.provider !== "builtin");
+  // r210: display slots in DIAL order (oldest first — the executor's actual
+  // scan order, not the API's provider-asc order) and mark the winner.
+  const laneSlots = slots
+    .filter((s) => s.provider !== "builtin")
+    .sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+  const dialSlot = React.useMemo(
+    () => pickExecutorSlot(slots, (p) => !!providerById(p)),
+    [slots],
+  );
 
   async function save() {
     if (!key.trim()) {
@@ -350,13 +363,41 @@ export function AutomationVaultCard() {
           </div>
           {laneSlots.length > 0 ? (
             <ul className="space-y-1.5">
-              {laneSlots.map((s) => (
+              {laneSlots.map((s) => {
+                const resolvable = !!providerById(s.provider);
+                const isDialSlot = dialSlot?.provider === s.provider;
+                return (
                 <li key={s.provider} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                  <KeyRound className="h-3 w-3 shrink-0 text-cyan-500" aria-hidden />
+                  <KeyRound className={cn("h-3 w-3 shrink-0", isDialSlot ? "text-cyan-400" : "text-cyan-500/60")} aria-hidden />
                   <span className="font-medium">{providerById(s.provider)?.name ?? s.provider}</span>
+                  {isDialSlot ? (
+                    <span
+                      title="The executor dials THIS slot for closed-tab runs: the oldest stored slot whose provider pairs with a registry endpoint (newer keys wait their turn — delete this one to promote the next)."
+                      className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0 text-[10px] font-semibold text-cyan-600 dark:text-cyan-400"
+                    >
+                      dials first
+                    </span>
+                  ) : !resolvable ? (
+                    <span
+                      title="This provider id no longer pairs with a registry endpoint — the executor skips it and scans the next slot (never guesses)."
+                      className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                    >
+                      not pairable — skipped
+                    </span>
+                  ) : (
+                    <span
+                      title="A resolvable slot is stored, but the executor dials the OLDEST resolvable one first — this slot fires only if older slots are removed."
+                      className="rounded-full border border-border/60 px-1.5 py-0 text-[10px] text-muted-foreground"
+                    >
+                      queued
+                    </span>
+                  )}
                   <span className="font-mono tabular-nums text-muted-foreground">{s.maskedKey}</span>
-                  <span className="text-[10px] text-muted-foreground/70">
-                    updated {new Date(s.updatedAt).toLocaleString()}
+                  <span
+                    className="text-[10px] text-muted-foreground/70"
+                    title={`stored ${s.createdAt ? new Date(s.createdAt).toLocaleString() : "unknown"} · key last updated ${new Date(s.updatedAt).toLocaleString()}`}
+                  >
+                    {s.createdAt ? `stored ${fmtSlotAge(s.createdAt)}` : `updated ${new Date(s.updatedAt).toLocaleString()}`}
                   </span>
                   <Button
                     type="button"
@@ -369,7 +410,8 @@ export function AutomationVaultCard() {
                     Remove
                   </Button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           ) : (
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
@@ -423,7 +465,9 @@ export function AutomationVaultCard() {
                   </span>
                 ) : null}
                 <span className="text-[10px] text-muted-foreground/70">
-                  updated {new Date(builtin.updatedAt).toLocaleString()}
+                  {builtin.createdAt
+                    ? `stored ${fmtSlotAge(builtin.createdAt)} (the executor skips this slot)`
+                    : `updated ${new Date(builtin.updatedAt).toLocaleString()}`}
                 </span>
               </div>
             ) : (

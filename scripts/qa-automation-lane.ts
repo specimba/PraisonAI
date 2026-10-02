@@ -14,8 +14,14 @@
 // executor can never claim anything while a test vault key exists, and
 // restores byte-for-byte in finally.
 
-import { computeStaleRegistry, humanizeLaneReason, type ExecutorLaneState } from "../src/lib/automation-lane";
-import { resolveServerDial } from "../src/lib/server/automation-executor";
+import {
+  computeStaleRegistry,
+  fmtSlotAge,
+  humanizeLaneReason,
+  pickExecutorSlot,
+  type ExecutorLaneState,
+} from "../src/lib/automation-lane";
+import { resolveServerDial, resolveServerDialFromSlots } from "../src/lib/server/automation-executor";
 import { PrismaClient } from "@prisma/client";
 
 let pass = 0, fail = 0;
@@ -60,6 +66,49 @@ const r3 = resolveServerDial({ provider: "vyce", key: " sk-vyce-real-key-123456 
 ok(!!r3.dial && r3.dial.providerLabel === "Vyce AI", "registry provider resolves with label");
 ok(r3.dial?.url === "https://vyceai.com/v1/chat/completions", "dial URL pairs registry baseUrl with /chat/completions");
 ok(r3.dial?.key === "sk-vyce-real-key-123456", "key trimmed, never reformatted");
+
+console.log("— r210: pickExecutorSlot (card ⇄ executor dial parity) —");
+// The card wires providerById as isResolvable; the QA wires fixture booleans.
+const slot = (provider: string, createdAt: string, maskedKey: string | null = "sk-x") => ({ provider, createdAt, maskedKey });
+const resolveVyce = (p: string) => p === "vyce";
+ok(
+  pickExecutorSlot([slot("vyce", "2026-01-02"), slot("builtin", "2026-01-01")], resolveVyce)?.provider === "vyce",
+  "builtin OLDEST is skipped — the newer resolvable slot is the dial slot (r207 parity)",
+);
+ok(
+  pickExecutorSlot([slot("vyce", "2026-01-01"), slot("vyce", "2026-01-02")], resolveVyce)?.createdAt === "2026-01-01",
+  "oldest RESOLVABLE slot wins (input order irrelevant — sorted internally)",
+);
+ok(
+  pickExecutorSlot([slot("vyce", "2026-01-01", null), slot("vyce", "2026-01-02", "sk-x")], resolveVyce)?.createdAt === "2026-01-02",
+  "keyless slot skipped, scan continues (mirrors resolveServerDialFromSlots)",
+);
+ok(
+  pickExecutorSlot([slot("builtin", "2026-01-01", "sk-x")], resolveVyce) === null,
+  "no resolvable slot → null (honest empty answer, no guess)",
+);
+ok(
+  pickExecutorSlot([], resolveVyce) === null,
+  "empty vault → null",
+);
+// Cross-check against the executor's own resolver on the same fixture:
+const parity = resolveServerDialFromSlots([
+  { provider: "builtin", key: "sk-legacy" },
+  { provider: "vyce", key: "sk-new" },
+]);
+ok(
+  parity.dial !== null && parity.slot.provider === pickExecutorSlot([
+    slot("vyce", "2026-01-02", "sk-new"), slot("builtin", "2026-01-01", "sk-legacy"),
+  ], resolveVyce)?.provider,
+  "pickExecutorSlot picks the SAME provider resolveServerDialFromSlots dials (parity)",
+);
+
+console.log("— r210: fmtSlotAge —");
+ok(fmtSlotAge(new Date(now - 5_000).toISOString(), now) === "just now", "age: <60s → just now");
+ok(fmtSlotAge(new Date(now - 5 * 60_000).toISOString(), now) === "5m ago", "age: minutes");
+ok(fmtSlotAge(new Date(now - 3 * HOUR).toISOString(), now) === "3h ago", "age: hours");
+ok(fmtSlotAge(new Date(now - 2 * 24 * HOUR).toISOString(), now) === "2d ago", "age: days");
+ok(fmtSlotAge(new Date(now + HOUR).toISOString(), now) === "just now", "future timestamp (clock skew) → just now, never negative");
 
 console.log("— live route contract (self-restoring) —");
 const db = new PrismaClient();
@@ -136,6 +185,22 @@ try {
   ok(Array.isArray(s3.registry) && Array.isArray(s3.runs) && typeof s3.serverDriving === "boolean", "sync GET shape intact (registry/runs/serverDriving)");
   const raw = JSON.stringify(s3);
   ok(!raw.includes(testKey), "no raw key anywhere in the sync response");
+
+  // r210: the vault GET now ships createdAt (dial-order input) — the card
+  // needs it to mark which slot the executor dials first; never the raw key.
+  const vaultRes = await fetch(`${BASE}/api/vault`, { cache: "no-store" });
+  const vaultJson = (await vaultRes.json()) as {
+    vault?: { provider: string; maskedKey: string; createdAt?: string; updatedAt?: string }[];
+  };
+  const vyceRow = (vaultJson.vault ?? []).find((r) => r.provider === "vyce");
+  ok(
+    !!vyceRow && typeof vyceRow.createdAt === "string" && !Number.isNaN(new Date(vyceRow.createdAt).getTime()),
+    "vault GET ships createdAt per slot (r210 dial-order input)",
+  );
+  ok(
+    !!vaultJson.vault && !JSON.stringify(vaultJson).includes(testKey),
+    "vault GET still never leaks the raw key",
+  );
 
 } catch (e) {
   ok(false, `route QA threw: ${e instanceof Error ? e.message : String(e)}`);
