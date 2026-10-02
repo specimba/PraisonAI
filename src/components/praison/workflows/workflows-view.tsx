@@ -18,6 +18,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  PauseCircle,
   ShieldAlert,
   Sparkles,
   Trash2,
@@ -1602,6 +1603,15 @@ export function WorkflowsView() {
                           </span>
                           backoff · auto-resume {fmtIn(wf.schedule.autoResumeAt)}
                         </button>
+                      )}
+                      {wf.depth === "deep" && (wf.schedule?.failStreak ?? 0) >= 2 && (
+                        <span
+                          title={`Deep passes are paused after ${wf.schedule?.failStreak} consecutive failures — scheduled fires run Standard until a run completes (manual Run keeps Deep). If you still see 11-step runs, this tab is running a stale bundle — refresh.`}
+                          className="inline-flex items-center gap-1 rounded-full border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400"
+                        >
+                          <PauseCircle className="h-3 w-3" />
+                          deep paused · firing standard
+                        </span>
                       )}
                       {wf.schedule && !wf.schedule.enabled && wf.schedule.autoResumeAt == null && (wf.schedule.failStreak ?? 0) >= 2 && (
                         <button
