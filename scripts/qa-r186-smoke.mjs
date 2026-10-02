@@ -116,6 +116,16 @@ const body = await page.locator("body").innerText();
 ok(/Workflow Studio/i.test(body), "Workflow Studio heading renders");
 ok(/Evolution ledger|Pipelines|Runs board/i.test(body), "board sections render");
 
+// r205: the server-lane chip must state EXECUTOR truth (the executorLane
+// mirror: first vault slot, registry-provider pairing, builtin skipped) —
+// not the legacy builtin-slot read that could claim a lane the executor
+// would refuse. Defensive on which honest state shows: the live vault may
+// hold no key, a builtin slot, or a registry-provider key.
+await page.waitForSelector('[aria-label="Headless lane key status"]', { timeout: 15_000 }).catch(() => null);
+const laneChip = await page.textContent('[aria-label="Headless lane key status"]').catch(() => null);
+ok(!!laneChip, "server autopilot lane chip renders (r205)");
+ok(!!laneChip && laneChip.trim().startsWith("server lane: "), `lane chip states executor truth (${(laneChip ?? "").trim()})`);
+
 // Depth chip fallback: pre-r186 runs have no stamped depth — panel shows authored depth.
 // The chip text itself appears inside the run panel sheet; assert the component
 // vocabulary is present in the bundle-driven page (rendered when a panel opens).

@@ -1,15 +1,14 @@
 "use client";
 
-// ─── v25: Automation Vault (Settings card) ───────────────────────────────────
-// Opt-in, LOCAL-ONLY key slot for the headless server lane. While a tab is
-// open, schedules run in-browser with the user's own keys (BYOK — keys never
-// leave the browser). When the tab is CLOSED, the local server fires the same
-// schedules headlessly; without a vault key those runs dial the shared
-// built-in gateway (congested — the r109-era 429 storms). A key stored here
-// (local SQLite only, nothing telemetered) lets closed-tab runs use the
-// user's own quota instead. GET never returns the raw key — masked preview.
-// The raw key is reachable ONLY through POST /api/vault/consume (the scheduler
-// handoff); r154 adds the card's deliberate reveal-once on that same path.
+// ─── v25: Automation Vault (Settings card) · r205 doctrine alignment ─────────
+// Opt-in, LOCAL-ONLY key storage. While a tab is open, schedules run
+// in-browser with the user's own keys (BYOK — keys never leave the browser).
+// When the tab is CLOSED, the local server claims due schedules itself
+// (r204 executor) but dials ONLY with a REGISTRY-PROVIDER key stored here —
+// no key means an honest no-op (runs stay queued, nothing implicit dials).
+// The "builtin" slot is a legacy client-lane handoff the executor SKIPS:
+// the built-in gateway has no server-side endpoint pairing. Local SQLite
+// only, nothing telemetered, masked previews only.
 
 import * as React from "react";
 import {
@@ -33,6 +32,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FREE_PROVIDERS, providerById } from "@/lib/providers";
 
 interface VaultSlot {
   provider: string;
@@ -42,7 +42,7 @@ interface VaultSlot {
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
-  builtin: "Built-in engine (headless lane)",
+  builtin: "Built-in engine slot (legacy client handoff — the server executor skips it)",
 };
 
 export function AutomationVaultCard() {
@@ -85,6 +85,12 @@ export function AutomationVaultCard() {
   React.useEffect(() => maskNow, [maskNow]);
 
   const builtin = slots.find((s) => s.provider === "builtin");
+  // r205: registry-provider slots are what the server executor actually
+  // reads (first created wins); the builtin slot above is legacy client-lane.
+  const [laneProvider, setLaneProvider] = React.useState(FREE_PROVIDERS[0]?.id ?? "");
+  const [laneKey, setLaneKey] = React.useState("");
+  const [laneSaving, setLaneSaving] = React.useState(false);
+  const laneSlots = slots.filter((s) => s.provider !== "builtin");
 
   async function save() {
     if (!key.trim()) {
@@ -137,6 +143,54 @@ export function AutomationVaultCard() {
     } finally {
       setSaving(false);
       setConfirmRemove(false);
+    }
+  }
+
+  // r205: store a key for a REAL registry provider — the only kind the
+  // server executor can pair with an endpoint. POST upserts by provider id.
+  async function saveLane() {
+    if (!laneProvider || !laneKey.trim()) {
+      toast.error("Pick a provider and paste its key first.");
+      return;
+    }
+    setLaneSaving(true);
+    try {
+      const res = await fetch("/api/vault", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: laneProvider, key: laneKey.trim() }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setLaneKey("");
+      await load();
+      toast.success("Server-lane key stored — closed-tab runs can dial now.", {
+        description: `${providerById(laneProvider)?.name ?? laneProvider} · local SQLite only, nothing leaves this machine.`,
+      });
+    } catch (e) {
+      toast.error("Could not store the server-lane key", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setLaneSaving(false);
+    }
+  }
+
+  async function removeSlot(provider: string) {
+    try {
+      const res = await fetch(`/api/vault?provider=${encodeURIComponent(provider)}`, {
+        method: "DELETE",
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      await load();
+      toast.success("Server-lane key removed — closed-tab runs stay queued until a key is stored again.", {
+        description: "Nothing dials implicitly; the executor never falls back.",
+      });
+    } catch (e) {
+      toast.error("Could not remove the key", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     }
   }
 
@@ -252,12 +306,80 @@ export function AutomationVaultCard() {
         </div>
         <CardDescription>
           While a tab is open, schedules run in-browser with your own keys — they never
-          leave the browser. When the tab is closed, the local server fires headlessly;
-          store a key here and those runs use your quota instead of the congested shared
-          lane. Stored in local SQLite, never telemetered, displayed masked.
+          leave the browser. When the tab is closed, the local server claims due schedules
+          itself but dials only with a registry-provider key stored below; with no key,
+          runs stay queued instead of falling back to anything implicit. Stored in local
+          SQLite, never telemetered, displayed masked.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="lane-provider" className="text-xs text-muted-foreground">
+            Server lane (closed-tab runs) — store a key for a registry provider
+          </Label>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              id="lane-provider"
+              value={laneProvider}
+              onChange={(e) => setLaneProvider(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            >
+              {FREE_PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <Input
+              type="password"
+              value={laneKey}
+              onChange={(e) => setLaneKey(e.target.value)}
+              placeholder="paste the provider key for closed-tab runs"
+              autoComplete="off"
+              spellCheck={false}
+              className="min-w-0 flex-1 font-mono text-xs"
+            />
+            <Button type="button" onClick={saveLane} disabled={laneSaving || !laneKey.trim()}>
+              {laneSaving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <KeyRound className="h-3.5 w-3.5" aria-hidden />
+              )}
+              Store
+            </Button>
+          </div>
+          {laneSlots.length > 0 ? (
+            <ul className="space-y-1.5">
+              {laneSlots.map((s) => (
+                <li key={s.provider} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                  <KeyRound className="h-3 w-3 shrink-0 text-cyan-500" aria-hidden />
+                  <span className="font-medium">{providerById(s.provider)?.name ?? s.provider}</span>
+                  <span className="font-mono tabular-nums text-muted-foreground">{s.maskedKey}</span>
+                  <span className="text-[10px] text-muted-foreground/70">
+                    updated {new Date(s.updatedAt).toLocaleString()}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void removeSlot(s.provider)}
+                    className="ml-auto h-6 gap-1 px-1.5 text-[10px] text-red-500 hover:text-red-500"
+                  >
+                    <Trash2 className="h-3 w-3" aria-hidden />
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+              No registry-provider key stored — with the tab closed, the executor stands
+              down and due schedules stay queued (honest no-op). The executor reads the
+              OLDEST stored slot; remove older ones to promote a newer provider.
+            </p>
+          )}
+        </div>
+
         {loading ? (
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -305,8 +427,8 @@ export function AutomationVaultCard() {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                No vault key yet — closed-tab runs use the shared built-in lane (subject
-                to rate limits).
+                No built-in slot stored — this legacy handoff is unused by the server
+                lane; closed-tab runs dial with a registry-provider key above.
               </p>
             )}
           </div>
@@ -388,10 +510,11 @@ export function AutomationVaultCard() {
             ) : null}
           </div>
           <p className="text-[10px] leading-relaxed text-muted-foreground/70">
-            The key is written to this machine&apos;s SQLite DB only. The chat/agent BYOK
+            Keys are written to this machine&apos;s SQLite DB only. The chat/agent BYOK
             keys in Providers above stay browser-side and are unaffected. Removing the
-            slot makes headless runs fall back to the built-in lane automatically. The
-            eye button reveals the stored key once for ~8 seconds, then re-masks.
+            server-lane key makes closed-tab runs stay queued until a new key is stored —
+            the executor never falls back implicitly. The eye button reveals the stored
+            built-in slot once for ~8 seconds, then re-masks.
           </p>
         </div>
       </CardContent>

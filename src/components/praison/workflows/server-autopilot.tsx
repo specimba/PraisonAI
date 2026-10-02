@@ -15,6 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useUiStore, useWorkflowsStore } from "@/lib/stores";
+import {
+  computeStaleRegistry,
+  humanizeLaneReason,
+  type ExecutorLaneState,
+} from "@/lib/automation-lane";
 import { cn } from "@/lib/utils";
 
 // r116: transient = environmental noise (429 congestion, socket blips, the app
@@ -48,20 +53,16 @@ type RunRow = {
   startedAt: string;
   finishedAt: string | null;
 };
-type VaultLaneState = {
-  hasKey: boolean;
-  maskedKey: string | null;
-  updatedAt: string | null;
-};
 type SyncState = {
   serverDriving: boolean;
   lastSeenAt: string | null;
   registry: RegistryRow[];
   runs: RunRow[];
-  // r134: the sync GET reports the AutomationVault lane so the panel shows
-  // WHAT closed-tab runs will dial with — the user's stored key (masked) or
-  // the shared built-in gateway. Optional: tolerant of older responses.
-  vaultLane?: VaultLaneState;
+  // r205: the sync GET mirrors the executor's exact dial resolution — what
+  // a due closed-tab run would do RIGHT NOW (first vault slot, registry
+  // provider pairing, builtin skipped). Supersedes the r134 builtin-slot
+  // read, which could claim a lane the executor would refuse.
+  executorLane?: ExecutorLaneState;
 };
 
 const POLL_MS = 15_000;
@@ -177,8 +178,17 @@ export function ServerAutopilot() {
     ? ([...localNextByWf.values()].sort()[0] ?? null)
     : null;
   const nextFire = localNextFire ?? registryNextFire;
-  const vaultKeyMasked =
-    state?.vaultLane?.hasKey === true ? (state.vaultLane.maskedKey ?? null) : null;
+  // r205: lane truth from the executor's mirror, not the builtin slot.
+  const lane = state?.executorLane ?? null;
+  const laneBlocked = lane !== null && !lane.ready;
+  const blockedReason: ExecutorLaneState["reason"] =
+    lane && !lane.ready ? (lane.reason ?? "no-vault-key") : null;
+  // r204 QA-incident shape: enabled rows overdue >24h with neither lane
+  // driving (see computeStaleRegistry for the frozen-countdown trap).
+  const staleRows = computeStaleRegistry(active, localNextByWf, Date.now());
+  const dueQuietCount = driving
+    ? active.filter((r) => r.nextRunAt && new Date(r.nextRunAt).getTime() <= Date.now()).length
+    : 0;
   // r134: chip deep-links to the vault card (same r125 pattern the workflow
   // cards use) so the fix for a missing key is one click away.
   const openVault = React.useCallback(() => {
@@ -244,27 +254,31 @@ export function ServerAutopilot() {
             next fire {fmtIn(nextFire)}
           </span>
         ) : null}
-        {state ? (
+        {state && lane ? (
           <button
             type="button"
             onClick={openVault}
             title={
-              vaultKeyMasked
-                ? `Closed-tab runs dial with your stored key ${vaultKeyMasked} (Automation vault). Click to manage.`
-                : "Closed-tab runs share the built-in gateway (rate-limited). Click to store a vault key."
+              lane.ready
+                ? `Closed-tab runs dial ${lane.providerLabel} with your stored key ${lane.maskedKey} (Automation vault). Click to manage.`
+                : lane.reason === "no-vault-key"
+                  ? "The server executor dials ONLY with a key you store in the Automation vault (BYOK-preserving). No key: due schedules stay queued while the tab is closed. Click to store one."
+                  : `The vault's first slot (${lane.slotProvider}) can't be paired with a server-side endpoint — the built-in gateway is client-side knowledge. Store a registry provider key so closed-tab runs can dial. Click to manage.`
             }
             aria-label="Headless lane key status"
             className={cn(
               "inline-flex items-center gap-1 rounded-full border px-1.5 py-0 text-[10px] transition-colors",
-              vaultKeyMasked
+              lane.ready
                 ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:border-cyan-500/60 hover:bg-cyan-500/15"
                 : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:border-amber-500/60 hover:bg-amber-500/15"
             )}
           >
             <KeyRound className="h-2.5 w-2.5" aria-hidden />
-            {vaultKeyMasked
-              ? `headless lane: your key ${vaultKeyMasked}`
-              : "headless lane: shared lane"}
+            {lane.ready
+              ? `server lane: ${lane.providerLabel} ${lane.maskedKey}`
+              : lane.reason === "no-vault-key"
+                ? "server lane: no key — closed-tab runs wait"
+                : "server lane: needs a registry provider key"}
           </button>
         ) : null}
         <Button
@@ -279,10 +293,21 @@ export function ServerAutopilot() {
       </div>
       <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
         While the tab is open, schedules run in-browser with your own keys (BYOK — nothing
-        leaves this machine). When the tab is closed, the local server fires the same
-        schedules headlessly via the built-in engine and results land here. Local-only: no
+        leaves this machine). When the tab is closed, the local server claims due schedules
+        itself — but dials only with a key stored in the Automation vault; without one,
+        runs stay queued (nothing implicit dials). Results land here. Local-only: no
         telemetry, no cloud relay.
       </p>
+      {driving && laneBlocked && dueQuietCount > 0 && blockedReason ? (
+        <div className="mt-2.5 rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2 text-[11px] leading-relaxed text-amber-300">
+          <p>
+            ⏸ {dueQuietCount} schedule{dueQuietCount === 1 ? "" : "s"} due while this tab is
+            quiet, but the server lane can&apos;t dial: {humanizeLaneReason(blockedReason)}.{" "}
+            {dueQuietCount === 1 ? "It stays" : "They stay"} queued — store a registry
+            provider key in the Automation vault to let closed-tab runs fire.
+          </p>
+        </div>
+      ) : null}
 
       {active.length > 0 ? (
         <ul className="mt-2.5 space-y-1">
@@ -314,6 +339,25 @@ export function ServerAutopilot() {
           syncs here within a minute.
         </p>
       )}
+
+      {staleRows.length > 0 ? (
+        <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2 text-[11px] leading-relaxed text-amber-300">
+          <p className="font-medium">
+            ⚠ {staleRows.length} registered schedule{staleRows.length === 1 ? "" : "s"} overdue
+            &gt;24h with no lane driving {staleRows.length === 1 ? "it" : "them"}:
+          </p>
+          <p>
+            {staleRows.slice(0, 3).map((r) => r.name).join(" · ")}
+            {staleRows.length > 3 ? ` · +${staleRows.length - 3} more` : ""}
+          </p>
+          <p className="text-amber-300/80">
+            Neither this tab&apos;s schedule nor the server lane has claimed{" "}
+            {staleRows.length === 1 ? "it" : "them"} — re-enable the schedule in Workflow
+            Studio, store a vault key for closed-tab runs, or use “Run on server” to force
+            one fire.
+          </p>
+        </div>
+      ) : null}
 
       {state && state.runs.length > 0 ? (
         <div className="mt-3 border-t border-sky-500/15 pt-2.5">
