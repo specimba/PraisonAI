@@ -5258,3 +5258,29 @@ Verification result: PASS
 Open risks: (1) The code vocabulary is explicit-by-design — an exotic provider code not in the lists still falls to hard (documented extension point: add to CODED_DEADLY_RE after confirming it is truly permanent). (2) Codes are matched inside ANY "code"/"type" string value — an error MESSAGE that embeds a literal quoted {"code":"..."} fragment would classify from it (acceptable: the fragment came from the provider anyway). (3) r189 stale-tab confirmation STILL pending — 4 rounds without a user paste; the instrumentation (violet chip, stale-build pill, lane-degraded banner) is all in place and idle.
 Blockers: none
 Next recommended action: r195 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): event-ID scheduler health (directive d); proposal-reason polish naming the leading branch when exploitation fires; import-dialog "credentials excluded" hint for scrubbed exports (r193 item 3). (3) If no user paste arrives by r197, consider a proactive user-facing changelog note (Settings or README section) summarizing r186-r194 fixes so the user knows what to look for on the board.
+
+---
+Task ID: 424432 — r195 (in-app changelog: "What's fixed" section ships the invisible rounds to the user)
+Agent: main (platform development — hourly dev round)
+Task: r194 handoff said "if no user paste by r197, ship a user-facing changelog so the user knows what to look for" — 5 rounds have passed with zero user pastes, so the visibility problem is already real: r186-r194 fixed the user's exact reported pathologies, but every fix lives behind a tab whose bundle the user may not even be running. Pulled the work forward one round.
+
+Work Log:
+- SHIPPED — Settings → "What's fixed" section (new whats-fixed.tsx, mounted first in the section nav): nine rounds of repairs summarized as seven receipt cards (r186 degradation, r187-188 relay verdicts, r189 stale-tab guard, r190-191 proposal rotation, r192 lane-degraded banner, r193 export scrubbing, r194 structured codes), each with a "On the board:" line naming the exact chip/banner/pill to look for. Header doubles as the freshness instruction (amber pill = click it).
+- Self-proving property: the section only exists in r195+ bundles — a user who can read it is running current code; a user on a stale tab can't see it at all (and the r189 guard will toast them). No store wiring, pure static content — zero runtime risk to settings.
+- Smoke: extended to navigate to Settings via the real nav button and assert the changelog renders (9 assertions now). Also fixed the pre-existing no-unused-expressions warning in the smoke's ok() helper (eslint now silent on the touched files).
+- Verification: smoke 9/9 (0 page errors); tsc clean; eslint 0 warnings/errors on touched files; root 200.
+- Snapshot pushed → fork/main (c173e9a3b).
+
+Stage Summary:
+- The user no longer needs to read git to know the platform moved: Settings opens on a receipt of everything fixed since their last "same !", with the board-level evidence to check for. The panel is itself the stale-tab test.
+
+Round Handoff:
+Round ID: r196
+Task owner: main (platform dev)
+Scope completed: whats-fixed.tsx changelog section (7 cards, board-evidence lines) + first-position nav entry + smoke 9 assertions.
+User-visible changes: Settings now leads with "What's fixed recently" — the r186-r195 repair list with per-fix board evidence, and a built-in bundle-freshness proof.
+Verification steps: node scripts/qa-r186-smoke.mjs → 9/9; tsc → clean; eslint (whats-fixed, smoke) → 0; curl root → 200.
+Verification result: PASS
+Open risks: (1) The changelog is static — future rounds must remember to append their entries (rotation risk: the panel silently goes stale exactly like the tab it diagnoses). Mitigation candidate: generate from a ROUNDS constant the worklog append could touch. (2) The smoke's Settings navigation clicks the first "Settings" button — if the shell grows another same-labeled control, the assertion may need a scoped locator. (3) User confirmation still pending (5 rounds); all instrumentation now ships with its own user manual.
+Blockers: none
+Next recommended action: r196 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): event-ID scheduler health (directive d); proposal-reason polish naming the leading branch when exploitation fires; import-dialog "credentials excluded" hint. (3) Add the r195 entry to whats-fixed FIXES (one card: "the panel you are reading") OR wire the panel to a shared ROUNDS constant so future rounds stay honest.
