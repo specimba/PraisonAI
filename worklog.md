@@ -5447,3 +5447,29 @@ Verification result: PASS
 Open risks: (1) Title ping ownership: if another surface sets document.title while stale (e.g. chat auto-title), the ping overwrites it every 2s until reload — stale is terminal-until-reload so this is accepted, but a future title-setting feature should know. (2) Re-assert fires on EVERY foreground return while stale — a user who deliberately dismissed the toast and keeps switching tabs sees it again each return; bounded by one toast + instant pill + the fact that reload clears everything. (3) The visibility test relies on headless Chromium dispatching visibilitychange with visibilityState "visible" — stable across recent Playwright, re-verified this round. (4) User confirmation still pending since r189 — 11 rounds.
 Blockers: none
 Next recommended action: r202 — (1) FIRST read any user report: if the user pastes a screenshot showing the 🔄 title/amber pill, the stale-tab theory just got CONFIRMED live. (2) Backlog (fresh queue — the directive list is done): r200's semantic twin `tsc --noEmit --incremental false` one-shot; proposal-reason exposure polish (r199's decision-aware reasons could surface in run panel tooltips); Local Automation Vault epic continuation (r123+). (3) Standing: bun run qa:syntax every round; keep B 40 / K 84 / smoke 24 green.
+
+---
+Task ID: 424432 — r202 (qa:tsc semantic twin: fresh full typecheck is now a standing ZERO-error gate)
+Agent: main (platform development — hourly dev round)
+Task: r201 handoff backlog item 1 — the semantic twin of r200's syntax sweep: one-shot `tsc --noEmit --incremental false`, and fix whatever stands between it and a clean exit. No user report this fire (12th round).
+
+Work Log:
+- Ran the fresh full typecheck (tsbuildinfo bypassed, 9.3s wall): exactly ONE error — the months-old known TS2867 in scripts/hang-server.ts. Semantic verdict on the whole tree: CLEAN. Combined with r200's syntax sweep, the r199 corruption class now has both halves checked fresh: syntactic (per-file double-parser sweep) and semantic (full-program typecheck without incremental caching). The r199 bomb carried BOTH classes (undefined symbol + stray bracket); either gate alone would now have caught it from a cold start.
+- Fixed the last standing error: scripts/hang-server.ts got a minimal local ambient declaration for Bun.serve (its only Bun API — r155 already moved the call log to node:fs appendFile). Same no-new-dependency pattern as qa-syntax-sweep.ts: @types/bun stays out of the Next app's type graph, and the "known error" that has polluted every tsc verification line for months is gone rather than allowlisted.
+- Registered package.json "qa:tsc": "tsc --noEmit --incremental false". First run after the fix: exit 0, zero output. Standing verification battery is now: bun run qa:syntax + bun run qa:tsc + bunx eslint + B/K series + smoke.
+- Verification: qa:tsc → exit 0 (fresh, zero errors); bun run qa:syntax → PASS (213 files); bunx eslint scripts/hang-server.ts → 0; B 40/40; K 84/84; smoke 24/24 (0 page errors); root 200 at round start.
+- Snapshot pushed → fork/main (2fd9422f8).
+
+Stage Summary:
+- The verification story since r199 is now symmetric and honest: syntax rot cannot hide behind tsbuildinfo/transpiler caches (qa:syntax, r200), semantic rot cannot hide behind incremental checking (qa:tsc, r202), and both gates run clean from a cold checkout. The old "tsc clean except the known hang-server error" caveat is retired — clean means zero.
+
+Round Handoff:
+Round ID: r203
+Task owner: main (platform dev)
+Scope completed: fresh-tsc standing gate registered (qa:tsc, exit 0), hang-server.ts ambient fix (zero known errors), r199-class failure both-halves closure.
+User-visible changes: none this round (dev-infrastructure); hang-server.ts behavior unchanged (ambient type only).
+Verification steps: bun run qa:tsc → 0; bun run qa:syntax → PASS; bunx eslint → 0; B 40/K 84; node scripts/qa-r186-smoke.mjs → 24/24; curl root → 200.
+Verification result: PASS
+Open risks: (1) qa:tsc costs ~9s per run vs ~2s incremental — fine for per-round use, but if the tree grows much larger a scoped variant may be needed. (2) The ambient Bun.serve shape is minimal — if hang-server grows more Bun API usage (Bun.write etc.), extend the declaration rather than silently casting. (3) User confirmation still pending since r189 — 12 rounds; every diagnostic surface (evidence chips, stale pill + title ping, degraded banner, changelog) is live and unconfirmed.
+Blockers: none
+Next recommended action: r203 — (1) FIRST read any user report. (2) Backlog (rotate surfaces): proposal-reason exposure — r199's decision-aware router reasons could surface in the run panel / Evolution ledger tooltips (spawn-proposal-engine + workflows-view, keep smoke 24 green); Local Automation Vault epic continuation (r123+); StaleBuildGuard as a smoke-documented surface is done, so consider a user-facing "diagnostics" summary card aggregating the r192–r201 instruments in one place. (3) Standing: bun run qa:syntax + bun run qa:tsc every round; keep B 40 / K 84 / smoke 24 green.
