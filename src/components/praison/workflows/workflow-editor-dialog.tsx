@@ -97,6 +97,16 @@ export function WorkflowEditorDialog({
   const [planOpen, setPlanOpen] = React.useState(false);
   const [planTask, setPlanTask] = React.useState("");
   const [planning, setPlanning] = React.useState(false);
+  // r235: the auto-plan call is now cancellable — the AbortController is
+  // handed to runAgentChat (signal plumbed through), a Cancel button shows
+  // while planning, and a stale run's finally can never clobber a new run's
+  // in-flight state (live-run guard below).
+  const planAbortRef = React.useRef<AbortController | null>(null);
+  // Closing the plan panel (toggle or dialog close) must not leave a request
+  // running invisibly in the background.
+  React.useEffect(() => {
+    if (!planOpen && planAbortRef.current) planAbortRef.current.abort();
+  }, [planOpen]);
   // r232 save-truth: after a blocked save attempt, errors render INLINE at the
   // offending field (r225 pattern) instead of a distant toast — and no authored
   // step is ever silently dropped (pre-fix: unassigned steps vanished on save).
@@ -192,6 +202,9 @@ export function WorkflowEditorDialog({
       return;
     }
     setPlanning(true);
+    const controller = new AbortController();
+    planAbortRef.current?.abort(); // never two live plan runs
+    planAbortRef.current = controller;
     try {
       const settings = useSettingsStore.getState().settings;
       const agentList = useAgentsStore
@@ -205,6 +218,7 @@ export function WorkflowEditorDialog({
         model: llm.model,
         temperature: 0.2,
         maxIterations: 1,
+        signal: controller.signal,
         system: AUTO_PLAN_SYSTEM,
         messages: [
           {
@@ -242,11 +256,18 @@ export function WorkflowEditorDialog({
       setPlanTask("");
       toast.success(`Generated ${mapped.length} steps`);
     } catch (err) {
+      // r235: a user cancel lands here as AbortError and stays silent — the
+      // Cancel button is the affordance; no toast noise on purpose.
       if (!isAbortError(err)) {
         toast.error("Couldn't generate a plan, add steps manually");
       }
     } finally {
-      setPlanning(false);
+      // Only the LIVE run resets planning state — a stale run resolving right
+      // after Cancel + Regenerate must not clobber the new run.
+      if (planAbortRef.current === controller) {
+        planAbortRef.current = null;
+        setPlanning(false);
+      }
     }
   }
 
@@ -734,7 +755,11 @@ export function WorkflowEditorDialog({
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => setPlanOpen((v) => !v)}
+                onClick={() => {
+                  // r235: collapsing the panel mid-generation cancels the run.
+                  if (planOpen && planning) planAbortRef.current?.abort();
+                  setPlanOpen((v) => !v);
+                }}
                 disabled={agents.length === 0}
                 aria-expanded={planOpen}
               >
@@ -755,7 +780,17 @@ export function WorkflowEditorDialog({
                   onChange={(e) => setPlanTask(e.target.value)}
                   placeholder="e.g. Research the state of AI agents, distill the top trends into an outline, then write a short blog post"
                 />
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  {planning ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => planAbortRef.current?.abort()}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
