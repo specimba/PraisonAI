@@ -26,6 +26,9 @@ import {
 
 type Filter = "all" | "new" | "free";
 
+/** r219: matches the always-on ticker's cadence (model-ticker.tsx POLL_MS). */
+const POLL_MS = 15 * 60_000;
+
 export function ModelRadarTab() {
   const [data, setData] = React.useState<TrackerData | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -47,6 +50,25 @@ export function ModelRadarTab() {
 
   React.useEffect(() => {
     void load();
+    // r219 parked-tab staleness: this tab used to fetch EXACTLY once at mount —
+    // park the Radar view for an hour and the full table, source health, and
+    // HF signals froze, while the always-on ticker above (same /api/tracker
+    // endpoint) stayed fresh on its own poll + visibility refetch. The deep
+    // view now obeys the same freshness doctrine: refetch the moment the tab
+    // becomes visible again, poll on the ticker's 15-min cadence while
+    // visible, and dial nothing while hidden (r141 hidden-tab doctrine).
+    // load() keeps previous data on failure (no flicker) and is cache:"no-store".
+    const onVis = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    const iv = setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, POLL_MS);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      clearInterval(iv);
+    };
   }, [load]);
 
   const sync = React.useCallback(async () => {
