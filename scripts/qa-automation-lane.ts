@@ -214,4 +214,5 @@ try {
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
+console.log(`SUMMARY: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

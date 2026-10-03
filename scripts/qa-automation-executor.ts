@@ -309,4 +309,5 @@ try {
 }
 
 console.log(`\n${pass}/${pass + fail} automation-executor assertions passed`);
+console.log(`SUMMARY: ${pass}/${pass + fail} automation-executor assertions`);
 process.exit(fail === 0 ? 0 : 1);

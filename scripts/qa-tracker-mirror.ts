@@ -61,4 +61,5 @@ if (minimal.kind === "data") {
 }
 
 console.log(`\n${pass}/${pass + fail} assertions pass`);
+console.log(`SUMMARY: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

@@ -218,4 +218,5 @@ ok(
 );
 
 console.log(`\nB-series (branch router): ${pass} passed, ${fail} failed`);
+console.log(`SUMMARY: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

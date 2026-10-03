@@ -78,4 +78,5 @@ check("name capped at 60", sanitizeAgent({ name: "n".repeat(200) })?.name.length
 check("fresh timestamps minted (not trusted)", typeof sanitizeAgent({ name: "x", createdAt: 1, updatedAt: 1 })?.createdAt === "number" && sanitizeAgent({ name: "x", createdAt: 1 })!.createdAt > 1e12);
 
 console.log(`\n${passed}/${passed + failed} assertions pass`);
+console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
