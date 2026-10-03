@@ -5942,3 +5942,30 @@ Verification result: PASS
 Open risks: E6's post-cleanup UI re-verify still vulnerable to dev-compile stalls (r218 item — split it out of the E-suite or give it its own compile-tolerant budget); gateway-pulse-chip stays one-shot by documented egress doctrine — do not "fix" without revisiting that decision; r142 real-world validation (real vault key, closed-tab dial) still pending; parallel-instance push hygiene (fetch + inspect before push).
 Blockers: none
 Next recommended action: r220 — (1) FIRST read any user report. (2) Backlog (fork-diff first): split the E6 leg out of scripts/cdp-qa-vault-slot-affordances.mjs into its own compile-tolerant script (the last recurring QA infra flake); then rotate surface — r142 real-world vault validation, or a UI-polish pass away from tracker/workflows (agents view hasn't been touched in many rounds), or perf/error-handling wherever an honest sweep finds something. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.
+
+---
+Task ID: 424432 — r220
+Agent: main (platform development — hourly dev round)
+Task: r219 handoff — split the E6 leg out of the E-suite into its own compile-tolerant script (the last recurring QA infra flake).
+
+Work Log:
+- Start-of-round discipline: fork lagged 1 commit — but this time the parallel instance's cron-hygiene job had committed MY OWN uncommitted r219 worklog append (28 lines, round order is commit-then-worklog, so the append outlives the snapshot). Inspected with git show --stat (worklog-only ✓), fast-forwarded fork to 09d817bb5. Health: root 200 (13.8s — cold first compile after the sandbox reaped the dev server; tracker 200). No user report.
+- Root-caused the E6 flake properly before splitting: the old leg deleted the slot, reloaded, and asserted "row gone" — but a dev-compile stall either crashed the leg (r218's documented infra crash) or, WORSE, made rowGone VACUOUSLY true (stalled card → no card rendered → no row matched → assert passes for the wrong reason). The check had no positive control.
+- SPLIT executed: (1) E-suite keeps E1-E5 untouched; E6 is now API-only cleanup ("vault left empty (no residue)") — the suite stays self-cleaning and byte-clean, 6/6 checks PASS; (2) new F-series script scripts/cdp-qa-vault-slot-residue.mjs owns the honest UI residue check with compile-tolerant budgets (90s CDP eval, 60s vault-mount climb, 30s render waits — the settings view cold-compiles >20s, which is exactly what killed old E6).
+- THE FIX IS THE POSITIVE CONTROL: F-series proves row VISIBLE while the key exists (F2, reload-driven, name read from the rendered row) BEFORE proving row GONE after deletion (F3, card-side AND API-side) — a "row gone" assertion is only meaningful once the same card has just proven it renders rows. F4 leaves the slate byte-clean. Both directions reload-driven, so no dependence on the r218 IntersectionObserver timing.
+- DRIVEN TO GREEN: F-series 4/4 (plant → Vyce AI row visible → delete → row gone + vaultEmpty → byte-clean exit; evidence ops/qa/F2-residue-row-visible.png, F3-residue-row-gone.png); E-series 6/6 (first fully green E-run with zero compile-stall exposure — the flake leg no longer touches the UI after its DELETE).
+- VERIFIED: tsc --noEmit → 0; eslint (both QA scripts) → 0 errors (2 pre-existing ternary-style warnings inherited from the harness pattern); standing QA: tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; root → 200; snapshot pushed (34ecef074).
+
+Stage Summary:
+- The last recurring QA infra flake is dead, and the residue assertion it used to fake-guard is now stronger than originally specified: positive control first, deletion second, both sides of the truth (UI + API) asserted, budgets sized to the real cold-compile. E-suite 6/6 and F-suite 4/4 are now independently replayable without compile-stall roulette.
+
+Round Handoff:
+Round ID: r221
+Task owner: main (platform dev)
+Scope completed: E6 split into API-only cleanup (E-suite 6/6) + new compile-tolerant F-series residue suite with positive control (4/4); snapshot pushed (34ecef074).
+User-visible changes: none (verification-infrastructure round — product untouched).
+Verification steps: node scripts/cdp-qa-vault-slot-residue.mjs → SUMMARY: 4 passed, 0 failed; node scripts/cdp-qa-vault-slot-affordances.mjs → 6/6 checks PASS; tsc 0; eslint 0 errors; tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; root 200.
+Verification result: PASS
+Open risks: r142 real-world validation (real vault key, closed-tab dial) still pending — the epic's last unproven leg; QA-script lint carries 2 inherited style warnings (harness-wide ternary pattern — fix once across all cdp-qa scripts if it ever errors); parallel-instance push hygiene (fetch + inspect — this round the foreign commit was my own worklog append, confirm content before pushing).
+Blockers: none
+Next recommended action: r221 — (1) FIRST read any user report. (2) Backlog (fork-diff first): rotate surface per the rotation doctrine — the agents view hasn't been touched in many rounds (UI-polish sweep or an honest audit of its data-loading patterns), or r142 real-world vault validation if a real key is available in the environment, or a perf/error-handling sweep wherever an honest look finds something. Avoid grinding tracker/workflows/vault again this round. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 green.
