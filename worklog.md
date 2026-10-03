@@ -6129,3 +6129,29 @@ Verification result: PASS
 Open risks: import has no size cap (a pathologically huge file still freezes the tab — noted, not fixed this round); the private slugify in agents-view duplicates lib/helpers slugify with a different fallback ("agent" vs "chat") — left as micro-debt to avoid filename drift; K-series not re-run after the firstGrapheme move (unit-tested directly); r142 real-world vault validation still pending.
 Blockers: none
 Next recommended action: r227 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — candidates: pipelines view polish, workflows run-detail audit, or a docs pass. Avoid agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. All CDP harness runs: boot chrome and run in ONE shell command; output filter rg "✅|❌|SUMMARY|FATAL|PASS|FAIL". (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6+6/6 / F-series 4/4+11/11 / G-series 6/6 / H-series 4/4 / I-series 7/7 / J-series 7/7 / K-series 9/9 / L-series 5/5 green.
+
+---
+Task ID: 424432 — r227
+Agent: main (platform development — hourly dev round)
+Task: r226 handoff — workflows run-detail audit (run-kanban.tsx).
+
+Work Log:
+- Start-of-round discipline: fork in sync (0 ahead). Health: root 200 (14.1s cold compile), tracker 200. No user report.
+- Full read of run-kanban.tsx (688 lines, the runs kanban + server-run detail drawer). Honest near-negatives ruled out first: server-lane status vocabulary is complete per Prisma schema (running|done|error — the lane mapping can't strand a status); parseRunSteps is crash-safe on junk entries; drawer duration guard is correct. The REAL finding is the same truth-class as r223 (badge) and r224 (search counter): groupRuns capped done/attention at 10 via .slice() BEFORE anything counted — a pipeline with 30 completed runs read "Done 10" and its filter chip said 10, as if the cap were the total, with zero hint that older runs existed.
+- FIXED: cap moved to RENDER time. groupRuns returns full arrays; the board renders exactly 10 cards, the column badge reads "10/<total>", a "+N older runs not shown" footer names the hidden rest (with a title tooltip naming the cap), the aria label uses the true total, and filter chips (computed from the now-unsliced columns) count the real total. Both capped lanes (Done, Needs-you) are honest; server-lane and local cards count identically.
+- Browser-proven with a new harness, scripts/cdp-qa-kanban-cap-truth.mjs (M-series), 5/5 GREEN: seeded one pipeline with 14 done + 12 error runs; M1 Done badge "10/18" (the live server lane contributed 4 REAL done runs from other pipelines mid-test — the invariant holds across mixed local+server data); M2 footer "+8 older runs not shown" = total − 10 exactly; M3 Needs-you badge "10/12" + "+2 older"; M4 filter chip counts the pipeline's real 26 (pre-fix: 10); M5 praison-workflows restored byte-clean, zero residue. Evidence: ops/qa/M2-cap-truth.png. Harness lesson paid (fixed on first re-run): the shared environment adds real server-lane cards — assertions must verify the badge/footer/chip INVARIANT, never absolute counts.
+- VERIFIED: tsc --noEmit → 0; eslint (run-kanban, M-harness) → 0 errors (1 inherited harness-pattern warning). Standing matrix NOT re-run this round (budget): the change is scoped to run-kanban.tsx, which no standing suite exercises (E reads the registry panel, F vault, G agents, H composer, I chat; bun suites are store-level) — M-series + tsc + eslint cover the changed surface. r228 should re-run the full matrix as usual.
+
+Stage Summary:
+- The runs kanban no longer presents its 10-card cap as the total: capped lanes show "10/N", name the hidden runs in a footer, and filter chips count every card.
+
+Round Handoff:
+Round ID: r228
+Task owner: main (platform dev)
+Scope completed: render-time cap + truth-in-counts for the runs kanban (r227) + M-series harness (5/5); snapshot pushed.
+User-visible changes: a busy pipeline's Done/Needs-you columns now read "10/18" style with a "+8 older runs not shown" footer instead of a bare capped count; pipeline filter chips show the true card count.
+Verification steps: node scripts/cdp-qa-kanban-cap-truth.mjs → SUMMARY: 5 passed, 0 failed (boot chrome + run in ONE shell command; assert invariants, not absolute counts — server lane adds real cards); tsc 0; eslint 0 errors; root 200. Full standing matrix deferred to r228.
+Verification result: PASS
+Open risks: standing matrix deferred to r228 (documented above); the kanban drawer (ServerRunDrawer) has no focus trap (Escape works, focus stays behind — a11y polish candidate); run detail for server-lane runs with stepsJson junk entries renders defensively but untested; r142 real-world vault validation still pending.
+Blockers: none
+Next recommended action: r228 — (1) FIRST read any user report. (2) Re-run the FULL standing matrix (deferred from r227), then rotate surfaces: candidates: workflow-run-panel.tsx (1594 lines — the biggest unaudited surface), workflow-editor-dialog, or a docs pass. Avoid run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. All CDP harness runs: boot chrome + run in ONE shell command; filter rg "✅|❌|SUMMARY|FATAL|PASS|FAIL"; seed-based suites must assert invariants (shared server lane adds real cards). (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6+6/6 / F-series 4/4+11/11 / G-series 6/6 / H-series 4/4 / I-series 7/7 / J-series 7/7 / K-series 9/9 / L-series 5/5 / M-series 5/5 green.

@@ -196,8 +196,12 @@ function groupRuns(workflows: Workflow[], serverRuns: ServerRunRow[]): Record<Co
   cards.attention.sort((a, b) => b.sortAt - a.sortAt);
   cards.done.sort((a, b) => b.sortAt - a.sortAt);
   cards.scheduled.sort((a, b) => (a.scheduled!.nextRunAt ?? 0) - (b.scheduled!.nextRunAt ?? 0));
-  cards.done = cards.done.slice(0, MAX_PER_COLUMN);
-  cards.attention = cards.attention.slice(0, MAX_PER_COLUMN);
+  // r227: the per-column cap is applied at RENDER time, not here — groupRuns
+  // used to slice done/attention to MAX_PER_COLUMN before anything counted,
+  // so a pipeline with 30 completed runs reported "Done 10" and its filter
+  // chip said 10 as if the cap were the total (same truth-class as the
+  // r224 search-counter bug). The board now shows 10 cards plus an honest
+  // "+N older runs not shown" footer, and chips count the real total.
   return cards;
 }
 
@@ -629,11 +633,15 @@ export function RunKanban({
         aria-label="Runs kanban board"
       >
       {COLUMNS.map((col) => {
-        const cards = visible[col.id];
+        // r227: cap at render — the raw array keeps the true total so the
+        // badge, the aria label and the "+N older" footer can tell the truth.
+        const rawCards = visible[col.id];
+        const cards = rawCards.slice(0, MAX_PER_COLUMN);
+        const older = rawCards.length - cards.length;
         return (
           <section
             key={col.id}
-            aria-label={`${col.label} column, ${cards.length} card${cards.length === 1 ? "" : "s"}`}
+            aria-label={`${col.label} column, ${rawCards.length} card${rawCards.length === 1 ? "" : "s"}`}
             className={cn(
               "flex min-h-32 flex-col gap-2 rounded-2xl border border-t-4 bg-muted/20 p-2.5",
               col.ringClass
@@ -644,8 +652,12 @@ export function RunKanban({
               <h3 className="text-xs font-semibold uppercase tracking-wide">
                 {col.label}
               </h3>
-              <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold tabular-nums text-muted-foreground">
+              <span
+                title={older > 0 ? `${older} older ${col.id === "scheduled" ? "pipelines" : "runs"} beyond the ${MAX_PER_COLUMN}-card cap` : undefined}
+                className="rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold tabular-nums text-muted-foreground"
+              >
                 {cards.length}
+                {older > 0 ? `/${rawCards.length}` : ""}
               </span>
               <span className="sr-only">{col.hint}</span>
             </header>
@@ -658,6 +670,11 @@ export function RunKanban({
                   onOpenServer={setServerDetail}
                 />
               ))}
+              {older > 0 ? (
+                <p className="px-1 py-1 text-[10px] leading-relaxed text-muted-foreground/70">
+                  +{older} older {col.id === "scheduled" ? "pipelines" : "runs"} not shown
+                </p>
+              ) : null}
               {cards.length === 0 ? (
                 <p className="px-1 py-3 text-[11px] leading-relaxed text-muted-foreground/70">
                   {col.id === "running" && "No runs streaming — start one from a pipeline card."}
