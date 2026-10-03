@@ -10,7 +10,12 @@
 //   E4  click the eye again → immediate re-mask (raw gone from the whole DOM)
 //   E5  click the row's Test → toast "<name> key verified" carrying the MASKED
 //       key only (raw never shown by the test path)
-//   E6  delete the slot → reload → row gone; vault left EMPTY (no residue)
+//   E6  cleanup, API-verified only — vault left EMPTY (no DB residue).
+//       (r220: the old E6 UI re-verify — reload + "row gone" — moved to the
+//       F-series, scripts/cdp-qa-vault-slot-residue.mjs: a compile-stalled
+//       card made rowGone vacuously true, and the leg was the suite's one
+//       recurring infra flake. The F-suite proves row VISIBLE → row GONE
+//       with compile-tolerant budgets instead.)
 // Same harness lessons as the D-series: new-tab CDP boot, retry-click loop,
 // self-adapting provider name (read from the rendered row, not hardcoded).
 // Launch chrome-headless-shell on :9222 first (see cdp-qa-vault-test.mjs).
@@ -258,19 +263,19 @@ async function main() {
     toastText.replace(/\n/g, " ").slice(0, 120)
   );
 
-  // E6 — cleanup + residue guard
+  // E6 — cleanup, API-verified only (r220 split). The old leg reloaded and
+  // asserted "row gone" in the UI: a dev-compile stall crashed it (r218's
+  // documented flake), and a stalled card would have made rowGone VACUOUSLY
+  // true anyway (no card → no row). The honest residue re-verify — plant →
+  // row VISIBLE (positive control) → delete → row GONE, compile-tolerant —
+  // lives in scripts/cdp-qa-vault-slot-residue.mjs (F-series, r220). This
+  // suite only guarantees it leaves no DB residue behind.
   await fetch(`${BASE}/api/vault?provider=${encodeURIComponent(providerId)}`, {
     method: "DELETE",
   });
-  await wsSend(ws, "Page.navigate", { url: `${BASE}/` });
-  await waitFor(ws, `document.readyState === 'complete'`);
-  await gotoSettings(ws);
-  await waitFor(ws, `Boolean(document.querySelector('#vault'))`, 15_000);
-  await new Promise((r) => setTimeout(r, 800));
-  const rowGone = await waitFor(ws, `!Boolean(${rowExpr})`, 8_000);
   const finalVault = await (await fetch(`${BASE}/api/vault`)).json();
   const vaultEmpty = Array.isArray(finalVault?.vault) && finalVault.vault.length === 0;
-  check("E6 slot removed — row gone, vault left empty (no residue)", rowGone && vaultEmpty, `rowGone=${rowGone} vaultEmpty=${vaultEmpty}`);
+  check("E6 cleanup API-verified — vault left empty (no residue)", vaultEmpty, `vaultEmpty=${vaultEmpty}`);
 
   await wsSend(ws, "Page.close").catch(() => {});
   const fails = results.filter((r) => !r.ok);
