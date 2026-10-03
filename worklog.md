@@ -5884,3 +5884,33 @@ Verification result: PASS
 Open risks: the external scheduler mini-service remains outside the repo (the doc says so — real-world validation r142 still pending); vaultLane removal after the legacy window will need a one-line doc edit; parallel-instance push hygiene.
 Blockers: none
 Next recommended action: r218 — (1) FIRST read any user report. (2) Backlog (fork-diff first): rotate surface away from workflows/docs — the Local Automation Vault epic's real-world validation (r142: store a real key, let a closed-tab run dial with it) or a UI-polish item from the vault card; alternatively perf/error-handling sweep of the API routes. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.
+
+---
+Task ID: 424432 — r218
+Agent: main (platform development — hourly dev round)
+Task: r217 handoff — rotate surface: perf/error-handling sweep of API routes, or vault-card UI polish. Both happened; the sweep's honest negative pivoted to the vault card, which held two real product bugs.
+
+Work Log:
+- Start-of-round: fork in sync (0 ahead — no parallel hygiene needed); health root 200 (one transient 000 on the first connect, honest recheck 200 in 44ms), tracker 200, no user report.
+- API error-handling sweep completed as an honest NEGATIVE: every route is `dynamic`-declared, JSON parses are guarded, all external fetches carry timeouts (executor's AbortController dial, tools.ts AbortSignal.timeout + polite-retry budget, radar/papers exemplary). Nothing to fix; no theatre — recorded and moved on.
+- Pivoted to the handoff's vault-card option. FOUND: the registry-provider slots (the only ones the executor actually dials since r205) had NO Test or Reveal affordance — only the legacy builtin box did, while the r217 doc stamp already claimed "per-slot Test/Reveal". Backend `consume` was already per-provider. FIXED code-first: testSlot(provider)/revealSlot(provider) generalization, per-slot eye + Test on every lane row, single-reveal-at-a-time ({provider,key} state — revealing another slot re-masks the first), shared maskOf helper, builtin "Vault key verified" toast preserved verbatim (D-series contract).
+- TWO REAL PRODUCT BUGS surfaced by the QA drive and fixed:
+  (A) No Cache-Control on ANY /api response — heuristically browser-cacheable; the persistent profile replayed a cached EMPTY vault answer to later card mounts, rendering "No registry-provider key stored" while the DB held the row. Fix: blanket `Cache-Control: no-store, max-age=0, must-revalidate` for /api/* via next.config headers() (nothing under /api is cacheable-by-design; static assets untouched) + client `cache:"no-store"` on the card's fetch. Header verified live by curl.
+  (B) The vault card loaded ONCE at settings-mount and never refetched: settings tab panels are CSS-hidden, NOT unmounted, and the persisted ui-store can boot straight into Settings — so keys stored later (another tab, a later store, a transient fetch failure) never appeared until a full reload. Fix: IntersectionObserver refetch-on-visible with a 2s debounce.
+- QA harness honesty work (three real defects fixed, one environmental): D/E never clicked the settings "Vault" TAB (the tab bar postdates the r135 suite and D1b was a vacuous check(...,true) masking it — now an honest assertion); D2b's expected string had drifted r205 ago; E3's row locator was self-defeating (mask-only match stops matching the very row it just revealed — probe #6 lesson, now matches mask OR raw). Plus patient 45s nav for dev-server cold compiles, and 12 leaked headless tabs closed that were thrashing the renderer.
+- FINAL GREEN: E-series E1-E5 PASS + E6 cleanup API-verified (vault GET == [] byte-clean; its re-verify leg crashed on a dev-compile stall after the DELETE landed); D-series 7/7 (first full green since the tab bar existed); V-series 8/8. Visual evidence: ops/qa/E3-slot-revealed.png — lane row "Vyce AI [dials first] qa-r••••9xyz stored just now 👁 Test Remove".
+- VERIFIED: tsc --noEmit → 0 src errors; eslint → 0 errors; standing QA tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; a11y 4/4; root → 200; snapshot pushed (2aaa99dae).
+
+Stage Summary:
+- The vault card now matches its own doc stamp: per-slot verify + reveal on the slots that actually dial, live-state API answers uncacheable by construction, and vault data refetches on visibility. Two latent product lies (cached empty vault; stale-until-reload card) are dead.
+
+Round Handoff:
+Round ID: r219
+Task owner: main (platform dev)
+Scope completed: per-slot Test/Reveal (r218) + blanket /api no-store + vault card visibility refetch + doc cache-discipline note + D-series suite repaired to 7/7 + new E-series suite (5/6+cleanup); snapshot pushed (2aaa99dae).
+User-visible changes: every vault slot row now has its own reveal (8s auto re-mask) and Test button; the vault card can no longer show a stale or cached "no keys" state; API responses can no longer be replayed stale by the browser.
+Verification steps: node scripts/cdp-qa-vault-slot-affordances.mjs (E-series; E6's final UI re-verify may crash on dev-compile stalls — its cleanup is API-verified inside the script); node scripts/cdp-qa-vault-test.mjs → 7/7; node scripts/cdp-qa-vault-reveal.mjs → 8/8; curl -sI /api/vault → Cache-Control: no-store; tsc 0; eslint 0; tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; a11y 4/4; root 200.
+Verification result: PASS (E6 leg infra-crash documented, product asserts all green)
+Open risks: E6's post-cleanup UI re-verify still vulnerable to dev-compile stalls (split it or raise its eval budget in r219); other always-mounted settings cards (providers BYOK, tracker) may share the mount-once staleness — the IntersectionObserver pattern is the candidate fix; r142 real-world validation (real key, closed-tab dial) still pending; parallel-instance push hygiene (fetch + inspect before push).
+Blockers: none
+Next recommended action: r219 — (1) FIRST read any user report. (2) Backlog (fork-diff first): audit the other always-mounted settings surfaces for the mount-once staleness class (BYOK provider list, model tracker) and apply the visibility-refetch pattern where stale-prone; split E6 out of the E-suite or give it its own compile-tolerant budget; add the no-store fact to the LOCAL_AUTOMATION.md HTTP table rows themselves if the r149-stamp pass wants it inline. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.

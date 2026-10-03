@@ -95,6 +95,9 @@ and closed-tab runs dial with your quota instead of the shared lane.
 | `DELETE /api/vault?provider=…` | Settings UI | Removes the slot; headless runs fall back to the shared lane automatically. |
 | `POST /api/vault/consume` | external scheduler (and the Test key button) | `{ provider }` → `{ key, updatedAt }` — the raw key. **Localhost-only guard (enforced since r138):** non-local `Host`, non-local `x-forwarded-host`, non-loopback `x-forwarded-for` / `x-real-ip`, or any `forwarded` header ⇒ `403` before any key lookup — both legit callers dial localhost, so both pass. **Trust model:** the key is already plaintext in this machine's SQLite DB, so localhost HTTP adds no exposure while giving the service a stable, DB-agnostic contract. Never logged, never telemetered. The header guard is defense-in-depth, not auth — a LAN client can still spoof `Host`, so if this app is ever deliberately exposed beyond localhost, it **must** gain real auth first. |
 
+- **Cache discipline (r218):** every `/api/*` response ships `Cache-Control: no-store, max-age=0, must-revalidate` (blanket header via `next.config.ts`) — none of these endpoints is cacheable-by-design. Browsers heuristically caching an empty vault answer was observed rendering a false "No registry-provider key stored" state while the DB held the row (r218 QA); the vault card also refetches whenever it becomes visible (r218), so tab panels that are CSS-hidden rather than unmounted can never show a stale vault.
+- **Test key / Reveal (per slot, r218):** every registry-provider row — not just the legacy builtin box — carries its own eye (reveal-once, ~8s auto re-mask) and Test button; both dial `POST /api/vault/consume` with that row's provider. The builtin "Vault key verified" toast text is preserved verbatim (D-series CDP contract).
+
 ## Reliability notes
 
 - Errors in the server-run history are classified: transient infra noise
