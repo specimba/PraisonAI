@@ -1342,7 +1342,7 @@ export function WorkflowsView() {
         ) : (
           <>
           {breakerPaused.length > 0 && (
-            <Alert className="border-red-500/30 bg-red-500/5">
+            <Alert id="breaker-paused-strip" className="border-red-500/30 bg-red-500/5">
               <ShieldAlert className="h-4 w-4 text-red-500" />
               <AlertTitle className="text-red-600 dark:text-red-400">
                 Lane degraded — {breakerPaused.length} schedule{breakerPaused.length === 1 ? "" : "s"} auto-paused by the failure breaker

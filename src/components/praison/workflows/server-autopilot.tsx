@@ -227,6 +227,25 @@ export function ServerAutopilot() {
   if (driving && laneBlocked && dueQuietCount > 0)
     attention.push(`${dueQuietCount} due run${dueQuietCount === 1 ? "" : "s"} blocked: ${humanizeLaneReason(blockedReason ?? "no-vault-key")}`);
 
+  // r212: the attention cell deep-links to the FIRST offender's remediation
+  // surface — stale >24h scrolls to this panel's amber strip (it names the
+  // rows + the advice), breaker-parked scrolls to the workflows view's "Lane
+  // degraded" strip (Resume all lives there), and a lane-blocked due run
+  // rides the r134 vault deep-link. Signal-driven mapping, never string
+  // matching on the rendered sentences (the push order above IS the
+  // priority order).
+  const focusFirstAttention = React.useCallback(() => {
+    if (staleRows.length > 0) {
+      document.getElementById("automation-stale-strip")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return;
+    }
+    if (parked > 0) {
+      document.getElementById("breaker-paused-strip")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    openVault();
+  }, [staleRows.length, parked, openVault]);
+
   return (
     <section
       aria-label="Server autopilot"
@@ -268,29 +287,28 @@ export function ServerAutopilot() {
               {openProposals} open · {acceptedProposals} accepted
             </p>
           </div>
-          <div
-            title={
-              attention.length > 0
-                ? attention.join("; ")
-                : "No stale schedules, no breaker-parked pipelines, and the closed-tab lane is not blocking due runs."
-            }
-            className={cn(
-              "rounded-lg border bg-background/40 px-2 py-1.5",
-              attention.length > 0
-                ? "border-amber-500/30"
-                : "border-emerald-500/25"
-            )}
-          >
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Needs attention</p>
-            <p
-              className={cn(
-                "mt-0.5 text-xs font-semibold tabular-nums",
-                attention.length > 0 ? "text-amber-300" : "text-emerald-400"
-              )}
+          {attention.length > 0 ? (
+            <button
+              type="button"
+              onClick={focusFirstAttention}
+              title={`${attention.join("; ")}\nClick to jump to the first offender's remediation surface.`}
+              aria-label={`Needs attention: ${attention.length} item${attention.length === 1 ? "" : "s"} — jump to the first offender`}
+              className="w-full rounded-lg border border-amber-500/30 bg-background/40 px-2 py-1.5 text-left transition-colors hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-500/50"
             >
-              {attention.length === 0 ? "all clear" : `${attention.length} item${attention.length === 1 ? "" : "s"}`}
-            </p>
-          </div>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Needs attention</p>
+              <p className="mt-0.5 text-xs font-semibold tabular-nums text-amber-300">
+                {attention.length} item{attention.length === 1 ? "" : "s"} →
+              </p>
+            </button>
+          ) : (
+            <div
+              title="No stale schedules, no breaker-parked pipelines, and the closed-tab lane is not blocking due runs."
+              className="rounded-lg border border-emerald-500/25 bg-background/40 px-2 py-1.5"
+            >
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Needs attention</p>
+              <p className="mt-0.5 text-xs font-semibold tabular-nums text-emerald-400">all clear</p>
+            </div>
+          )}
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
@@ -433,7 +451,7 @@ export function ServerAutopilot() {
       )}
 
       {staleRows.length > 0 ? (
-        <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2 text-[11px] leading-relaxed text-amber-300">
+        <div id="automation-stale-strip" className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2 text-[11px] leading-relaxed text-amber-300">
           <p className="font-medium">
             ⚠ {staleRows.length} registered schedule{staleRows.length === 1 ? "" : "s"} overdue
             &gt;24h with no lane driving {staleRows.length === 1 ? "it" : "them"}:

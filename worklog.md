@@ -5724,3 +5724,30 @@ Verification result: PASS
 Open risks: parallel-instance duplication (diff fork/main first — held clean this round); r142 real-world validation still pending; watcher data still empty since the rollback until a real sync.
 Blockers: none
 Next recommended action: r212 — (1) FIRST read any user report. (2) Backlog (diff fork/main first): vault slot age shown in the vault card (createdAt order is real but invisible); pulse attention cell deep-links to the offending strip; per-workflow variation-count header badge. (3) Standing: tsc + eslint; keep executor 26 / lane 38 / tracker-mirror 17 green.
+
+---
+Task ID: 424432 — r212
+Agent: main (platform development — hourly dev round)
+Task: r211 handoff — (1) no user report. (2) Backlog after fork-diff check: vault slot age; pulse attention deep-links; per-workflow variation-count badge. (3) Standing: tsc + eslint; executor 26 / lane 38 / tracker-mirror 17.
+
+Work Log:
+- Start-of-round discipline held: fork/main == local (83e867934), health 200, no user report.
+- ANTI-DUPLICATION paid off immediately: the "vault slot age" backlog item is ALREADY DONE on this lineage — the parallel instance's r210 added fmtSlotAge + dial-order (oldest-first) slot display with per-row stored-age titles (automation-vault-card.tsx lines 98-102, 398-400, 468-469). Dropped it without spending an edit.
+- SHIPPED: the pulse "Needs attention" cell is now a real BUTTON when something is on fire, deep-linking to the FIRST offender's remediation surface. Signal-driven three-branch mapping (never string-matching the rendered sentences): stale >24h → scrolls to this panel's amber strip (now id="automation-stale-strip", names the rows + advice); breaker-parked → scrolls to the workflows view's "Lane degraded" Alert (now id="breaker-paused-strip" — "Resume all" lives there; parked rows render nowhere else, since the panel's list is enabled-only); lane-blocked due runs → the r134 vault deep-link (setView settings + anchor vault). All-clear state stays a static emerald div. The button carries the full attention list in its title, an explicit aria-label, a hover tint, and a focus-visible ring (a11y gate re-run: 136 buttons, 0 unnamed).
+- Self-caught: first placement of focusFirstAttention referenced `parked` before its declaration — tsc TS2448 caught it before any QA run; moved the callback below the attention construction (the push order there IS the priority order, now documented in-code).
+- Verification limits, stated honestly: the deep-link CLICK is not covered by an automated browser test — exercising all three branches needs planted stale/parked/lane-blocked fixtures (heavy CDP work); the wiring is a 3-branch signal-driven callback and the panel renders clean post-change (root 200, hot recompile clean). Left as a known gap, not theatre-covered.
+- VERIFIED: tsc --noEmit → 0 src errors; eslint (both touched files) → 0; a11y gate → 0 unnamed icon buttons; root → 200; standing QA green: tracker-mirror 17/17, lane 38/38, executor 26/26.
+
+Stage Summary:
+- The pulse's "is anything on fire?" cell now answers "so what?" — one click lands on the surface that fixes the first offender (amber strip / breaker strip with Resume all / vault card), instead of only naming the fire in a tooltip.
+
+Round Handoff:
+Round ID: r213
+Task owner: main (platform dev)
+Scope completed: attention-cell deep-link (3 remediation surfaces wired via ids) + slot-age backlog item verified already-done and dropped; snapshot pushed.
+User-visible changes: "Needs attention: N items →" is clickable and jumps to the fix; keyboard + SR reachable.
+Verification steps: bunx tsc --noEmit → 0 src errors; bunx eslint → 0; node scripts/a11y-icon-button-audit.mjs → 0 missing; curl root → 200; qa-tracker-mirror 17/17, qa-automation-lane 38/38, qa-automation-executor 26/26.
+Verification result: PASS
+Open risks: deep-link click paths not browser-QA'd (fixture cost — noted, not hidden); parallel-instance duplication (fork-diff first — held clean; slot-age item was already done by them); r142 real-world validation pending.
+Blockers: none
+Next recommended action: r213 — (1) FIRST read any user report. (2) Backlog (fork-diff first): per-workflow variation-count header badge (last open r209 item); optionally a browser QA for the r212 deep-link using planted fixtures; docs pass on docs/LOCAL_AUTOMATION.md if the r205-r212 automation work drifted the r149 fact-check stamp. (3) Standing: tsc + eslint; keep tracker-mirror 17 / lane 38 / executor 26 green.
