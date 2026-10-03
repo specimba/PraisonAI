@@ -90,7 +90,6 @@ function useSlashCommands(): SlashCommand[] {
   return React.useMemo(() => {
     const ui = useUiStore.getState();
     const convStore = useConversationsStore.getState();
-    const conv = convStore.conversations.find((c) => c.id === convStore.activeId);
     return [
       {
         id: "new",
@@ -469,8 +468,11 @@ export function Composer({
     [attachments.length, attachments]
   );
 
-  const removeAttachment = React.useCallback((name: string) => {
-    setAttachments((prev) => prev.filter((a) => a.name !== name));
+  // Remove by INDEX, not name: duplicate-named attachments are legal (paste
+  // the same screenshot twice, attach one file from two folders), and a
+  // name-based filter silently removed every twin at once.
+  const removeAttachment = React.useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const reorderAttachments = React.useCallback((from: number, to: number) => {
@@ -812,7 +814,7 @@ export function Composer({
                     </span>
                     <button
                       type="button"
-                      onClick={() => removeAttachment(a.name)}
+                      onClick={() => removeAttachment(i)}
                       aria-label={`Remove attachment ${a.name}`}
                       className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
@@ -841,7 +843,7 @@ export function Composer({
                     </span>
                     <button
                       type="button"
-                      onClick={() => removeAttachment(a.name)}
+                      onClick={() => removeAttachment(i)}
                       aria-label={`Remove attachment ${a.name}`}
                       className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
