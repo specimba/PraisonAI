@@ -5751,3 +5751,30 @@ Verification result: PASS
 Open risks: deep-link click paths not browser-QA'd (fixture cost — noted, not hidden); parallel-instance duplication (fork-diff first — held clean; slot-age item was already done by them); r142 real-world validation pending.
 Blockers: none
 Next recommended action: r213 — (1) FIRST read any user report. (2) Backlog (fork-diff first): per-workflow variation-count header badge (last open r209 item); optionally a browser QA for the r212 deep-link using planted fixtures; docs pass on docs/LOCAL_AUTOMATION.md if the r205-r212 automation work drifted the r149 fact-check stamp. (3) Standing: tsc + eslint; keep tracker-mirror 17 / lane 38 / executor 26 green.
+
+---
+Task ID: 424432 — r213
+Agent: main (platform development — hourly dev round)
+Task: r212 handoff — (1) no user report. (2) Backlog after fork-diff check: per-workflow variation-count header badge (last open r209 item). (3) Standing: tsc + eslint; tracker-mirror 17 / lane 38 / executor 26.
+
+Work Log:
+- Start-of-round discipline held: fork/main == local (216acc192), zero divergence, health 200/200, no user report.
+- SHIPPED the last open r209 backlog item: the run panel header now carries a per-workflow variation aggregate badge — "🧬 N variations" — aggregating EVERY SpawnProposal sourced from the pipeline (sourceWorkflowId: stalled runs + manual suggestions), visible from ANY run the panel is open for, closing the r209 gap where the RunRouterChip only spoke for the one run it was sourced from. The two surfaces now answer different questions and cannot collide: chip = "what did THIS run trigger?", badge = "how much variation came out of this pipeline overall?".
+- The badge is a real BUTTON, not a stat: violet while the inbox holds open (undecided) proposals, muted once all are handled; title carries the full status breakdown (X open · Y accepted · Z dismissed); click deep-links to Settings → Evolution (setView + setSettingsAnchor("evolution")) — the r212 signal→remediation doctrine, and the same anchor machinery the vault/providers deep-links already exercise.
+- Self-caught via tsc (r211 lesson paid off): `settingsAnchor` was typed narrow in TWO places — the state field AND the setter's parameter signature. Enumerated all matches after the first tsc hit; both unions now include "evolution". No third narrow typing existed (rg-verified).
+- Verification limits, stated honestly: the badge's rendering with real proposals and its click-scroll are not covered by an automated browser test (needs planted SpawnProposal fixtures — heavy CDP work, same gap class as r212's deep-link). The scroll-target machinery (settings-view anchor effect, id="evolution") is pre-existing and already load-bearing for r212; the panel compiles hot and root stays 200. Left as a known gap, not theatre-covered.
+- VERIFIED: tsc --noEmit → 0 src errors; eslint (workflow-run-panel.tsx + stores.ts) → 0; a11y gate → 136 buttons, 0 unnamed icon-only; standing QA green: tracker-mirror 17/17, lane 38/38, executor 26/26; root → 200.
+
+Stage Summary:
+- The r209 handoff backlog is now fully cleared (resolver fold r211, slot age done-by-parallel-r210, deep-links r212, variation badge r213). The run panel header tells the whole variation story: per-run decision chip + per-workflow aggregate badge, one click from either to the surface that resolves it.
+
+Round Handoff:
+Round ID: r214
+Task owner: main (platform dev)
+Scope completed: per-workflow variation-count header badge with status-aware styling and Evolution deep-link; settingsAnchor union extended (field + setter); snapshot pushed (e9e87ebce).
+User-visible changes: any workflow with ≥1 sourced variation shows "🧬 N variations" in its run-panel header from every run; violet while the spawn inbox holds open rows; click lands on Settings → Evolution.
+Verification steps: bunx tsc --noEmit → 0 src errors; bunx eslint → 0; node scripts/a11y-icon-button-audit.mjs → 0 missing; curl root → 200; qa-tracker-mirror 17/17, qa-automation-lane 38/38, qa-automation-executor 26/26.
+Verification result: PASS
+Open risks: badge click-scroll not browser-QA'd with planted fixtures (noted, not hidden); parallel-instance duplication (fork-diff first — held clean this round); r142 real-world validation still pending; watcher data still empty since the rollback until a real sync.
+Blockers: none
+Next recommended action: r214 — (1) FIRST read any user report. (2) Backlog (fork-diff first): browser QA for the r212/r213 deep-links using planted stale/parked/proposal fixtures (the two known uncovered click paths); docs pass on docs/LOCAL_AUTOMATION.md if the r205-r213 automation work drifted the r149 fact-check stamp. (3) Standing: tsc + eslint; keep tracker-mirror 17 / lane 38 / executor 26 green.
