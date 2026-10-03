@@ -208,7 +208,11 @@ export function ServerAutopilot() {
   const registryRows = state?.registry ?? [];
   // Breaker-parked (r192/r204 parity): disabled AFTER the 3-strike breaker,
   // not merely off (user toggle / orphan-guard — those were never failing).
-  const parked = registryRows.filter((r) => !r.enabled && r.failStreak >= 3).length;
+  // r216: keep the ROWS, not just the count — the parked strip below renders
+  // from this same array, so the pulse's number and its remediation surface
+  // can never disagree (they are one data source).
+  const parkedRows = registryRows.filter((r) => !r.enabled && r.failStreak >= 3);
+  const parked = parkedRows.length;
   const off = registryRows.filter((r) => !r.enabled && r.failStreak < 3).length;
   // Server-run outcomes over the last day (the sync GET ships the 25 most
   // recent rows — the title says exactly that, no pretended completeness).
@@ -229,18 +233,22 @@ export function ServerAutopilot() {
 
   // r212: the attention cell deep-links to the FIRST offender's remediation
   // surface — stale >24h scrolls to this panel's amber strip (it names the
-  // rows + the advice), breaker-parked scrolls to the workflows view's "Lane
-  // degraded" strip (Resume all lives there), and a lane-blocked due run
-  // rides the r134 vault deep-link. Signal-driven mapping, never string
-  // matching on the rendered sentences (the push order above IS the
-  // priority order).
+  // rows + the advice), breaker-parked scrolls to THIS panel's parked strip
+  // (r216 fix: it used to target the workflows view's local-schedule "Lane
+  // degraded" Alert, but the pulse counts SERVER registry rows — a disjoint
+  // population the local strip never renders, so the click could land on a
+  // surface that does not exist; the strip below renders from the same array
+  // as the count, so it is always there when the signal fires), and a
+  // lane-blocked due run rides the r134 vault deep-link. Signal-driven
+  // mapping, never string matching on the rendered sentences (the push order
+  // above IS the priority order).
   const focusFirstAttention = React.useCallback(() => {
     if (staleRows.length > 0) {
       document.getElementById("automation-stale-strip")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       return;
     }
     if (parked > 0) {
-      document.getElementById("breaker-paused-strip")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById("automation-parked-strip")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     openVault();
@@ -465,6 +473,29 @@ export function ServerAutopilot() {
             {staleRows.length === 1 ? "it" : "them"} — re-enable the schedule in Workflow
             Studio, store a vault key for closed-tab runs, or use “Run on server” to force
             one fire.
+          </p>
+        </div>
+      ) : null}
+
+      {/* r216: server-parked schedules finally render somewhere — the pulse
+          counts these rows but the workflows view's "Lane degraded" strip only
+          renders LOCAL schedules, so a closed-tab breaker pause (exactly the
+          scenario the server registry exists for) was invisible in the UI.
+          Same array as the parked count above: count and cure cannot drift. */}
+      {parkedRows.length > 0 ? (
+        <div id="automation-parked-strip" className="mt-2 rounded-md border border-red-500/30 bg-red-500/[0.06] p-2 text-[11px] leading-relaxed text-red-300">
+          <p className="font-medium">
+            ⛔ {parkedRows.length} registered schedule{parkedRows.length === 1 ? "" : "s"} parked by the
+            server-side failure breaker (3 straight failed closed-tab runs):
+          </p>
+          <p>
+            {parkedRows.slice(0, 3).map((r) => r.name).join(" · ")}
+            {parkedRows.length > 3 ? ` · +${parkedRows.length - 3} more` : ""}
+          </p>
+          <p className="text-red-300/80">
+            The breaker paused them to stop quota burn. Fix the underlying failure — usually a
+            missing or stale vault key — then resume the schedule from its workflow card; the next
+            client heartbeat re-registers the row.
           </p>
         </div>
       ) : null}
