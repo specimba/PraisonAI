@@ -1,15 +1,17 @@
-2026/10/03-19:28:18.306 687 Reusing MANIFEST /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/MANIFEST-000001
-2026/10/03-19:28:18.311 687 Recovering log #79
-2026/10/03-19:28:18.311 687 Reusing old log /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/000079.log 
-2026/10/03-19:28:52.629 689 Level-0 table #82: started
-2026/10/03-19:28:52.629 689 Level-0 table #82: 11386 bytes OK
-2026/10/03-19:28:52.630 689 Delete type=0 #79
-2026/10/03-19:28:52.630 689 Compacting 4@0 + 1@1 files
-2026/10/03-19:28:52.631 689 Generated table #83@0: 7 keys, 14767 bytes
-2026/10/03-19:28:52.631 689 Compacted 4@0 + 1@1 files => 14767 bytes
-2026/10/03-19:28:52.631 689 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/10/03-19:28:52.631 689 Delete type=2 #73
-2026/10/03-19:28:52.631 689 Delete type=2 #82
-2026/10/03-19:28:52.631 689 Delete type=2 #78
-2026/10/03-19:28:52.631 689 Delete type=2 #71
-2026/10/03-19:28:52.631 689 Delete type=2 #76
+2026/10/03-20:28:02.625 5a0 Reusing MANIFEST /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/10/03-20:28:02.629 5a0 Recovering log #90
+2026/10/03-20:28:02.629 5a0 Level-0 table #90: started
+2026/10/03-20:28:02.632 5a0 Level-0 table #90: 20035 bytes OK
+2026/10/03-20:28:02.635 5a0 Delete type=0 #90
+2026/10/03-20:29:02.642 5a0 Level-0 table #93: started
+2026/10/03-20:29:02.643 5a0 Level-0 table #93: 17880 bytes OK
+2026/10/03-20:29:02.643 5a0 Delete type=0 #91
+2026/10/03-20:29:02.643 5a0 Compacting 4@0 + 1@1 files
+2026/10/03-20:29:02.644 5a0 Generated table #94@0: 7 keys, 15811 bytes
+2026/10/03-20:29:02.644 5a0 Compacted 4@0 + 1@1 files => 15811 bytes
+2026/10/03-20:29:02.644 5a0 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/10/03-20:29:02.644 5a0 Delete type=2 #83
+2026/10/03-20:29:02.644 5a0 Delete type=2 #93
+2026/10/03-20:29:02.644 5a0 Delete type=2 #88
+2026/10/03-20:29:02.644 5a0 Delete type=2 #85
+2026/10/03-20:29:02.644 5a0 Delete type=2 #90

@@ -97,6 +97,12 @@ export function WorkflowEditorDialog({
   const [planOpen, setPlanOpen] = React.useState(false);
   const [planTask, setPlanTask] = React.useState("");
   const [planning, setPlanning] = React.useState(false);
+  // r232 save-truth: after a blocked save attempt, errors render INLINE at the
+  // offending field (r225 pattern) instead of a distant toast — and no authored
+  // step is ever silently dropped (pre-fix: unassigned steps vanished on save).
+  const [saveAttempted, setSaveAttempted] = React.useState(false);
+  const nameInputRef = React.useRef<HTMLInputElement | null>(null);
+  const stepTriggerRefs = React.useRef(new Map<string, HTMLButtonElement>());
 
   // Drag-to-reorder state (HTML5 DnD — dragstart is only allowed from the grip handle)
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
@@ -117,6 +123,7 @@ export function WorkflowEditorDialog({
     setPlanOpen(false);
     setPlanTask("");
     setPlanning(false);
+    setSaveAttempted(false);
   }, [open, workflow]);
 
   const patchStep = (id: string, patch: Partial<WorkflowStep>) => {
@@ -244,9 +251,21 @@ export function WorkflowEditorDialog({
   }
 
   const handleSave = () => {
+    setSaveAttempted(true);
     const trimmedName = name.trim();
     if (!trimmedName) {
-      toast.error("Give your workflow a name");
+      // r232: inline error at the field (aria-invalid + role=alert below),
+      // focus pulled to the input — matches the r225 agent-form contract.
+      nameInputRef.current?.focus();
+      return;
+    }
+    const firstUnassigned = steps.find((s) => !s.agentId);
+    if (firstUnassigned) {
+      // r232 truth-in-save: a labeled-but-unassigned step used to be SILENTLY
+      // dropped here (its label + instruction lost). Block instead: inline
+      // alert naming the count, aria-invalid on every offender, focus the
+      // first one. Nothing is saved until every step has an agent.
+      stepTriggerRefs.current.get(firstUnassigned.id)?.focus();
       return;
     }
     const validSteps = steps
@@ -306,11 +325,30 @@ export function WorkflowEditorDialog({
               <Label htmlFor="wf-name">Name</Label>
               <Input
                 id="wf-name"
+                ref={nameInputRef}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Blog post factory"
                 autoFocus
+                aria-invalid={saveAttempted && !name.trim()}
+                aria-describedby={
+                  saveAttempted && !name.trim() ? "wf-name-error" : undefined
+                }
+                className={cn(
+                  saveAttempted &&
+                    !name.trim() &&
+                    "border-red-500/60 focus-visible:ring-red-500/30"
+                )}
               />
+              {saveAttempted && !name.trim() ? (
+                <p
+                  id="wf-name-error"
+                  role="alert"
+                  className="text-xs text-red-500 dark:text-red-400"
+                >
+                  Give your workflow a name
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="wf-desc">Description</Label>
@@ -377,6 +415,21 @@ export function WorkflowEditorDialog({
                 {steps.length} step{steps.length === 1 ? "" : "s"} · run top to bottom · drag ⠿ to reorder
               </span>
             </div>
+
+            {/* r232 truth-in-save: a blocked save says so HERE, naming the
+                unassigned count — pre-fix these steps were dropped silently. */}
+            {saveAttempted && steps.some((s) => !s.agentId) ? (
+              <p
+                id="wf-steps-error"
+                role="alert"
+                className="rounded-lg border border-red-500/40 bg-red-500/5 px-3 py-2 text-xs text-red-500 dark:text-red-400"
+              >
+                {steps.filter((s) => !s.agentId).length} step
+                {steps.filter((s) => !s.agentId).length === 1 ? " has" : "s have"} no
+                agent assigned — pick an agent or remove the step. Nothing was
+                saved.
+              </p>
+            ) : null}
 
             {/* Depth summary — what the runner will actually execute */}
             <p className="text-[11px] text-muted-foreground" aria-live="polite">
@@ -461,8 +514,23 @@ export function WorkflowEditorDialog({
                     >
                       <SelectTrigger
                         size="sm"
-                        className="flex-1"
+                        className={cn(
+                          "flex-1",
+                          saveAttempted &&
+                            !step.agentId &&
+                            "border-red-500/60 focus-visible:ring-red-500/30"
+                        )}
                         aria-label={`Agent for step ${i + 1}`}
+                        aria-invalid={saveAttempted && !step.agentId}
+                        aria-describedby={
+                          saveAttempted && !step.agentId
+                            ? "wf-steps-error"
+                            : undefined
+                        }
+                        ref={(el) => {
+                          if (el) stepTriggerRefs.current.set(step.id, el);
+                          else stepTriggerRefs.current.delete(step.id);
+                        }}
                       >
                         <SelectValue placeholder="Select agent" />
                       </SelectTrigger>
