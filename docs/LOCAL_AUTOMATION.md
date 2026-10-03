@@ -42,21 +42,34 @@ storms). That default is exactly what the Automation Vault fixes.
 
 ## The Automation Vault
 
-An opt-in, local-only key slot for the headless lane. Store a key and
-closed-tab runs dial with your quota instead of the shared lane.
+Opt-in, local-only key slots for the headless lane. Store a key per provider
+and closed-tab runs dial with your quota instead of the shared lane.
 
-- **Storage:** one row in the local SQLite DB (`AutomationVault`). Nothing is
-  telemetered. `GET /api/vault` never returns the raw key — only a masked
-  preview (`first4••••last4` for keys longer than 12 chars, otherwise `••••••••`).
-- **UI:** Settings → *Automation vault* card. Store / Update / Remove, plus:
-- **Test key:** dials `POST /api/vault/consume` exactly as the external
-  scheduler would, then round-trips the returned raw key through the same
-  `mask()` and compares it with the displayed preview. A match proves the
+- **Storage:** one row **per provider** in the local SQLite DB
+  (`AutomationVault`, `provider` is unique — a slot list, not a single slot).
+  Nothing is telemetered. `GET /api/vault` never returns raw keys — only
+  masked previews (`first4••••last4` for keys longer than 12 chars,
+  otherwise `••••••••`).
+- **Slot resolution (r207/r211):** the executor scans the slots **oldest
+  first** (`createdAt` asc — the order the vault GET ships since r210) and
+  the first resolvable slot wins: a slot with no key or no matching registry
+  provider is skipped, and if no slot resolves the run is honestly reported
+  as `no-vault-key` / `no-resolvable-provider`. The dial semantics have
+  exactly one exported resolver (`resolveServerDialFromSlots`); the lane chip
+  and the sync GET mirror it, so they cannot disagree.
+- **Legacy `builtin` slot:** the built-in engine's gateway-key handoff is
+  kept for older client bundles but the server executor **skips it** — it is
+  a client-lane concept, not a headless credential.
+- **UI:** Settings → *Automation vault* card — one row per provider slot with
+  its stored age (the dial-order input, made visible), plus:
+- **Test key:** per slot — dials `POST /api/vault/consume` exactly as the
+  external scheduler would, then round-trips the returned raw key through the
+  same `mask()` and compares it with the displayed preview. A match proves the
   handoff endpoint is reachable, the slot is readable, and the key is intact —
   without ever rendering the raw key. It does **not** dial an LLM (the built-in
   lane is environment-credentialed in-repo; dialing with the key is the
   external scheduler's job).
-- **Reveal (r154):** the card's eye button on the stored-slot row dials the
+- **Reveal (r154):** the card's eye button on a stored-slot row dials the
   same `POST /api/vault/consume` and renders the raw key for ~8 seconds, then
   re-masks itself — immediate re-mask on second click / unmount / re-store,
   no auto-copy, and a reload re-masks (reveal state is never persisted).
@@ -65,15 +78,17 @@ closed-tab runs dial with your quota instead of the shared lane.
   reveal changes who can *see* the key on screen, not who can programmatically
   *get* it.
 - **Status at a glance:** the *Server autopilot* panel (top of the Workflows
-  view) shows a chip — cyan "headless lane: your key <mask>" or amber
-  "headless lane: shared lane" — and clicking it deep-links to the vault card.
+  view) shows a lane chip — when the tab drives, "browser driving — schedules
+  run in-tab (your keys)"; when the server lane is live, "server lane:
+  <provider> <mask>" with the resolved slot — and the vault-related surfaces
+  deep-link to the vault card.
 
 ## HTTP contract (all localhost)
 
 | Method & path | Caller | Behaviour |
 | --- | --- | --- |
 | `POST /api/automation/sync` | open tab, every 60s | Heartbeat + push enabled schedules. A push with ≥1 enabled schedule prunes orphaned registry rows; an empty push is heartbeat-only (protects against a second client disarming the registry). |
-| `GET /api/automation/sync` | Server autopilot panel (15s poll) & drivers | `{ serverDriving, lastSeenAt, registry, runs[last 25], vaultLane { hasKey, maskedKey, updatedAt } }`. `serverDriving` = heartbeat stale >120s. The panel poll pauses while the tab is hidden and refetches on return (r141) — the deliberate mirror of the heartbeat's keep-hidden semantics. |
+| `GET /api/automation/sync` | Server autopilot panel (15s poll) & drivers | `{ serverDriving, lastSeenAt, registry, runs[last 25], executorLane, vaultLane }`. `serverDriving` = heartbeat stale >120s. `executorLane` (r205/r207) mirrors `resolveServerDialFromSlots` exactly — `{ ready, reason?, providerLabel, maskedKey }` for the slot the executor will actually dial; `vaultLane` is the legacy r133 builtin-slot read, kept one release for older cached bundles. The panel poll pauses while the tab is hidden and refetches on return (r141) — the deliberate mirror of the heartbeat's keep-hidden semantics. |
 | `POST /api/automation/run-now` | UI ("Run on server") | Sets `nextRunAt = now` and re-enables the row; the external scheduler claims it within ~30s when it is driving. |
 | `POST /api/vault` | Settings UI | Upsert `{ provider, key, label }` → masked ack. |
 | `GET /api/vault` | Settings UI | Masked slots only — raw key never leaves the DB except through `consume`. |
@@ -89,14 +104,31 @@ closed-tab runs dial with your quota instead of the shared lane.
 - Run history rows with recorded LLM calls expose an "N calls" expander: the
   grouped per-step call log with global numbering and a counted resilience
   digest (`↻ primary skipped ×N · ⇄ model substitution ×N · ⇄ relay rotation ×N`).
+- **Failure breaker (server side):** three straight failed closed-tab runs
+  park a registry row (`enabled: false, failStreak ≥ 3`) instead of burning
+  more quota. Parked rows render in the autopilot panel's red strip (r216)
+  with the resume advice; the pulse's attention cell deep-links to the first
+  offender's remediation surface (stale >24h → the amber strip, breaker-parked
+  → the red strip, lane-blocked due run → the vault card) — each surface
+  renders from the same data source as the count it explains (r212/r216).
+- **Stale registry:** an enabled schedule overdue >24h with neither lane
+  claiming it renders the amber strip in the autopilot panel (re-enable the
+  schedule, store a vault key, or use "Run on server").
 
 ---
 
-Fact-checked against code as of r154 (2026-10-01): `SYNC_INTERVAL_MS = 60_000`,
-`HEARTBEAT_STALE_MS = 120_000`, `GET /api/automation/sync` response shape
-(verified live against the dev server), `take: 25` run history, the r138
-consume-guard header list, the r154 reveal-once path (consume reuse + 8s auto
-re-mask), `run-now`'s `nextRunAt + enabled: true`, the
-`TRANSIENT_RE` timeout coverage, and the digest strings in
-`workflow-run-panel.tsx`. Future rounds changing these endpoints should treat
-this file as part of the blast radius.
+Fact-checked against code as of r217 (2026-10-03), re-stamped after the
+r205–r216 vault/lane/diagnostics work: `SYNC_INTERVAL_MS = 60_000`,
+`HEARTBEAT_STALE_MS = 120_000` (both the bridge and the sync route),
+`GET /api/automation/sync` response shape **including the r205 `executorLane`
+field and the legacy `vaultLane`** (verified live against the dev server),
+`take: 25` run history, the multi-slot `AutomationVault` model
+(`provider @unique`, oldest-first dial order, `builtin` skipped by the
+executor), the r138 consume-guard header list, the r154 reveal-once path
+(consume reuse + 8s auto re-mask, now per slot), the vault card's per-slot
+Test-key round-trip, `run-now`'s `nextRunAt + enabled: true`, the
+`TRANSIENT_RE` timeout coverage, the digest strings in
+`workflow-run-panel.tsx`, and the r212/r216 attention deep-link targets
+(`automation-stale-strip`, `automation-parked-strip`, vault anchor). Future
+rounds changing these endpoints should treat this file as part of the blast
+radius.
