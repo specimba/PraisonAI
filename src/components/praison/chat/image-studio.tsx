@@ -172,7 +172,7 @@ export function ImageStudioDialog() {
               maxLength={1200}
               disabled={busy}
               onKeyDown={(e) => {
-                if ((e.key === "Enter" || e.key === "Enter") && (e.metaKey || e.ctrlKey)) {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
                   handleGenerate();
                 }

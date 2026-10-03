@@ -27,13 +27,27 @@ interface SearchHit {
   snippetAfter: string;
 }
 
-function buildHits(messages: ChatMessage[], query: string): SearchHit[] {
+interface SearchResult {
+  /** Capped render list (MAX_RENDERED). */
+  hits: SearchHit[];
+  /** TRUE match count across all messages — the counter must not lie. */
+  total: number;
+}
+
+const MAX_RENDERED = 50;
+
+function buildHits(messages: ChatMessage[], query: string): SearchResult {
   const q = query.trim().toLowerCase();
-  if (q.length < 2) return [];
+  if (q.length < 2) return { hits: [], total: 0 };
   const hits: SearchHit[] = [];
+  let total = 0;
   for (const m of messages) {
     const idx = m.content.toLowerCase().indexOf(q);
     if (idx === -1) continue;
+    total++;
+    // Keep COUNTING past the render cap — the "N matches" readout reports the
+    // real total while the list shows only the first MAX_RENDERED hits.
+    if (hits.length >= MAX_RENDERED) continue;
     const before = m.content.slice(Math.max(0, idx - 42), idx);
     const match = m.content.slice(idx, idx + q.length);
     const after = m.content.slice(idx + q.length, idx + q.length + 62);
@@ -46,9 +60,8 @@ function buildHits(messages: ChatMessage[], query: string): SearchHit[] {
       snippetMatch: match,
       snippetAfter: after + (idx + q.length + 62 < m.content.length ? "…" : ""),
     });
-    if (hits.length >= 50) break;
   }
-  return hits;
+  return { hits, total };
 }
 
 function jumpToMessage(msgId: string) {
@@ -73,7 +86,7 @@ export function ChatSearch({ open, messages, onClose }: ChatSearchProps) {
     }
   }, [open]);
 
-  const hits = React.useMemo(() => buildHits(messages, query), [messages, query]);
+  const { hits, total } = React.useMemo(() => buildHits(messages, query), [messages, query]);
 
   if (!open) return null;
 
@@ -105,7 +118,8 @@ export function ChatSearch({ open, messages, onClose }: ChatSearchProps) {
           <div className="absolute right-2 flex items-center gap-1">
             {query.trim().length >= 2 && (
               <span className="mr-1 text-[11px] tabular-nums text-muted-foreground">
-                {hits.length} {hits.length === 1 ? "match" : "matches"}
+                {total} {total === 1 ? "match" : "matches"}
+                {total > hits.length ? ` · showing first ${hits.length}` : ""}
               </span>
             )}
             <Button
