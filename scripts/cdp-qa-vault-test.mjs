@@ -37,7 +37,7 @@ function wsSend(ws, method, params = {}) {
         pending.delete(id);
         reject(new Error(`CDP timeout: ${method}`));
       }
-    }, 20_000);
+    }, 60_000);
   });
 }
 
@@ -116,8 +116,26 @@ const testBtnExpr = `
 
 async function gotoSettings(ws) {
   if (!(await retryClick(ws, "Settings"))) throw new Error("nav to Settings failed");
-  await waitFor(ws, `Boolean(document.querySelector('#vault'))`, 15_000);
-  await new Promise((r) => setTimeout(r, 800)); // let the card fetch its slot
+  // r218 fix: settings grew a TAB BAR after r135 — the vault card renders
+  // only under the "Vault" tab, so switch to it (the old suite silently sat
+  // on "What's fixed" and D1b's vacuous check(..., true) masked that).
+  // ALSO: the dev server cold-compiles this view for >20s after a code edit,
+  // so keep clicking until the surface really mounts (45s budget).
+  const t0 = Date.now();
+  while (Date.now() - t0 < 45_000) {
+    await evalJs(ws, `(() => {
+      const t = [...document.querySelectorAll('button,[role="tab"],a')]
+        .find((e) => (e.textContent || "").trim().toLowerCase() === "vault" && e.offsetParent !== null);
+      if (t) t.click();
+      return Boolean(t);
+    })()`);
+    if (await evalJs(ws, `Boolean(document.querySelector('#vault'))`)) {
+      await new Promise((r) => setTimeout(r, 800)); // let the card fetch its slot
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+  return false;
 }
 
 async function main() {
@@ -148,8 +166,8 @@ async function main() {
   check("D1a store throwaway vault key", storeRes.ok);
 
   await gotoSettings(ws);
-  await waitFor(ws, `Boolean(${testBtnExpr})`, 15_000);
-  check("D1b Test key button renders with a key stored", true);
+  const testBtnReady = await waitFor(ws, `Boolean(${testBtnExpr})`, 15_000);
+  check("D1b Test key button renders with a key stored", testBtnReady);
 
   for (let i = 0; i < 6; i++) {
     const clicked = await evalJs(ws, `${testBtnExpr}?.click() ?? false`);
@@ -185,7 +203,7 @@ async function main() {
   const guard = await evalJs(ws, `
     ({
       testBtnAbsent: !${testBtnExpr},
-      emptyState: document.body.innerText.includes("No vault key yet"),
+      emptyState: document.body.innerText.includes("No built-in slot stored"),
     })
   `);
   check(

@@ -1,6 +1,6 @@
 "use client";
 
-// ─── v25: Automation Vault (Settings card) · r205 doctrine alignment ─────────
+// ─── v25: Automation Vault (Settings card) · r218 per-slot Test/Reveal ───────
 // Opt-in, LOCAL-ONLY key storage. While a tab is open, schedules run
 // in-browser with the user's own keys (BYOK — keys never leave the browser).
 // When the tab is CLOSED, the local server claims due schedules itself
@@ -50,21 +50,44 @@ const PROVIDER_LABELS: Record<string, string> = {
   builtin: "Built-in engine slot (legacy client handoff — the server executor skips it)",
 };
 
+/** The exact mask the consume round-trip is verified against (r149 fact-check:
+ * first4••••last4, keys ≤12 chars render as all-dots). Shared by every slot's
+ * Test button so the proof is identical across slots. */
+function maskOf(raw: string): string {
+  return raw.length > 12 ? `${raw.slice(0, 4)}••••${raw.slice(-4)}` : "••••••••";
+}
+
 export function AutomationVaultCard() {
   const [slots, setSlots] = React.useState<VaultSlot[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [key, setKey] = React.useState("");
   const [showKey, setShowKey] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [testing, setTesting] = React.useState(false);
+  // r218: per-slot affordances — WHICH slot is under test / on screen, not a
+  // single card-wide flag. The executor-facing registry slots get the same
+  // verify + reveal machinery the legacy builtin slot always had (the doc
+  // already promised "per slot"; the UI now delivers it).
+  const [testingProvider, setTestingProvider] = React.useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
-  const [revealed, setRevealed] = React.useState<string | null>(null);
-  const [revealing, setRevealing] = React.useState(false);
+  const [revealed, setRevealed] = React.useState<{ provider: string; key: string } | null>(null);
+  const [revealingProvider, setRevealingProvider] = React.useState<string | null>(null);
   const revealTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // r218: the settings tab panels are CSS-hidden, NOT unmounted — this card
+  // mounts when the settings view mounts (which persisted-view restores can
+  // do long before the user ever opens the Vault tab) and its one mount-time
+  // load() could go stale forever: keys stored later (another tab, a later
+  // store, a transient fetch failure) never appeared until a full reload.
+  // Refetch whenever the card actually becomes VISIBLE, debounced.
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const lastLoadRef = React.useRef(0);
 
   const load = React.useCallback(async () => {
+    lastLoadRef.current = Date.now();
     try {
-      const res = await fetch("/api/vault");
+      // cache:"no-store" (r218): this endpoint's answer must never come from
+      // the browser's HTTP cache — a cached empty vault rendered a LIE
+      // ("no key stored") while the DB held the row.
+      const res = await fetch("/api/vault", { cache: "no-store" });
       const json = (await res.json()) as { vault?: VaultSlot[] };
       setSlots(Array.isArray(json.vault) ? json.vault : []);
     } catch {
@@ -76,6 +99,24 @@ export function AutomationVaultCard() {
 
   React.useEffect(() => {
     void load();
+  }, [load]);
+
+  // r218: refetch on becoming visible (tab switch into the Vault panel, or
+  // the settings view re-entering the viewport). Debounced to 2s so hover-
+  // flicker across panels cannot spam the endpoint.
+  React.useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting) && Date.now() - lastLoadRef.current > 2_000) {
+          void load();
+        }
+      },
+      { threshold: 0.01 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
   }, [load]);
 
   const maskNow = React.useCallback(() => {
@@ -207,24 +248,25 @@ export function AutomationVaultCard() {
     }
   }
 
-  // r135: the vault epic's verify affordance (descoped in r132 when the key
-  // had NO consumer to prove anything against). What this test verifies —
-  // honestly: the EXACT handoff the external headless scheduler depends on.
-  // It POSTs /api/vault/consume as the scheduler would, then round-trips the
-  // returned raw key through the same mask() the API uses and compares with
-  // the displayed masked preview. A match proves: endpoint reachable, slot
+  // r135 (generalized per slot in r218): the vault epic's verify affordance.
+  // What this test verifies — honestly: the EXACT handoff the external
+  // headless scheduler depends on, for ANY slot (registry-provider slots are
+  // the ones the executor actually dials since r205). It POSTs
+  // /api/vault/consume as the scheduler would, then round-trips the returned
+  // raw key through the same mask() the API uses and compares with the
+  // displayed masked preview. A match proves: endpoint reachable, slot
   // readable, key intact end-to-end. What it does NOT verify: a real LLM
-  // dial — the builtin lane is environment-credentialed in-repo; dialing
-  // with the key is the external scheduler's job. The raw key is never
-  // rendered, never logged — only the masked form ever reaches the UI.
-  async function testKey() {
-    if (!builtin) return;
-    setTesting(true);
+  // dial — dialing with the key is the external scheduler's job. The raw key
+  // is never rendered, never logged — only the masked form ever reaches the UI.
+  async function testSlot(provider: string) {
+    const slot = slots.find((s) => s.provider === provider);
+    if (!slot) return;
+    setTestingProvider(provider);
     try {
       const res = await fetch("/api/vault/consume", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider: "builtin" }),
+        body: JSON.stringify({ provider }),
       });
       if (res.status === 404) {
         toast.error("No key to test", {
@@ -236,17 +278,21 @@ export function AutomationVaultCard() {
       if (!res.ok || !json.ok || typeof json.key !== "string" || json.key.length === 0) {
         throw new Error(json.error ?? `HTTP ${res.status}`);
       }
-      const raw = json.key;
-      const masked =
-        raw.length > 12 ? `${raw.slice(0, 4)}••••${raw.slice(-4)}` : "••••••••";
-      if (masked !== builtin.maskedKey) {
+      const masked = maskOf(json.key);
+      if (masked !== slot.maskedKey) {
         toast.error("Key round-trip mismatch", {
           description:
             "The handoff endpoint returned a key that does not match the stored slot — re-store the key.",
         });
         return;
       }
-      toast.success("Vault key verified", {
+      // builtin keeps its historical "Vault key verified" toast (the D-series
+      // CDP contract asserts it verbatim); lane slots name their provider.
+      const name =
+        provider === "builtin"
+          ? "Vault"
+          : providerById(provider)?.name ?? PROVIDER_LABELS[provider] ?? provider;
+      toast.success(`${name} key verified`, {
         description: `The headless handoff returns it intact (${masked}) — closed-tab runs will dial with it.`,
       });
     } catch (e) {
@@ -254,11 +300,11 @@ export function AutomationVaultCard() {
         description: e instanceof Error ? e.message : String(e),
       });
     } finally {
-      setTesting(false);
+      setTestingProvider(null);
     }
   }
 
-  // r154: deliberate reveal-once — THREAT MODEL, honestly:
+  // r154 (per slot since r218): deliberate reveal-once — THREAT MODEL, honestly:
   // The raw key already sits in plaintext in this machine's SQLite, and
   // POST /api/vault/consume already hands it to any same-machine caller
   // (localhost-only guard since r138; the doc records the LAN spoofing caveat).
@@ -269,19 +315,19 @@ export function AutomationVaultCard() {
   // re-store, no auto-copy, no reveal-state persistence (a reload re-masks),
   // and the raw key still never reaches logs or telemetry. NOT defended:
   // a screenshot taken inside the 8s window, or malicious client-side code —
-  // the latter can already call consume directly.
-  async function revealKey() {
-    if (revealed !== null) {
+  // the latter can already call consume directly. Only ONE slot is ever on
+  // screen at a time: revealing another slot re-masks the first.
+  async function revealSlot(provider: string) {
+    if (revealed?.provider === provider) {
       maskNow();
       return;
     }
-    if (!builtin) return;
-    setRevealing(true);
+    setRevealingProvider(provider);
     try {
       const res = await fetch("/api/vault/consume", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider: "builtin" }),
+        body: JSON.stringify({ provider }),
       });
       if (res.status === 404) {
         toast.error("Nothing to reveal", {
@@ -295,7 +341,7 @@ export function AutomationVaultCard() {
       if (!res.ok || !json.ok || typeof json.key !== "string" || json.key.length === 0) {
         throw new Error(json.error ?? `HTTP ${res.status}`);
       }
-      setRevealed(json.key);
+      setRevealed({ provider, key: json.key });
       if (revealTimer.current) clearTimeout(revealTimer.current);
       revealTimer.current = setTimeout(maskNow, 8_000);
     } catch (e) {
@@ -303,11 +349,12 @@ export function AutomationVaultCard() {
         description: e instanceof Error ? e.message : String(e),
       });
     } finally {
-      setRevealing(false);
+      setRevealingProvider(null);
     }
   }
 
   return (
+    <div ref={rootRef}>
     <Card className="gap-4">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
@@ -366,10 +413,12 @@ export function AutomationVaultCard() {
               {laneSlots.map((s) => {
                 const resolvable = !!providerById(s.provider);
                 const isDialSlot = dialSlot?.provider === s.provider;
+                const slotName = providerById(s.provider)?.name ?? s.provider;
+                const isRevealed = revealed?.provider === s.provider;
                 return (
                 <li key={s.provider} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                   <KeyRound className={cn("h-3 w-3 shrink-0", isDialSlot ? "text-cyan-400" : "text-cyan-500/60")} aria-hidden />
-                  <span className="font-medium">{providerById(s.provider)?.name ?? s.provider}</span>
+                  <span className="font-medium">{slotName}</span>
                   {isDialSlot ? (
                     <span
                       title="The executor dials THIS slot for closed-tab runs: the oldest stored slot whose provider pairs with a registry endpoint (newer keys wait their turn — delete this one to promote the next)."
@@ -392,19 +441,62 @@ export function AutomationVaultCard() {
                       queued
                     </span>
                   )}
-                  <span className="font-mono tabular-nums text-muted-foreground">{s.maskedKey}</span>
+                  <span className="font-mono tabular-nums text-muted-foreground">
+                    {isRevealed ? revealed.key : s.maskedKey}
+                  </span>
+                  {isRevealed ? (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400">visible — auto-hides</span>
+                  ) : null}
                   <span
                     className="text-[10px] text-muted-foreground/70"
                     title={`stored ${s.createdAt ? new Date(s.createdAt).toLocaleString() : "unknown"} · key last updated ${new Date(s.updatedAt).toLocaleString()}`}
                   >
                     {s.createdAt ? `stored ${fmtSlotAge(s.createdAt)}` : `updated ${new Date(s.updatedAt).toLocaleString()}`}
                   </span>
+                  {/* r218: the executor-facing slots get the same per-slot
+                      verify + reveal affordances the builtin box always had. */}
+                  <button
+                    type="button"
+                    onClick={() => void revealSlot(s.provider)}
+                    disabled={revealingProvider === s.provider}
+                    aria-label={
+                      isRevealed
+                        ? `Hide stored ${slotName} key`
+                        : `Reveal stored ${slotName} key (auto-hides after 8 seconds)`
+                    }
+                    title="Deliberate reveal: shows this stored key for 8 seconds, then re-masks itself. Uses the same localhost-only handoff the headless scheduler uses — it changes who can see the key on screen, not who can already get it."
+                    className="ml-auto rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {revealingProvider === s.provider ? (
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    ) : isRevealed ? (
+                      <EyeOff className="h-3 w-3" aria-hidden />
+                    ) : (
+                      <Eye className="h-3 w-3" aria-hidden />
+                    )}
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void testSlot(s.provider)}
+                    disabled={testingProvider !== null}
+                    title="Dials /api/vault/consume exactly as the external headless scheduler would, and verifies THIS slot's stored key comes back intact — the raw key is never shown."
+                    className="h-6 gap-1 px-1.5 text-[10px]"
+                  >
+                    {testingProvider === s.provider ? (
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    ) : (
+                      <FlaskConical className="h-3 w-3" aria-hidden />
+                    )}
+                    Test
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => void removeSlot(s.provider)}
-                    className="ml-auto h-6 gap-1 px-1.5 text-[10px] text-red-500 hover:text-red-500"
+                    className="h-6 gap-1 px-1.5 text-[10px] text-red-500 hover:text-red-500"
                   >
                     <Trash2 className="h-3 w-3" aria-hidden />
                     Remove
@@ -437,29 +529,29 @@ export function AutomationVaultCard() {
                   {PROVIDER_LABELS[builtin.provider] ?? builtin.provider}
                 </span>
                 <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                  {revealed ?? builtin.maskedKey}
+                  {revealed?.provider === "builtin" ? revealed.key : builtin.maskedKey}
                 </span>
                 <button
                   type="button"
-                  onClick={revealKey}
-                  disabled={revealing}
+                  onClick={() => void revealSlot("builtin")}
+                  disabled={revealingProvider === "builtin"}
                   aria-label={
-                    revealed !== null
+                    revealed?.provider === "builtin"
                       ? "Hide stored key"
                       : "Reveal stored key (auto-hides after 8 seconds)"
                   }
                   title="Deliberate reveal: shows the stored key for 8 seconds, then re-masks itself. Uses the same localhost-only handoff the headless scheduler uses — it changes who can see the key on screen, not who can already get it."
                   className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {revealing ? (
+                  {revealingProvider === "builtin" ? (
                     <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                  ) : revealed !== null ? (
+                  ) : revealed?.provider === "builtin" ? (
                     <EyeOff className="h-3 w-3" aria-hidden />
                   ) : (
                     <Eye className="h-3 w-3" aria-hidden />
                   )}
                 </button>
-                {revealed !== null ? (
+                {revealed?.provider === "builtin" ? (
                   <span className="text-[10px] text-amber-600 dark:text-amber-400">
                     visible — auto-hides
                   </span>
@@ -528,12 +620,12 @@ export function AutomationVaultCard() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={testKey}
-                disabled={testing || saving}
+                onClick={() => void testSlot("builtin")}
+                disabled={testingProvider !== null || saving}
                 title="Dials /api/vault/consume exactly as the external headless scheduler would, and verifies the stored key comes back intact — the raw key is never shown."
                 className="shrink-0 border-cyan-500/40 text-cyan-600 transition-colors hover:bg-cyan-500/10 hover:text-cyan-600 dark:text-cyan-400"
               >
-                {testing ? (
+                {testingProvider === "builtin" ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 ) : (
                   <FlaskConical className="h-3.5 w-3.5" aria-hidden />
@@ -564,5 +656,6 @@ export function AutomationVaultCard() {
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }

@@ -142,7 +142,7 @@ async function main() {
     if (!navSettings) await new Promise((r) => setTimeout(r, 800));
   }
   if (!navSettings) throw new Error("nav to Settings failed");
-  if (!(await waitFor(ws, `document.querySelector('#vault')`, 15_000))) {
+  if (!(await waitFor(ws, `document.querySelector('#vault')`, 45_000))) {
     throw new Error("vault card did not appear");
   }
   await waitFor(ws, `${cardText()}.includes(${JSON.stringify(QA_MASK)})`, 10_000);
@@ -214,13 +214,13 @@ async function main() {
   await wsSend(ws, "Page.navigate", { url: `${BASE}/?view=settings` });
   await waitFor(ws, `document.readyState === 'complete'`);
   await new Promise((r) => setTimeout(r, 2500));
-  if (!(await waitFor(ws, `document.querySelector('#vault')`, 15_000))) {
+  if (!(await waitFor(ws, `document.querySelector('#vault')`, 45_000))) {
     // settings may need a nav click after reload depending on view routing
     await retryClickAria(ws, "Open navigation");
     await evalJs(ws, `
       [...document.querySelectorAll("button,a")].find(
         (e) => (e.textContent || "").trim() === "Settings" && e.offsetParent !== null)?.click()`);
-    await waitFor(ws, `document.querySelector('#vault')`, 15_000);
+    await waitFor(ws, `document.querySelector('#vault')`, 45_000);
   }
   await waitFor(ws, `${cardText()}.includes(${JSON.stringify(QA_MASK)})`, 10_000);
   const reloadMasked = await evalJs(ws, `${cardText()}.includes(${JSON.stringify(QA_MASK)})`);
