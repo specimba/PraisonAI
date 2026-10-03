@@ -6289,3 +6289,30 @@ Verification steps: node scripts/cdp-qa-run-panel-follow-recovery.mjs → SUMMAR
 Open risks: sync route comment-vs-code mismatch (guard on any non-empty push) is a live footgun for any future caller pushing a partial payload — candidate small fix in src/app/api/automation/sync/route.ts; editor AI auto-plan path only unit-audited (no browser test, no abort button while planning); r142 real-world vault validation still pending; rollback discipline (verify HEAD each round) kept forever.
 Blockers: none
 Next recommended action: r234 — (1) FIRST read any user report. (2) Verify HEAD lineage. (3) Either (a) tighten the sync route so the orphan guard matches the v24 comment (prune only when the push contains ≥1 enabled schedule) — small src/-level fix that keeps every existing caller honest, with the full matrix re-run after; or (b) rotate to pipelines-view polish / docs pass. Avoid workflow-editor-dialog/workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (5) Standing: tsc + eslint every code round; full matrix green (tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5).
+
+---
+Task ID: 424432 — r234
+Agent: main (platform development — hourly dev round)
+Task: r233 handoff — tighten the sync-route orphan guard to match its own v24 comment (prune only on ≥1 enabled schedule).
+
+Work Log:
+- Start-of-round: HEAD lineage verified (7c930b71f = r233 snapshot). No user report. Root 200 (14.5s cold compile).
+- Audited every POST /api/automation/sync caller before touching behavior: automation-bridge.tsx buildPayload() sends ONLY enabled:true rows (filters schedule?.enabled === true) → bridge behavior is bit-identical under the new semantics (≥1 enabled push → prune; empty push → skip, exactly as before). J-series (bridge-resync) only COUNTS heartbeat POSTs, asserts no prune semantics; vault-chip POSTs a different endpoint. Only cleanup POSTs (E5a single disabled row; N6 echo-all) sat in the danger zone.
+- FIXED src/app/api/automation/sync/route.ts: guard condition workflows.length > 0 → pushHasEnabled = workflows.some(w => w.enabled !== false), with a comment stating the true contract and why (E5a/N6 cleanup payloads previously disarmed every unrelated enabled row on any non-empty push).
+- NEW scripts/verify-r234-guard.mjs — one-shot live contract verifier, self-cleaning (qa-r234* rows only, user rows echoed verbatim): P0/P1 preflight+seed → A1 disabled-only push does NOT disarm an enabled victim row (THE fix) → A2 user rows untouched → B1 enabled-carrying push STILL prunes the orphan (v24 kept) → B2 user rows still enabled → Z0 zero enabled qa-r234 residue. RESULT: 7/7 GREEN against the live server.
+- REGRESSION SWEEP on the two direct sync-POST suites, fresh boots each: E lane-true 6/6 (E5a/E5b disabled-row path intact), N follow-recovery 9/9 (N6 echo-all path intact — and it idempotently re-swept the verifier's qa-r234* rows; detail showed otherRows=1 otherEnabled=0, zero collateral).
+- VERIFIED: tsc --noEmit → 0; eslint (route.ts + verifier) → 0 errors. Snapshot committed + pushed.
+
+Stage Summary:
+- The sync API's orphan guard now enforces exactly what its v24 comment always claimed: only a push carrying ≥1 enabled schedule is authoritative enough to prune; disabled-only pushes are heartbeats. The last footgun for cleanup-style callers is closed, proven live in both directions (7/7 verifier + E 6/6 + N 9/9).
+
+Round Handoff:
+Round ID: r235
+Task owner: main (platform dev)
+Scope completed: sync-route guard contract fix + live contract verifier (7/7) + E/N regression sweep green; snapshot pushed.
+User-visible changes: none for normal use (bridge pushes unchanged); hardening only — a push that contains no enabled schedule can no longer disable other users' enabled registry rows (matters for multi-tab/QA-profile edge cases and any future cleanup caller).
+Verification steps: node scripts/verify-r234-guard.mjs → SUMMARY: 7 passed, 0 failed; node scripts/cdp-qa-lane-true.mjs → 6/6; node scripts/cdp-qa-run-panel-follow-recovery.mjs → SUMMARY: 9 passed, 0 failed (fresh boots each). tsc 0; eslint 0; root 200.
+Verification result: PASS
+Open risks: suites not re-run this round are carried green from r231–r233 (no other surface changed; only route.ts POST semantics tightened, bridge-identical); editor AI auto-plan path still only unit-audited; r142 real-world vault validation still pending; rollback discipline (verify HEAD each round) kept forever.
+Blockers: none
+Next recommended action: r235 — (1) FIRST read any user report. (2) Verify HEAD lineage. (3) Rotate surfaces per the standing list: pipelines-view polish, a docs pass, or the editor AI auto-plan browser harness (O-series extension: mock runAgentChat → assert steps land in the editor; plus an abort affordance if planning hangs). Avoid workflow-editor-dialog save path (just shipped r232), workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (4) Standing: tsc + eslint every code round; full matrix green (tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 + r234 guard verifier 7/7).

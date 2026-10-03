@@ -61,9 +61,16 @@ export async function POST(req: Request) {
     // — any second client (QA browser profile, a second tab before hydration)
     // would otherwise disarm the primary user's registry every heartbeat
     // (proven live 2026-09-29: the QA instance re-disabled all 4 rows every
-    // 60s in a silent tug-of-war with the real tab). Empty push = heartbeat
-    // only. A push with ≥1 enabled schedule still prunes orphans.
-    if (workflows.length > 0) {
+    // 60s in a silent tug-of-war with the real tab).
+    // r234 contract fix: the guard now MATCHES that comment — prune only when
+    // the push carries ≥1 enabled schedule. Before this, ANY non-empty push
+    // pruned, so a cleanup POST of a single disabled row (E5a pattern) or a
+    // mixed payload with zero enabled rows (N6 echo-all) silently disarmed
+    // every unrelated enabled registry row. The bridge is unaffected: it only
+    // ever sends enabled:true rows (buildPayload filters on schedule.enabled),
+    // so its pushes prune exactly as before.
+    const pushHasEnabled = workflows.some((w) => w.enabled !== false);
+    if (pushHasEnabled) {
       const sentIds = new Set(workflows.map((w) => w.id));
       const all = await db.automationWorkflow.findMany({ select: { id: true, enabled: true } });
       for (const row of all) {
