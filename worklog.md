@@ -5831,3 +5831,30 @@ Verification result: PASS
 Open risks: existing persisted profiles keep the old sample run order (cosmetic trail-strip direction only — the helper fix restores correct semantics); r212's two same-panel scroll branches (stale strip / breaker strip) are the last unverified click paths; parallel-instance push hygiene (worklog-only commits lag fork — always fetch + inspect); r142 real-world validation pending.
 Blockers: none
 Next recommended action: r216 — (1) FIRST read any user report. (2) Backlog (fork-diff first): browser QA for r212's stale-strip and breaker-strip same-panel scrolls (the last two uncovered click paths); docs pass on docs/LOCAL_AUTOMATION.md if r205-r215 drifted the r149 fact-check stamp. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.
+
+---
+Task ID: 424432 — r216
+Agent: main (platform development — hourly dev round)
+Task: r215 handoff — browser QA for r212's stale-strip and breaker-strip same-panel scrolls (the last two uncovered click paths).
+
+Work Log:
+- Start-of-round discipline: fork lagged 1 commit again (parallel instance, worklog-only) — fast-forwarded fork to 47cff6d1c first. Health 200/200, no user report.
+- Built the missing fixtures honestly: scripts/qa-attention-fixture.ts (bun + the app's own Prisma client) plants ONE disposable registry row — plant-breaker (enabled:false, failStreak:3), plant-stale (enabled:true, nextRunAt 25h old), clean (delete) — exercising the REAL sync-GET read path, no mocks.
+- Browser QA found a REAL r212 wiring bug: the pulse's parked count reads SERVER registry rows, but the breaker deep-link scrolled to the workflows view's "Lane degraded" strip, which renders LOCAL client schedules only — disjoint populations. A server-parked row (the closed-tab scenario the registry exists for) rendered NOWHERE in the UI, so the attention button was a proven dead click (QA: attention counted "1 item", click, NO-STRIP). The stale branch passed immediately (strip visible after click).
+- FIXED by same-source construction: the autopilot panel now renders its own parked strip (id="automation-parked-strip", red tint, names the rows, quota-burn + resume advice) FROM THE SAME ARRAY as the pulse's count — count and cure cannot drift. focusFirstAttention's breaker branch now targets it. Server-parked schedules are visible in the UI for the first time. The local "Lane degraded" strip keeps serving local schedules (its own audience); the stale/vault branches unchanged.
+- DRIVEN TO GREEN: scripts/qa-attention-scrolls.sh → 5/5 PASS — plant-breaker → attention click → parked strip visible (top=403); plant-stale → attention click → stale strip visible (top=411); fixture cleaned (DB byte-clean). Evidence: download/r216-01-breaker.png, download/r216-02-stale.png.
+- VERIFIED: tsc --noEmit → 0 src errors; eslint (autopilot + fixture script) → 0; standing QA: tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; a11y 136/0; root → 200; snapshot pushed.
+
+Stage Summary:
+- All three r212 attention deep-links are now browser-proven (stale scroll, parked scroll, vault machinery via r213's QA) — the last verification gaps from the r212 handoff are closed. The pulse now obeys its own doctrine completely: every number it shows has a same-source surface one click away.
+
+Round Handoff:
+Round ID: r217
+Task owner: main (platform dev)
+Scope completed: same-source parked strip in the autopilot panel + deep-link rewire + 2 QA scripts (fixture planter + 5/5-GREEN scroll drive); r212's dead-click bug fixed and proven; snapshot pushed.
+User-visible changes: server-parked schedules (closed-tab breaker pauses) now render a red strip in the automation panel with names and resume advice; the pulse's "parked" attention click lands on it instead of a possibly-absent local strip.
+Verification steps: bash scripts/qa-attention-scrolls.sh → SUMMARY: 5 passed, 0 failed / QA RESULT: GREEN; tsc 0; eslint 0; tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; a11y 136/0; root 200.
+Verification result: PASS
+Open risks: fixture planting touches the live SQLite DB mid-drive (cleaned + byte-clean; the executor could in principle fire the stale row between plant and assert — window is seconds and the sandbox lane has no vault key); docs pass on docs/LOCAL_AUTOMATION.md still pending if r205-r216 drifted the r149 fact-check stamp; r142 real-world validation pending.
+Blockers: none
+Next recommended action: r217 — (1) FIRST read any user report. (2) Backlog (fork-diff first): docs pass on docs/LOCAL_AUTOMATION.md against the r149 fact-check stamp (r205-r216 changed lane semantics, resolver surface, badge, strips); then rotate surface — the vault epic or UI polish away from the workflows view. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.
