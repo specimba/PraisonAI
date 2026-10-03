@@ -6264,3 +6264,28 @@ Verification result: PASS
 Open risks: N-suite cleanup does NOT disable the DB registry row it syncs — a fired schedule can re-materialize its seeded workflow into the roster after the browser restore (observed this round; swept; fix = E5a-style sync POST with enabled:false in N5's cleanup, then rerun N); workflows-view has no series for the RUNS BOARD drawer beyond M; the editor's AI auto-plan path is only unit-logic audited, not browser-tested (maxIterations:1, no abort button while planning); r142 real-world vault validation still pending.
 Blockers: none
 Next recommended action: r233 — (1) FIRST read any user report. (2) Verify HEAD lineage. (3) Patch N5 cleanup to disable the qa-r228 DB registry row (E5a pattern: POST /api/automation/sync {workflows:[{id, enabled:false}]}) and rerun N → 8/8; consider a DB-side sweep for orphaned qa-r2xx registry rows. (4) Then rotate: pipelines-view polish or a docs pass. Avoid workflow-editor-dialog/workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (5) Standing: tsc + eslint every code round; full matrix green (tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 8/8 / O 5/5).
+
+---
+Task ID: 424432 — r233
+Agent: main (platform development — hourly dev round)
+Task: r232 handoff — kill the N-suite DB re-materialization source (N6) + standing qa-r2xx registry sweep.
+
+Work Log:
+- Start-of-round: HEAD lineage verified (b31d07907 = r232 snapshot, no rollback). Health: root 200 (13.5s cold compile). No user report.
+- Read the sync API contract end-to-end first (src/app/api/automation/sync/route.ts). CRITICAL CONTRACT FINDING: the orphan guard runs on ANY non-empty push (workflows.length > 0), not "≥1 enabled schedule" as the v24 comment claims — a bare E5a-style {workflows:[{id, enabled:false}]} cleanup POST would have silently DISABLED every unrelated enabled registry row. E-series' cleanup only got away with it because no other rows were enabled at that moment. N6 therefore echoes ALL registry rows (qa-r2* → enabled:false, others → enabled preserved verbatim, stepsJson parsed back) so sentIds covers every row and the guard disables nothing.
+- PATCHED N harness (scripts/cdp-qa-run-panel-follow-recovery.mjs): new N6 check after N5 — GET registry → echo-all POST → GET verify zero enabled qa-r2* rows; the generic "qa-r2" match doubles as the standing DB-side sweep for orphaned qa-r2xx rows (future seeds need no extra cleanup code). Detail line reports disabled ids / still-enabled ids / other-rows + other-enabled counts so collateral damage would be visible immediately.
+- RESULT: N-series 9/9 GREEN (was 8 checks). LIVE PROOF of the r232 mechanism: registry was EMPTY at suite start (BEFORE: []) yet N6 found + disabled qa-r228-wf — the bridge re-registered the enabled schedule mid-run, and N6 killed the re-materialization source at cleanup. N5 residue=0 ids=[].
+- VERIFIED: tsc --noEmit → 0; eslint on the harness → 0 errors (1 pre-existing line-70 harness warning, unchanged). Root 200. Snapshot committed + pushed (worklog committed WITH snapshot — r229 lesson).
+
+Stage Summary:
+- The N-suite now leaves zero DB trace: the last path by which a fired qa schedule could resurrect its workflow into the roster (observed r232 in O4's dump) is closed and the closure is self-verified every run. Sync-API hazard (orphan guard fires on any non-empty push) documented for every future cleanup author.
+
+Round Handoff:
+Round ID: r234
+Task owner: main (platform dev)
+Scope completed: N6 DB-registry hygiene check (N 9/9); orphan-guard contract hazard documented; snapshot pushed.
+User-visible changes: none (QA-infrastructure round; product code untouched — sync route UNCHANGED; its v24 comment is now known to understate the guard's trigger condition).
+Verification steps: node scripts/cdp-qa-run-panel-follow-recovery.mjs → SUMMARY: 9 passed, 0 failed (pkill+boot in ONE shell command; suite self-cleans localStorage AND DB). tsc 0; eslint 0; root 200. Full matrix green as of r231/r232 with N now at 9 checks.
+Open risks: sync route comment-vs-code mismatch (guard on any non-empty push) is a live footgun for any future caller pushing a partial payload — candidate small fix in src/app/api/automation/sync/route.ts; editor AI auto-plan path only unit-audited (no browser test, no abort button while planning); r142 real-world vault validation still pending; rollback discipline (verify HEAD each round) kept forever.
+Blockers: none
+Next recommended action: r234 — (1) FIRST read any user report. (2) Verify HEAD lineage. (3) Either (a) tighten the sync route so the orphan guard matches the v24 comment (prune only when the push contains ≥1 enabled schedule) — small src/-level fix that keeps every existing caller honest, with the full matrix re-run after; or (b) rotate to pipelines-view polish / docs pass. Avoid workflow-editor-dialog/workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (5) Standing: tsc + eslint every code round; full matrix green (tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5).

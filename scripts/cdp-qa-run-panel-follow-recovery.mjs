@@ -25,6 +25,9 @@
 //   N3  partial run → "Run stopped — resume anytime" card (pre-fix: none)
 //   N4  error run → "Run failed — pick a recovery option" (regression guard)
 //   N5  hygiene: praison-workflows snapshot restored — zero qa-r228 residue
+//   N6  hygiene: qa-r2* DB registry rows disabled (no re-materialization
+//       source; r232 observed a fired schedule resurrecting the workflow
+//       into the roster AFTER the browser restore)
 // Seeding doctrine (J/M-series): merge the throwaway workflow into the
 // praison-workflows persist payload, reload (hydration picks it up), restore
 // the snapshot at the end. Boot chrome + run in ONE shell command; never
@@ -367,6 +370,43 @@ async function main() {
     try { residueInfo = JSON.parse(residue); } catch {}
     check("N5 workflows store restored — zero qa-r228 residue", residueInfo.n === 0,
       `residue=${residueInfo.n} ids=${JSON.stringify(residueInfo.ids)} names=${JSON.stringify(residueInfo.names)}`);
+
+    // ── N6: disable every qa-r2* DB registry row (r232 finding). ─────────
+    // The bridge registers enabled schedules in the DB while the suite runs;
+    // a fired schedule can re-materialize its workflow into the roster AFTER
+    // the browser restore. Disable via the API's own "disabled, kept for
+    // history" path (E5a pattern) — but ECHO ALL ROWS back: the sync API's
+    // orphan guard disables any row missing from a non-empty push, so a
+    // qa-only payload would silently disarm unrelated user schedules.
+    const regBefore = await (await fetch(`${BASE}/api/automation/sync`, { cache: "no-store" })).json();
+    const regRows = regBefore?.registry ?? [];
+    const isQaRow = (r) => `${r.name ?? ""}${r.id ?? ""}`.includes("qa-r2");
+    const qaRows = regRows.filter(isQaRow);
+    if (qaRows.length > 0) {
+      const payload = regRows.map((r) => {
+        let steps = [];
+        try { steps = JSON.parse(r.stepsJson ?? "[]"); } catch {}
+        return {
+          id: r.id, name: r.name ?? r.id, task: r.task ?? "",
+          intervalMs: Number(r.intervalMs) || 900_000,
+          enabled: isQaRow(r) ? false : r.enabled === true,
+          steps,
+        };
+      });
+      const disRes = await fetch(`${BASE}/api/automation/sync`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workflows: payload }),
+      });
+      const regAfter = await (await fetch(`${BASE}/api/automation/sync`, { cache: "no-store" })).json();
+      const stillOn = (regAfter?.registry ?? []).filter((r) => isQaRow(r) && r.enabled === true);
+      const others = (regAfter?.registry ?? []).filter((r) => !isQaRow(r));
+      check("N6 qa-r2* DB registry rows disabled (no re-materialization source)",
+        disRes.ok && stillOn.length === 0,
+        `disabled=${qaRows.map((r) => r.id).join(",") || "none"} stillEnabled=${stillOn.map((r) => r.id).join(",")} otherRows=${others.length} otherEnabled=${others.filter((r) => r.enabled).length}`);
+    } else {
+      check("N6 qa-r2* DB registry rows disabled (no re-materialization source)", true,
+        "no qa-r2* rows in registry (already clean)");
+    }
   } finally {
     try { await wsSend(ws, "Page.close"); } catch {}
   }
