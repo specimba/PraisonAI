@@ -5996,3 +5996,29 @@ Verification result: PASS
 Open risks: the agents form dialog and test-agent-dialog were read-audited only at survey depth (441+433 lines) — a focused pass could still find detail bugs; r142 real-world vault validation still pending; the tool-round budget this round was consumed by the chrome-wedge + Radix pointerdown debugging (honest cost, now written down so future rounds skip it).
 Blockers: none
 Next recommended action: r222 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — the chat view's composer or memory-dialog surface (untouched for many rounds), or an agents form-dialog focused pass (required-field UX, validation feedback), or docs. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 / G-series 6/6 green.
+
+---
+Task ID: 424432 — r222
+Agent: main (platform development — hourly dev round)
+Task: r221 handoff — rotate to the chat surface (composer / memory-dialog): honest audit, then the strongest real improvement found.
+
+Work Log:
+- Start-of-round discipline: HEAD was AHEAD of fork by one commit — the parallel cron-hygiene job had committed my own r221 worklog append (27 lines, worklog-only, verified before pushing) → fork fast-forwarded to 56ff38ade. Health: root 200 (13.2s cold first compile; sandbox reaps the dev server between rounds), tracker 200. No user report.
+- Surface rotation per handoff: full read of composer.tsx (1124 lines) + memory-dialog.tsx (165). Memory-dialog: clean (honest negative). Composer honest finding: removeAttachment filtered by NAME (`prev.filter(a => a.name !== name)`) while duplicate-named attachments are legal — paste the same screenshot twice, attach same-named files from two folders (addFiles deliberately does not dedupe) — so clicking × on ONE chip silently removed every twin at once. FIXED: removal is now by INDEX. Also removed a dead `conv` variable in useSlashCommands (read store state it never used).
+- Browser-proven with a new harness, scripts/cdp-qa-composer-attachment-twins.mjs (H-series), 4/4 GREEN: H1 composer renders; H2 POSITIVE CONTROL — two same-name .txt files planted through the hidden file input (DataTransfer → input.files → synthetic change; the reliable no-CDP-upload-domain path) → exactly 2 chips render; H3 removing ONE twin leaves exactly one chip (pre-fix this read 0 — both died together); H4 the survivor still removes normally (list back to zero). Evidence: ops/qa/H2-twin-chips.png, H3-one-twin-survives.png. Attachments are component state only — nothing persisted, byte-clean by design.
+- INFRA LESSON (new variant of r221's chrome wedge, now in the H-harness header): the sandbox reaps background chrome within seconds even after setsid/nohup — two boots died between tool calls (cdp answered 200, then `fetch failed`). Fix: boot chrome AND run the suite in the SAME shell command (boot-wait loop → node). All three CDP suites this round used that pattern and went first-try green.
+- VERIFIED: tsc --noEmit → 0; eslint (composer + H-harness) → 0 errors (1 inherited harness-pattern warning); standing matrix ALL GREEN in a single batched run: tracker-mirror 17/17, lane 38 passed/0 failed, executor 26/26, B-series 46 passed, E-series 6/6, F-series 4/4, G-series 6/6; snapshot pushed (cc24160ec).
+
+Stage Summary:
+- Removing an attachment chip now removes exactly the chip you clicked — not its name-twins — proven both directions in a real browser: positive control first (twins render), then the one-of-two assertion that used to read 0.
+
+Round Handoff:
+Round ID: r223
+Task owner: main (platform dev)
+Scope completed: index-based attachment removal (r222) + H-series harness (4/4) + new chrome-reaping boot pattern; snapshot pushed (cc24160ec).
+User-visible changes: deleting one of several same-named attachments no longer deletes all of them — only the clicked chip is removed.
+Verification steps: node scripts/cdp-qa-composer-attachment-twins.mjs → SUMMARY: 4 passed, 0 failed (boot chrome + run in ONE shell command — see harness header); tsc 0; eslint 0 errors; tracker-mirror 17/17, lane 38/0, executor 26/26, B-series 46, E-series 6/6, F-series 4/4, G-series 6/6; root 200.
+Verification result: PASS
+Open risks: addFiles still does not dedupe (twins are legal state; the bug was removal semantics, now correct — but consider a "already attached" toast as future polish); slash menu Esc with zero filter matches does not clear the typed "/xx" (cosmetic inconsistency); agents form-dialog and test-agent-dialog still read-audited only at survey depth (r221 note stands); r142 real-world vault validation still pending.
+Blockers: none
+Next recommended action: r223 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — the conversation-list surface (496 lines, untouched many rounds), a chat-search or image-studio focused pass, or docs. Avoid grinding the composer again. All CDP harness runs must boot chrome and run in one shell command (r222 lesson). (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 / G-series 6/6 / H-series 4/4 green.
