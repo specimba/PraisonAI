@@ -5858,3 +5858,29 @@ Verification result: PASS
 Open risks: fixture planting touches the live SQLite DB mid-drive (cleaned + byte-clean; the executor could in principle fire the stale row between plant and assert — window is seconds and the sandbox lane has no vault key); docs pass on docs/LOCAL_AUTOMATION.md still pending if r205-r216 drifted the r149 fact-check stamp; r142 real-world validation pending.
 Blockers: none
 Next recommended action: r217 — (1) FIRST read any user report. (2) Backlog (fork-diff first): docs pass on docs/LOCAL_AUTOMATION.md against the r149 fact-check stamp (r205-r216 changed lane semantics, resolver surface, badge, strips); then rotate surface — the vault epic or UI polish away from the workflows view. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.
+
+---
+Task ID: 424432 — r217
+Agent: main (platform development — hourly dev round)
+Task: r216 handoff — docs pass on docs/LOCAL_AUTOMATION.md against the r149/r154 fact-check stamps (r205-r216 changed lane semantics, resolver surface, badge, strips).
+
+Work Log:
+- Start-of-round discipline: fork lagged 1 commit (parallel instance, worklog-only) — fast-forwarded to 086d5e982 first. Health 200/200, no user report.
+- Re-verified EVERY claim in the doc against current code, claim by claim: SYNC_INTERVAL_MS 60_000 ✓ (bridge:14), HEARTBEAT_STALE_MS 120_000 ✓ (both copies), take:25 ✓, mask first4••••last4 / MASK_MIN=12 ✓, r138 consume-guard header list ✓, run-now nextRunAt+enabled ✓, TRANSIENT_RE timeout coverage ✓, all three digest strings ✓, Test-key consume round-trip ✓, reveal ~8s re-mask ✓ (now per slot).
+- STALE facts found and fixed: (1) the vault was documented as "one row" — it is now a MULTI-SLOT table (provider @unique) with oldest-first dial promotion (r207), the builtin legacy slot skipped by the executor, slot-age display, and per-slot Test/Reveal; the section now describes slot resolution honestly (no-key/unresolvable skip → no-vault-key / no-resolvable-provider, single exported resolver r211). (2) The GET sync shape was missing the r205 `executorLane` field and mis-described `vaultLane` as current — now documented as legacy (r133) kept one release. (3) The lane chip's rendered text changed — documented from the component's actual strings. (4) Added the r212/r216 diagnostics: failure-breaker parking, the red parked strip, the amber stale strip, and the attention deep-link mapping (each surface same-source with its count).
+- Re-stamped r217 (2026-10-03) with the full verified-claim list; the GET shape was additionally verified LIVE via curl (executorLane + vaultLane present, serverDriving boolean).
+- VERIFIED: standing QA tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; root → 200; snapshot pushed.
+
+Stage Summary:
+- docs/LOCAL_AUTOMATION.md is truthful again as of r217: the vault's multi-slot promotion semantics, the executorLane field, the current chip texts, and the r212-r216 diagnostic surfaces are all documented from verified code, with the fact-check stamp naming every claim and its round.
+
+Round Handoff:
+Round ID: r218
+Task owner: main (platform dev)
+Scope completed: full docs pass + re-stamp (r217); snapshot pushed.
+User-visible changes: documentation only — the automation doc now matches the shipped vault/lane/pulse behavior.
+Verification steps: claim-by-claim grep verification (listed in the stamp), live curl of GET /api/automation/sync, standing QA suites, root 200.
+Verification result: PASS
+Open risks: the external scheduler mini-service remains outside the repo (the doc says so — real-world validation r142 still pending); vaultLane removal after the legacy window will need a one-line doc edit; parallel-instance push hygiene.
+Blockers: none
+Next recommended action: r218 — (1) FIRST read any user report. (2) Backlog (fork-diff first): rotate surface away from workflows/docs — the Local Automation Vault epic's real-world validation (r142: store a real key, let a closed-tab run dial with it) or a UI-polish item from the vault card; alternatively perf/error-handling sweep of the API routes. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.
