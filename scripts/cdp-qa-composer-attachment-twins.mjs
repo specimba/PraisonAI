@@ -115,12 +115,29 @@ async function main() {
     await waitFor(ws, `document.readyState === 'complete'`);
     await new Promise((r) => setTimeout(r, 2500));
 
-    // H1 — composer renders (chat is the default view)
-    const taOk = await waitFor(
+    // H1 — composer renders. Chat is the default view, but the ui store
+    // PERSISTS the last view (r223 lesson: a prior QA run that ended on the
+    // agents view leaves every later tab there) — so click the Chat nav item
+    // explicitly when the composer isn't already on screen.
+    let taOk = await waitFor(
       ws,
       `Boolean(document.querySelector('textarea[aria-label^="Message"]')?.offsetParent)`,
-      45_000,
+      15_000,
     );
+    if (!taOk) {
+      await evalJs(ws, `(() => {
+        const el = [...document.querySelectorAll("button,a")].find(
+          (e) => /^(Chat|New Chat)/.test((e.textContent || "").trim()) && e.offsetParent !== null);
+        if (!el) return false;
+        el.click();
+        return true;
+      })()`);
+      taOk = await waitFor(
+        ws,
+        `Boolean(document.querySelector('textarea[aria-label^="Message"]')?.offsetParent)`,
+        45_000,
+      );
+    }
     check("H1 composer textarea renders", taOk);
     if (!taOk) throw new Error("composer did not render in 45s");
 
