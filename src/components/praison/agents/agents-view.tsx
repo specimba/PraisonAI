@@ -153,6 +153,19 @@ export function AgentsView() {
   const [deleteTarget, setDeleteTarget] = React.useState<Agent | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
+  // r221: the delete dialog used to warn "Workflows that reference it will
+  // need to be updated" — a vague warning when the exact consequence is
+  // computable from the SAME workflows array this view already holds.
+  // Same-source doctrine (r216): the names in the dialog come from the one
+  // array the runner actually reads, so the warning can never drift from
+  // reality. A copy/duplicate agent (fresh id) correctly reads "none".
+  const referencingWorkflows = React.useMemo(() => {
+    if (!deleteTarget) return [] as string[];
+    return workflows
+      .filter((wf) => wf.steps.some((st) => st.agentId === deleteTarget.id))
+      .map((wf) => wf.name);
+  }, [deleteTarget, workflows]);
+
   const openCreate = () => {
     setFormAgent(null);
     setFormOpen(true);
@@ -294,7 +307,23 @@ export function AgentsView() {
             <AlertDialogTitle>Delete agent?</AlertDialogTitle>
             <AlertDialogDescription>
               This permanently removes &ldquo;{deleteTarget?.name}&rdquo; and its configuration.
-              Workflows that reference it will need to be updated.
+              {referencingWorkflows.length > 0 ? (
+                <>
+                  {" "}
+                  {referencingWorkflows.length}{" "}
+                  {referencingWorkflows.length === 1 ? "workflow" : "workflows"} reference
+                  {referencingWorkflows.length === 1 ? "s" : ""} it —{" "}
+                  <span className="font-medium text-foreground">
+                    {referencingWorkflows.slice(0, 3).join(", ")}
+                    {referencingWorkflows.length > 3
+                      ? ` and ${referencingWorkflows.length - 3} more`
+                      : ""}
+                  </span>
+                  . Those steps will run without an agent until updated.
+                </>
+              ) : (
+                <> No workflows reference it. This cannot be undone.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
