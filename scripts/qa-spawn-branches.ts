@@ -180,5 +180,42 @@ const e2e = buildAngleHistory(
 );
 ok(pickVariationAngle(TASK, e2e) === ANGLES[1], "end-to-end: router exploits the branch whose spawned pipeline scored highest (88%)");
 
+// ─── r215: latestScoredNovelty is a TIME claim, not a position claim ────────
+// The Novelty Lab sample seed stored runs oldest-first while the runner
+// prepends — the old find()-based helper returned the OLDEST score (62%),
+// masking the sample's real 22% stall and hiding the "Suggest variation"
+// path. Regression: max-startedAt selection with a first-match fallback.
+const storesSrc = fs.readFileSync("src/lib/stores.ts", "utf8");
+ok(
+  latestScoredNovelty([
+    { status: "done", novelty: 62, startedAt: 1000 },
+    { status: "done", novelty: 22, startedAt: 4000 },
+  ]) === 22,
+  "append-order runs (sample-seed shape) → the NEWEST startedAt's score wins (was 62 before r215)"
+);
+ok(
+  latestScoredNovelty([
+    { status: "done", novelty: 22, startedAt: 4000 },
+    { status: "done", novelty: 62, startedAt: 1000 },
+  ]) === 22,
+  "prepend-order runs (runner shape) → still the newest score"
+);
+ok(
+  latestScoredNovelty([{ status: "done", novelty: 62 }, { status: "done", novelty: 22 }]) === 62,
+  "no timestamps → first-match fallback preserved for legacy callers"
+);
+ok(
+  latestScoredNovelty([
+    { status: "error", startedAt: 9000 },
+    { status: "done", novelty: 22, startedAt: 4000 },
+  ]) === 22,
+  "newer unscored/error runs still don't erase the last score"
+);
+ok(latestScoredNovelty([]) === undefined, "no runs → undefined");
+ok(
+  storesSrc.indexOf("mkRun(3, 22") < storesSrc.indexOf("mkRun(0, 62"),
+  "sample seed stores runs newest-first (22 at index 0) per the runner's prepend contract"
+);
+
 console.log(`\nB-series (branch router): ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

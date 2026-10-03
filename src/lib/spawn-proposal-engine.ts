@@ -37,14 +37,29 @@ export function angleOfProposal(goal: string): string | null {
 }
 
 /**
- * Latest scored done-run novelty % for a workflow (runs are newest-first, so
- * the first scored hit wins). Skips newer unscored/error runs — a run that
- * finished before the Evolution Layer landed must not erase the last score.
+ * Latest scored done-run novelty % for a workflow (order-agnostic since
+ * r215: max startedAt wins; falls back to first hit when timestamps are
+ * absent). Skips unscored/error runs — a run that finished before the
+ * Evolution Layer landed must not erase the last score.
  */
 export function latestScoredNovelty(
-  runs: Array<{ status: string; novelty?: number }>
+  runs: Array<{ status: string; novelty?: number; startedAt?: number }>
 ): number | undefined {
-  return runs.find((r) => r.status === "done" && r.novelty != null)?.novelty;
+  // r215: "latest" is a TIME claim, not a position claim. Real runs are
+  // prepended (index 0 = newest, see the store's run insertion), but any
+  // append-order source — the Novelty Lab sample seed, future importers —
+  // silently inverted the stall signal: the helper returned the OLDEST run's
+  // score, so the sample's 62% masked its 22% stall and the "Suggest
+  // variation" path never rendered. Prefer max startedAt; fall back to
+  // first-match for callers that carry no timestamps.
+  const scored = runs.filter((r) => r.status === "done" && r.novelty != null);
+  if (scored.length === 0) return undefined;
+  if (scored.some((r) => r.startedAt != null)) {
+    return scored.reduce((best, r) =>
+      (r.startedAt ?? 0) > (best.startedAt ?? 0) ? r : best,
+    ).novelty;
+  }
+  return scored[0]?.novelty;
 }
 
 /**

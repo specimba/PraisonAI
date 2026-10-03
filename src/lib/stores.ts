@@ -860,11 +860,16 @@ export function ensureSeeded(): void {
           novelty,
         });
         wfStore.update("wf-novelty-lab", {
+          // r215: newest-first (the runner's prepend contract, stores run
+          // insertion) — the old oldest-first order made latestScoredNovelty
+          // read 62% (the oldest run) instead of 22% (the actual latest),
+          // dead on arrival for the stall chip and the "Suggest variation"
+          // path this seed exists to demo.
           runs: [
-            mkRun(0, 62, "Write a short essay on today's most interesting AI story"),
-            mkRun(1, 48, "Same weekly digest task, second edition"),
-            mkRun(2, 31, "Same weekly digest task, third edition"),
             mkRun(3, 22, "Same weekly digest task, fourth edition"),
+            mkRun(2, 31, "Same weekly digest task, third edition"),
+            mkRun(1, 48, "Same weekly digest task, second edition"),
+            mkRun(0, 62, "Write a short essay on today's most interesting AI story"),
           ],
         });
       }
