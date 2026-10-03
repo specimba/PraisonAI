@@ -269,7 +269,14 @@ export const useConversationsStore = create<ConversationsState>()(
       remove: (id) =>
         set((s) => {
           const conversations = s.conversations.filter((c) => c.id !== id);
-          const activeId = s.activeId === id ? conversations[0]?.id ?? null : s.activeId;
+          // Deleting the ACTIVE chat must land on the most recently updated
+          // remaining conversation — the row the sidebar shows on top — not
+          // conversations[0] (creation order), which diverges once an older
+          // chat has been messaged after a newer one was created.
+          const activeId =
+            s.activeId === id
+              ? [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id ?? null
+              : s.activeId;
           return { conversations, activeId };
         }),
       appendMessage: (convId, msg) =>

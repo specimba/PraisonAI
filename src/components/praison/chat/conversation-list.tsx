@@ -196,8 +196,12 @@ export function ConversationList({ onNavigate, className }: ConversationListProp
         {/* Header */}
         <div className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
           <h2 className="text-sm font-semibold">Chats</h2>
-          <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px] font-semibold">
-            {sorted.length}
+          <Badge
+            variant="secondary"
+            title={searching ? `${filtered.length} of ${sorted.length} chats match` : undefined}
+            className="h-5 min-w-5 px-1.5 text-[10px] font-semibold"
+          >
+            {searching ? filtered.length : sorted.length}
           </Badge>
           <div className="ml-auto flex items-center gap-0.5">
             <Button
