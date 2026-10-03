@@ -6050,3 +6050,30 @@ Verification result: PASS
 Open risks: date buckets in the sidebar can go stale across midnight if nothing re-renders the list (groups memo reads new Date() per filtered change — low impact, noted, not fixed); the store fallback fix's browser proof is indirect (store-level 9/9 is the direct proof; I-series covers the badge half); r142 real-world vault validation still pending; tool-round budget exceeded this round (~15) — burned by two harness bugs + the standing-matrix re-run, all lessons written into harness headers.
 Blockers: none
 Next recommended action: r224 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — a chat-search.tsx (188 lines) or image-studio.tsx (269 lines) focused pass, the agents form-dialog deep pass (standing note since r221), or docs. Avoid conversation-list/composer/stores this round. All CDP harness runs: boot chrome and run in ONE shell command, and never assume the chat view is showing (the ui store persists the last view). (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 / G-series 6/6 / H-series 4/4 / I-series 7/7 green.
+
+---
+Task ID: 424432 — r224
+Agent: main (platform development — hourly dev round)
+Task: r223 handoff — rotate to chat-search / image-studio: honest audit, then the strongest real improvements found.
+
+Work Log:
+- Start-of-round discipline: HEAD ahead of fork by the parallel cron-hygiene commit (my r223 worklog append, worklog-only +28, verified) → fork fast-forwarded to fe2b24925. Health: root 200 (14.1s cold first compile), tracker 200. No user report.
+- Surface rotation per handoff: full read of chat-search.tsx (188 lines) + image-studio.tsx (269 lines). Image-studio: honest near-negative — one typo-class wart (duplicated `e.key === "Enter" || e.key === "Enter"` condition, now cleaned). Chat-search: the real finding — buildHits CAPPED the hit list at 50 with `break`, and the readout displayed hits.length, so a conversation with 80 matches read "50 matches". Same truth-class as r223's badge bug.
+- FIXED: buildHits now returns { hits (capped at MAX_RENDERED=50), total (true count) } — counting continues past the cap; the readout reports the real total with a "· showing first 50" suffix exactly when the list is capped. The counter can no longer disagree with reality.
+- Browser-proven with a new harness, scripts/cdp-qa-search-match-truth.mjs (J-series), 7/7 GREEN: J1 a 57-message conversation seeded via the praison-conversations localStorage snapshot-merge-reload doctrine renders fully; J2 THE FIX — searching "zephyr" reads "55 matches · showing first 50" (pre-fix: "50 matches", a lie) with exactly 50 rows rendered; J3 narrow query "quokka" reads "2 matches" with no suffix; J4 Enter jumps to the first hit (msg-flash lands); J5 original localStorage snapshot restored byte-clean, zero residue. Evidence: ops/qa/J2-counter-truth.png.
+- Harness lesson paid (fixed first run): a class-selector with bracket suffix (text-[11px]) does not survive the two-layer template-literal → Runtime.evaluate escaping; replaced with a regex-text find over spans — no escaping needed.
+- VERIFIED: tsc --noEmit → 0; eslint (chat-search, image-studio, J-harness) → 0 errors (1 inherited harness-pattern warning); standing matrix ALL GREEN in one batched run: tracker-mirror 17/17, lane 38/0, executor 26/26, B-series 46, E-series 6/6, F-series 4/4, G-series 6/6, H-series 4/4, I-series 7/7; J-series 7/7; snapshot pushed (9e460555e).
+
+Stage Summary:
+- Find-in-chat now reports how many matches actually exist — the list shows the first 50 and says so, instead of quietly pretending the cap was the total.
+
+Round Handoff:
+Round ID: r225
+Task owner: main (platform dev)
+Scope completed: truth-in-counter for chat search (r224) + image-studio keydown cleanup + J-series harness (7/7) + localStorage seed/restore doctrine; snapshot pushed (9e460555e).
+User-visible changes: searching a long conversation shows the true match count with an explicit "showing first 50" note, instead of a capped count presented as the total.
+Verification steps: node scripts/cdp-qa-search-match-truth.mjs → SUMMARY: 7 passed, 0 failed (boot chrome + run in ONE shell command); tsc 0; eslint 0 errors; tracker-mirror 17/17, lane 38/0, executor 26/26, B-series 46, E-series 6/6, F-series 4/4, G-series 6/6, H-series 4/4, I-series 7/7; root 200.
+Verification result: PASS
+Open risks: search matches only the FIRST occurrence per message (one hit per message — by design but undocumented); the find panel has no ↑↓ hit navigation (aria-selected is statically false — future keyboard-nav polish); r142 real-world vault validation still pending.
+Blockers: none
+Next recommended action: r225 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — the agents form-dialog deep pass (standing note since r221: required-field UX, validation feedback), the test-agent-dialog, or docs. Avoid chat-search/image-studio/conversation-list/composer. All CDP harness runs: boot chrome and run in ONE shell command; never assume the chat view is showing. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 / G-series 6/6 / H-series 4/4 / I-series 7/7 / J-series 7/7 green.
