@@ -5969,3 +5969,30 @@ Verification result: PASS
 Open risks: r142 real-world validation (real vault key, closed-tab dial) still pending — the epic's last unproven leg; QA-script lint carries 2 inherited style warnings (harness-wide ternary pattern — fix once across all cdp-qa scripts if it ever errors); parallel-instance push hygiene (fetch + inspect — this round the foreign commit was my own worklog append, confirm content before pushing).
 Blockers: none
 Next recommended action: r221 — (1) FIRST read any user report. (2) Backlog (fork-diff first): rotate surface per the rotation doctrine — the agents view hasn't been touched in many rounds (UI-polish sweep or an honest audit of its data-loading patterns), or r142 real-world vault validation if a real key is available in the environment, or a perf/error-handling sweep wherever an honest look finds something. Avoid grinding tracker/workflows/vault again this round. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 green.
+
+---
+Task ID: 424432 — r221
+Agent: main (platform development — hourly dev round)
+Task: r220 handoff — rotate surface to the agents view (untouched many rounds): honest audit, then the strongest real improvement found.
+
+Work Log:
+- Start-of-round discipline: fork lagged 1 commit — again the parallel cron-hygiene job committing my own r220 worklog append (27 lines, worklog-only, verified with git show --stat) — fast-forwarded fork to b4da5d37f. Health: root 200 (14.1s cold first compile; sandbox reaps the dev server between rounds). No user report.
+- Agents-view audit: data loading is 100% local-store (conversations + workflows via zustand) — no server state, so the r219 staleness class cannot apply (honest negative). The real finding was a HONESTY gap: the delete dialog warned "Workflows that reference it will need to be updated" — a vague, unverifiable warning, when the exact breakage is computable from the SAME workflows array the view already holds.
+- FIXED (same-source doctrine, r216): the delete dialog now NAMES its real consequences — "N workflows reference it — A, B, C (+N more). Those steps will run without an agent until updated." — or, when nothing references the agent (fresh agents, duplicates), "No workflows reference it. This cannot be undone." The names come from the one array the runner reads, so the warning can never drift from reality. A duplicate (fresh id) correctly reads "none".
+- Browser-proven with a new harness, scripts/cdp-qa-agent-delete-references.mjs (G-series), 6/6 GREEN: G1 roster renders; G2 a referenced seeded agent's dialog names ≥1 real workflow (read: "4 workflows reference it — Novelty Lab (sample), Deep Research Dossier…"); G3a duplicate creates "<name> copy"; G3b the copy's dialog reads "No workflows reference it"; G3c the throwaway copy is actually deleted end-to-end (card gone, no residue — originals never deleted); G4 roster intact. Evidence: ops/qa/G2-delete-dialog-names-workflows.png, G3b-copy-dialog-no-references.png.
+- TWO INFRA LESSONS paid for this round (both now documented in the harness header): (1) a wedged/zombie chrome-headless-shell from a prior round made the CDP boot fetch hang forever — pkill + clean relaunch + hard `timeout` wrapper on every run; (2) the big one: Radix DropdownMenuTrigger opens on POINTERDOWN — a synthetic el.click() never opens the menu, so every kebab interaction silently starved through its retries (the 300s harness hang). Fix: dispatch the full pointer sequence (PointerEvent pointerdown + mousedown + click) at the element's center; dialogs close by CLICKING Cancel — Escape dispatch proved unreliable. Any future harness that opens a Radix dropdown must do the same.
+- VERIFIED: tsc --noEmit → 0; eslint (component + harness) → 0 errors; standing QA: tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; G-series 6/6; snapshot pushed (0ce3b8d7a).
+
+Stage Summary:
+- Deleting an agent now tells the truth about what breaks, with names, before the destructive click — and proves both directions in a real browser (referenced → named list; copy → none) with the destructive path exercised only on a throwaway duplicate.
+
+Round Handoff:
+Round ID: r222
+Task owner: main (platform dev)
+Scope completed: consequence-naming delete dialog (r221) + G-series harness (6/6) + two harness infra lessons (clean-chrome relaunch discipline, Radix pointerdown requirement); snapshot pushed (0ce3b8d7a).
+User-visible changes: the agent delete dialog names exactly which workflows reference the agent (or states none do) instead of a vague warning.
+Verification steps: node scripts/cdp-qa-agent-delete-references.mjs → SUMMARY: 6 passed, 0 failed (chrome may need pkill+relaunch first — see harness header); tsc 0; eslint 0 errors; tracker-mirror 17/17, lane 38/38, executor 26/26, spawn-branches 46/46; root 200.
+Verification result: PASS
+Open risks: the agents form dialog and test-agent-dialog were read-audited only at survey depth (441+433 lines) — a focused pass could still find detail bugs; r142 real-world vault validation still pending; the tool-round budget this round was consumed by the chrome-wedge + Radix pointerdown debugging (honest cost, now written down so future rounds skip it).
+Blockers: none
+Next recommended action: r222 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — the chat view's composer or memory-dialog surface (untouched for many rounds), or an agents form-dialog focused pass (required-field UX, validation feedback), or docs. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 / G-series 6/6 green.
