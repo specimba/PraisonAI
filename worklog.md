@@ -6077,3 +6077,29 @@ Verification result: PASS
 Open risks: search matches only the FIRST occurrence per message (one hit per message — by design but undocumented); the find panel has no ↑↓ hit navigation (aria-selected is statically false — future keyboard-nav polish); r142 real-world vault validation still pending.
 Blockers: none
 Next recommended action: r225 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — the agents form-dialog deep pass (standing note since r221: required-field UX, validation feedback), the test-agent-dialog, or docs. Avoid chat-search/image-studio/conversation-list/composer. All CDP harness runs: boot chrome and run in ONE shell command; never assume the chat view is showing. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6 / F-series 4/4 / G-series 6/6 / H-series 4/4 / I-series 7/7 / J-series 7/7 green.
+
+---
+Task ID: 424432 — r225
+Agent: main (platform development — hourly dev round)
+Task: r224 handoff — agents form-dialog deep pass (standing note since r221: required-field UX, validation feedback).
+
+Work Log:
+- Start-of-round discipline: fork-diff clean (only my own r224 worklog append outstanding). Health: root 200 (13.8s cold compile), tracker 200. No user report.
+- Surface per handoff: full audit of agent-form-dialog.tsx (441 lines) + test-agent-dialog.tsx (433 lines). Test-dialog: honest near-negative (r163 retry/kind-chips already solid). Form-dialog: confirmed the r221 note — name validation was SPLIT across two dishonest paths. EMPTY name → native `required` bubble (unstyled, not focus-managed, SR-silent); WHITESPACE-ONLY name sailed past `required` (non-empty value) into handleSave → a transient toast with ZERO field-level feedback and no pointer to the problem.
+- FIXED (one honest path): form is now noValidate (native `required` stays for semantics only); both empty and whitespace-only names land on inline state — error <p id="agent-name-error"> under the field ("Name is required — give this agent something to be called."), aria-invalid + aria-describedby wired, destructive border/ring, focus pulled to the input, dialog stays open. Error clears the moment a real name is typed (no submit needed), resets on dialog reopen.
+- Browser-proven with a new harness, scripts/cdp-qa-agent-form-validation.mjs (K-series), 9/9 GREEN on first run: K1 dialog opens from any persisted view + form.noValidate verified; K2 empty submit → inline error + aria-invalid/describedby + focus pulled + dialog stays; K3 whitespace-only submit → same honest state (pre-fix: toast-only dead end); K4 typing clears the error immediately; K5 valid submit → "Agent created" toast + dialog closed + praison-agents snapshot restored byte-clean, zero qa-r225 residue. Evidence: ops/qa/K2-inline-error.png, ops/qa/K5-restored.png.
+- VERIFIED: tsc --noEmit → 0; eslint (agent-form-dialog, K-harness) → 0 errors (1 inherited harness-pattern warning, documented as accepted). Standing matrix ALL GREEN: tracker-mirror 17/17, lane 38/0, executor 26/26, B-series 46; E-series lane-true 6/6 + vault-slot-affordances 6/6; F-series vault-slot-residue 4/4 + vault-guard 11/11; G-series 6/6; H-series 4/4; I-series 7/7; K-series 9/9; root 200.
+
+Stage Summary:
+- The Create/Edit Agent form now tells you the name is required AT the field, with focus and screen-reader wiring, whether the name is empty or just whitespace — no browser bubble, no vanishing toast.
+
+Round Handoff:
+Round ID: r226
+Task owner: main (platform dev)
+Scope completed: inline name validation for the agent form dialog (r225) + K-series harness (9/9) + full standing matrix re-run; snapshot pushed.
+User-visible changes: submitting the agent form without a usable name shows a persistent inline error at the Name field (destructive ring, helper text, focus, aria-invalid) instead of a browser bubble or a transient toast; the error clears as soon as a real name is typed.
+Verification steps: node scripts/cdp-qa-agent-form-validation.mjs → SUMMARY: 9 passed, 0 failed (boot chrome + run in ONE shell command; never assume the chat view is showing); tsc 0; eslint 0 errors; standing matrix green as listed above; root 200.
+Verification result: PASS
+Open risks: tool-round budget exceeded again (~18) — burned by the three per-check-format suites printing no SUMMARY line (my output filter hid their results; one silent re-run round to recover) — future batched runs should rg "✅|❌|SUMMARY|FATAL|PASS|FAIL" and count per-suite exits; the agents view has more dialogs (import/export, delete confirm) not yet under a series; r142 real-world vault validation still pending.
+Blockers: none
+Next recommended action: r226 — (1) FIRST read any user report. (2) Backlog (fork-diff first): keep rotating — candidates: the agents-view import/export flow audit, pipelines view polish, or a docs pass. Avoid agent-form-dialog/chat-search/image-studio/conversation-list/composer. All CDP harness runs: boot chrome and run in ONE shell command; filter rg must include the per-check glyphs (✅|❌|PASS|FAIL), not just SUMMARY. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E-series 6/6+6/6 / F-series 4/4+11/11 / G-series 6/6 / H-series 4/4 / I-series 7/7 / J-series 7/7 / K-series 9/9 green.

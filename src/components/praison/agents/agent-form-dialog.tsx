@@ -74,6 +74,13 @@ export function AgentFormDialog({
   const providerSettings = useSettingsStore((s) => s.settings);
 
   const [name, setName] = React.useState("");
+  // r225: the two name-validation paths used to be split — an EMPTY name got
+  // the browser's native `required` bubble (unstyled, silent to screen
+  // readers until focus) while a WHITESPACE-ONLY name sailed past `required`
+  // and got only a transient toast with zero field-level feedback. Both now
+  // land on one honest inline state: error text under the field,
+  // aria-invalid + describedby, destructive ring, and focus pulled to it.
+  const [nameError, setNameError] = React.useState(false);
   const [emoji, setEmoji] = React.useState("");
   const [color, setColor] = React.useState<AgentColor>("violet");
   const [role, setRole] = React.useState("");
@@ -83,6 +90,7 @@ export function AgentFormDialog({
   const [temperature, setTemperature] = React.useState(0.7);
   const [maxIterations, setMaxIterations] = React.useState(6);
   const [tools, setTools] = React.useState<ToolId[]>([]);
+  const nameRef = React.useRef<HTMLInputElement | null>(null);
 
   // Dirty tracking: a baseline snapshot is seeded on every open; any drift
   // arms a discard confirmation instead of silently losing typed instructions.
@@ -179,6 +187,7 @@ export function AgentFormDialog({
     setTemperature(next.temperature);
     setMaxIterations(next.maxIterations);
     setTools(next.tools);
+    setNameError(false);
     setBaseline(JSON.stringify(next));
     setConfirmDiscard(false);
   }, [open, agent]);
@@ -189,7 +198,9 @@ export function AgentFormDialog({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      toast.error("Agent needs a name");
+      // Inline, at the field — the transient toast never pointed anywhere.
+      setNameError(true);
+      nameRef.current?.focus();
       return;
     }
     const payload = {
@@ -236,19 +247,35 @@ export function AgentFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSave} className="space-y-4">
+        {/* noValidate: native `required` stays for semantics, but validation
+            is handled in code so empty and whitespace-only names get the SAME
+            inline, focus-managed feedback instead of a browser bubble. */}
+        <form onSubmit={handleSave} noValidate className="space-y-4">
           {/* Name + emoji */}
           <div className="flex gap-3">
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="agent-name">Name</Label>
               <Input
                 id="agent-name"
+                ref={nameRef}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  // Typing a real name clears the error immediately.
+                  if (e.target.value.trim()) setNameError(false);
+                }}
                 placeholder="e.g. Research Scout"
                 required
                 autoFocus
+                aria-invalid={nameError || undefined}
+                aria-describedby={nameError ? "agent-name-error" : undefined}
+                className={cn(nameError && "border-destructive focus-visible:ring-destructive/40")}
               />
+              {nameError ? (
+                <p id="agent-name-error" className="text-xs text-destructive">
+                  Name is required — give this agent something to be called.
+                </p>
+              ) : null}
             </div>
             <div className="w-20 space-y-1.5">
               <Label htmlFor="agent-emoji">Emoji</Label>
