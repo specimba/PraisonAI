@@ -534,8 +534,8 @@ interface UiState {
   setupWizardProviderId: string | null;
   /** Image Studio dialog (BYOK image generation) visibility. */
   imageStudioOpen: boolean;
-  /** Scroll target inside Settings ("providers" | "local-models" | "vault" — r125) — consumed by SettingsView. */
-  settingsAnchor: "providers" | "local-models" | "vault" | null;
+  /** Scroll target inside Settings ("providers" | "local-models" | "vault" | "evolution" — r125/r213) — consumed by SettingsView. */
+  settingsAnchor: "providers" | "local-models" | "vault" | "evolution" | null;
   setView: (v: View) => void;
   setMobileNavOpen: (v: boolean) => void;
   toggleChatList: () => void;
@@ -552,7 +552,7 @@ interface UiState {
   setBoardWorkflowFilter: (id: string | null) => void;
   openSetupWizard: (providerId?: string) => void;
   setSetupWizardOpen: (v: boolean) => void;
-  setSettingsAnchor: (a: "providers" | "local-models" | "vault" | null) => void;
+  setSettingsAnchor: (a: "providers" | "local-models" | "vault" | "evolution" | null) => void;
   /** Evolution archive row asked to spotlight a pipeline card (WorkflowsView consumes + auto-clears). */
   requestHighlightWorkflow: (workflowId: string) => void;
   clearHighlightWorkflow: () => void;

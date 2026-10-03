@@ -636,6 +636,53 @@ function RunRouterChip({
   );
 }
 
+// ─── r213: the per-workflow variation aggregate badge ───────────────────────
+// RunRouterChip answers "what did THIS run trigger?"; this badge answers
+// "how much variation came out of this pipeline overall?" — aggregating every
+// SpawnProposal sourced from the workflow (stalled runs + manual suggestions),
+// visible from any run the panel is open for. Click deep-links to the
+// Evolution section that owns the spawn inbox (same doctrine as r212: signal
+// → remediation surface). Violet while the inbox holds undecided rows.
+function VariationBadge({
+  count,
+  openCount,
+  acceptedCount,
+  dismissedCount,
+  onOpen,
+}: {
+  count: number;
+  openCount: number;
+  acceptedCount: number;
+  dismissedCount: number;
+  onOpen: () => void;
+}) {
+  const attention = openCount > 0;
+  const statusLine = [
+    openCount ? `${openCount} open in the inbox` : null,
+    acceptedCount ? `${acceptedCount} accepted` : null,
+    dismissedCount ? `${dismissedCount} dismissed` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const noun = count === 1 ? "variation" : "variations";
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`${count} ${noun} sourced from this pipeline\n${statusLine}\nClick to open the Evolution section`}
+      aria-label={`${count} ${noun} sourced from this pipeline — open the Evolution section`}
+      className={cn(
+        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
+        attention
+          ? "bg-violet-500/15 text-violet-600 hover:bg-violet-500/25 dark:text-violet-400"
+          : "bg-muted text-muted-foreground hover:bg-accent",
+      )}
+    >
+      🧬 {count} {noun}
+    </button>
+  );
+}
+
 interface WorkflowRunPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -683,6 +730,18 @@ export function WorkflowRunPanel({
   const viewedProposal = viewedRun
     ? proposals.find((p) => p.sourceRunId === viewedRun.id) ?? null
     : null;
+  // r213: per-workflow variation aggregate — the r209 chip names the decision
+  // for ONE run (and only when the panel is opened on that exact run); this
+  // aggregation answers "how many variations has this pipeline produced?"
+  // across every run plus manual suggestions, visible from ANY run.
+  const wfVariations = liveWorkflow
+    ? proposals.filter((p) => p.sourceWorkflowId === liveWorkflow.id)
+    : [];
+  const wfVarOpen = wfVariations.filter((p) => p.status === "open").length;
+  const wfVarAccepted = wfVariations.filter(
+    (p) => p.status === "accepted",
+  ).length;
+  const wfVarDismissed = wfVariations.length - wfVarOpen - wfVarAccepted;
   // Stop must survive navigation: after a remount the local abort handle is
   // gone, so derive "in flight" from the followed run and fall back to the
   // runner's live controller registry when stopping.
@@ -1103,6 +1162,20 @@ export function WorkflowRunPanel({
                 chip, surfaced the moment the panel opens for this run. */}
             {viewedProposal && (
               <RunRouterChip prop={viewedProposal} workflows={workflows} />
+            )}
+            {/* r213: per-workflow aggregate — how many variations this pipeline
+                has sourced overall, clickable into the Evolution inbox. */}
+            {liveWorkflow && wfVariations.length > 0 && (
+              <VariationBadge
+                count={wfVariations.length}
+                openCount={wfVarOpen}
+                acceptedCount={wfVarAccepted}
+                dismissedCount={wfVarDismissed}
+                onOpen={() => {
+                  useUiStore.getState().setView("settings");
+                  useUiStore.getState().setSettingsAnchor("evolution");
+                }}
+              />
             )}
             {scheduleEnabled && (
               <span
