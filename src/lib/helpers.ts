@@ -18,6 +18,22 @@ export function uid(prefix = "id"): string {
   return `${prefix}_${rand}`;
 }
 
+// First user-perceived character — flags (🇺🇸 is 2 code points / 4 UTF-16
+// units) and ZWJ sequences survive; a plain 2-unit slice left half a flag.
+// Shared doctrine (r75/r216, one implementation, zero copies): the agent
+// form dialog (emoji input) and the import sanitizer (agents-view) both
+// need it, and they must never disagree about what one emoji is.
+export function firstGrapheme(s: string): string {
+  const t = s.trim();
+  if (!t) return "";
+  try {
+    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    return seg.segment(t)[Symbol.iterator]().next().value?.segment ?? "";
+  } catch {
+    return [...t][0] ?? "";
+  }
+}
+
 export function truncate(s: string, n: number): string {
   if (!s) return "";
   return s.length <= n ? s : s.slice(0, n - 1) + "…";

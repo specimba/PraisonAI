@@ -17,7 +17,7 @@ import {
 import { AgentAvatar, EmptyState, ModelBadge, PageHeader, ToolBadge } from "@/components/praison/atoms";
 import { AgentFormDialog } from "@/components/praison/agents/agent-form-dialog";
 import { TestAgentDialog } from "@/components/praison/agents/test-agent-dialog";
-import { downloadJson, fmtRel } from "@/lib/helpers";
+import { downloadJson, firstGrapheme, fmtRel } from "@/lib/helpers";
 import { useAgentsStore, useConversationsStore, useWorkflowsStore } from "@/lib/stores";
 import type { Agent, AgentColor, ToolId } from "@/lib/types";
 
@@ -36,8 +36,15 @@ function slugify(name: string): string {
   );
 }
 
-/** Validate an untrusted parsed value as an Agent; returns null when unusable. */
-function sanitizeAgent(raw: unknown): Agent | null {
+/** Validate an untrusted parsed value as an Agent; returns null when unusable.
+ *  Exported for the agent-io unit suite (scripts/qa-agent-io.ts).
+ *  `existingIds` lets the caller guarantee batch-unique ids: an entry whose
+ *  original id is well-formed AND not yet taken keeps it (export → wipe →
+ *  import then RESTORES workflow wiring — the delete dialog warns "steps
+ *  will run without an agent until updated", and fresh-id import could
+ *  never undo that). Re-importing onto an existing roster keeps the old
+ *  behavior: every id collides → fresh copies, nothing clobbered. */
+export function sanitizeAgent(raw: unknown, existingIds: Set<string> = new Set()): Agent | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const name = typeof r.name === "string" ? r.name.trim() : "";
@@ -45,10 +52,19 @@ function sanitizeAgent(raw: unknown): Agent | null {
   const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
   const num = (v: unknown, min: number, max: number, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+  // r226: keep the original id when it is a well-formed agent id and not
+  // already in the roster; stamp() falls back to uid() only when we drop it.
+  const rawId = typeof r.id === "string" ? r.id : "";
+  const id = /^agent_[a-z0-9]+$/.test(rawId) && !existingIds.has(rawId)
+    ? rawId
+    : `agent_${Math.random().toString(36).slice(2, 14)}`;
   return {
-    id: `agent_${Math.random().toString(36).slice(2, 14)}`,
+    id,
     name: name.slice(0, 60),
-    emoji: str(r.emoji, "🤖").slice(0, 2) || "🤖",
+    // r226: flags are 2 code points / 4 UTF-16 units — .slice(0, 2) cut them
+    // in half on import (the form dialog fixed the same bug on input; the
+    // sanitizer now shares firstGrapheme, so both agree on what one emoji is).
+    emoji: firstGrapheme(str(r.emoji)) || "🤖",
     color: VALID_COLORS.includes(r.color as AgentColor)
       ? (r.color as AgentColor)
       : "violet",
@@ -209,9 +225,18 @@ export function AgentsView() {
         toast.error("Invalid agent file", { description: "Expected an agents array or a PraisonAI export." });
         return;
       }
-      const imported = list
-        .map(sanitizeAgent)
-        .filter((a): a is Agent => a !== null)
+      const existingIds = new Set(agents.map((a) => a.id));
+      // Feed each preserved id back into the set so duplicate ids WITHIN one
+      // file cannot land twice — the roster never gets two agents with the
+      // same id.
+      const imported: Agent[] = [];
+      for (const entry of list) {
+        const a = sanitizeAgent(entry, existingIds);
+        if (a) {
+          existingIds.add(a.id);
+          imported.push(a);
+        }
+      }
       if (imported.length === 0) {
         toast.error("No valid agents found in that file.");
         return;

@@ -32,7 +32,7 @@ import { FREE_PROVIDERS, loadLiveCatalog, providerModelOptions } from "@/lib/pro
 import { relayHealthSnapshot } from "@/lib/relay";
 import { withRelayHealth } from "@/lib/relay-health";
 import type { Agent, AgentColor, ToolId } from "@/lib/types";
-import { uid } from "@/lib/helpers";
+import { firstGrapheme, uid } from "@/lib/helpers";
 import { useAgentsStore, useSettingsStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
@@ -47,19 +47,9 @@ const COLOR_SWATCHES: { id: AgentColor; gradient: string; ring: string }[] = [
   { id: "fuchsia", gradient: "from-fuchsia-500 to-pink-600", ring: "ring-fuchsia-500" },
 ];
 
-// First user-perceived character — flags (🇺🇸 is 2 code points / 4 UTF-16
-// units) and ZWJ sequences survive; a plain 2-unit maxLength left half a flag.
-function firstGrapheme(s: string): string {
-  const t = s.trim();
-  if (!t) return "";
-  try {
-    const seg = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    return seg.segment(t)[Symbol.iterator]().next().value?.segment ?? "";
-  } catch {
-    return [...t][0] ?? "";
-  }
-}
-
+// First user-perceived character — shared from lib/helpers (r226): the
+// import sanitizer needs the exact same notion of "one emoji"; a local
+// copy here could drift from it.
 export function AgentFormDialog({
   open,
   onOpenChange,
