@@ -108,6 +108,19 @@ const STEP_BORDER: Record<WorkflowRunStep["status"], string> = {
   skipped: "border-l-zinc-500",
 };
 
+// r228: every ended status the runner emits that owes the user a recovery
+// affordance. The panel gate used to render RunRecoveryCard only for
+// error|stopped, leaving "partial" (user-ended with preserved progress) and
+// "blocked" (parked by congestion/network — auto-resumes) with NO card even
+// though the card ships dedicated copy for both ("Run parked — auto-resume
+// scheduled"). "running"/"done" correctly stay out.
+const RECOVERY_STATUSES: ReadonlySet<WorkflowRun["status"]> = new Set([
+  "error",
+  "stopped",
+  "partial",
+  "blocked",
+]);
+
 // ── r130 call-log grouping ──────────────────────────────────────────────────
 // After an outage, the flat call log drowns in repeated r126 resilience notes
 // ("primary skipped — … (Ns left)") — one per later step of the pipeline.
@@ -718,6 +731,9 @@ export function WorkflowRunPanel({
   const [, scheduleTick] = React.useReducer((n: number) => n + 1, 0);
   const abortRef = React.useRef<AbortController | null>(null);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  // r228: the run the auto-follow effect has already followed for THIS panel
+  // open — lets a manual history selection win over the follow (see below).
+  const followedRunIdRef = React.useRef<string | null>(null);
 
   const liveWorkflow = workflow
     ? workflows.find((w) => w.id === workflow.id) ?? workflow
@@ -760,6 +776,7 @@ export function WorkflowRunPanel({
     setViewingRunId(initialRunId ?? null);
     setHistoryOpen(false);
     abortRef.current = null;
+    followedRunIdRef.current = null;
   }, [open, workflow, initialRunId]);
 
   // Auto-scroll the output area to the bottom while a run streams
@@ -772,14 +789,21 @@ export function WorkflowRunPanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [outputLen, stepCount, running]);
 
-  // Follow a run started elsewhere (e.g. the scheduler) for the open workflow
+  // Follow a run started elsewhere (e.g. the scheduler) for the open workflow.
+  // r228: follow each running run exactly ONCE per panel-open. The old effect
+  // re-fired on every viewingRunId change, so while a scheduled run streamed,
+  // clicking ANY history row snapped the view straight back — the user could
+  // not inspect past runs until the stream ended. The ref remembers what was
+  // followed; manual selections always win afterwards, and a NEW running run
+  // (new id) still pulls focus once, as before.
   const latestRun = liveWorkflow?.runs[0];
   React.useEffect(() => {
     if (!open || running || !latestRun) return;
-    if (latestRun.status === "running" && viewingRunId !== latestRun.id) {
+    if (latestRun.status === "running" && followedRunIdRef.current !== latestRun.id) {
+      followedRunIdRef.current = latestRun.id;
       setViewingRunId(latestRun.id);
     }
-  }, [open, running, latestRun, viewingRunId]);
+  }, [open, running, latestRun]);
 
   // Keep the schedule countdown honest while the panel is open
   const scheduleEnabled = schedule?.enabled === true;
@@ -1373,7 +1397,7 @@ export function WorkflowRunPanel({
                 </p>
               ) : null}
               {/* Non-silent failure fallback: options + information, never just a dead end */}
-              {!running && (viewedRun.status === "error" || viewedRun.status === "stopped") && liveWorkflow ? (
+              {!running && RECOVERY_STATUSES.has(viewedRun.status) && liveWorkflow ? (
                 <RunRecoveryCard
                   key={viewedRun.id}
                   run={viewedRun}
