@@ -5804,3 +5804,30 @@ Verification result: PARTIAL (2/5 steps green this round; empty-state badge beha
 Open risks: sample-run bootstrap seed may be gated on a first-boot condition that a fresh profile doesn't hit — inspect the wf-novelty-lab seed guard in stores.ts before re-running; r212's two same-panel scroll branches still unverified; parallel-instance push hygiene; r142 real-world validation pending.
 Blockers: none
 Next recommended action: r215 — (1) FIRST read any user report. (2) Backlog (fork-diff first): fix the qa-variation-badge seed precondition and drive it to GREEN (the ONLY missing step — everything else is proven); then r212's stale/breaker same-panel scroll QA. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 green.
+
+---
+Task ID: 424432 — r215
+Agent: main (platform development — hourly dev round)
+Task: r214 handoff — fix the qa-variation-badge seed precondition and drive the harness to GREEN.
+
+Work Log:
+- Start-of-round discipline: fork lagged 1 commit again (parallel instance committed my r214 worklog append, worklog-only, never pushed) — fast-forwarded fork to 50a5be79e first. Health 200/200, no user report.
+- ROOT-CAUSED the r214 SUGGEST-NOT-FOUND as a REAL product bug, not a QA quirk: latestScoredNovelty used runs.find() — "latest by array position". The real runner PREPENDS runs (newest at index 0) so real data was correct, but the Novelty Lab sample seed stored runs OLDEST-FIRST → the helper returned the OLDEST score (62%) instead of the actual latest (22%) → 22<35 stall never detected → the "Suggest variation" demo path this seed exists to showcase was dead on arrival for every first visitor. The trail-strip direction was likewise inverted.
+- FIXED both layers: (1) helper is now order-agnostic — max startedAt wins, first-match fallback preserved for timestamp-less callers, doc comment corrected; (2) sample seed reordered newest-first with the prepend contract documented in-place. Existing profiles with the old persisted order are ALSO healed by the helper fix (their runs carry startedAt), so no migration needed.
+- REGRESSION-COVERED: 6 new assertions in qa-spawn-branches.ts (append-order → newest wins; prepend-order → unchanged; no-timestamp fallback; error-run skip; empty; seed-order source check). Engine QA now 46/46.
+- DRIVEN TO GREEN: bash scripts/qa-variation-badge.sh → 6/6 PASS — nav, SUGGEST-CLICKED (the previously blocked step, now working), run panel, badge render ("🧬 1 variation", violet 15% bg), badge click, EVOLUTION anchored=true. The r213 deep-link is now proven END-TO-END in a real browser with zero fixtures.
+- VERIFIED: tsc --noEmit → 0 src errors; eslint (engine + stores + QA) → 0; standing QA: tracker-mirror 17/17, lane 38/38, executor 26/26; a11y 136/0; root → 200; snapshot pushed (ef35104dc).
+
+Stage Summary:
+- The Evolution stall signal is truthful by construction now (time-based, not position-based), the sample demo actually demos, and the r213 badge click path is browser-proven green. Two known verification gaps closed in two rounds (r213 deep-link this round; r212's same-panel scrolls remain).
+
+Round Handoff:
+Round ID: r216
+Task owner: main (platform dev)
+Scope completed: latestScoredNovelty order-agnostic fix + sample seed reorder + 6 regression assertions + qa-variation-badge.sh driven to 6/6 GREEN; snapshot pushed (ef35104dc).
+User-visible changes: the Novelty Lab sample's stall chip, trail strip, and "Suggest variation" button now work on first visit; any workflow whose runs arrive append-order reads its true latest novelty.
+Verification steps: bash scripts/qa-variation-badge.sh → SUMMARY: 6 passed, 0 failed / QA RESULT: GREEN; bun scripts/qa-spawn-branches.ts → 46/46; tsc 0; eslint 0; tracker-mirror 17/17, lane 38/38, executor 26/26; a11y 136/0; root 200.
+Verification result: PASS
+Open risks: existing persisted profiles keep the old sample run order (cosmetic trail-strip direction only — the helper fix restores correct semantics); r212's two same-panel scroll branches (stale strip / breaker strip) are the last unverified click paths; parallel-instance push hygiene (worklog-only commits lag fork — always fetch + inspect); r142 real-world validation pending.
+Blockers: none
+Next recommended action: r216 — (1) FIRST read any user report. (2) Backlog (fork-diff first): browser QA for r212's stale-strip and breaker-strip same-panel scrolls (the last two uncovered click paths); docs pass on docs/LOCAL_AUTOMATION.md if r205-r215 drifted the r149 fact-check stamp. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 green.
