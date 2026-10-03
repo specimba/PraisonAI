@@ -5778,3 +5778,29 @@ Verification result: PASS
 Open risks: badge click-scroll not browser-QA'd with planted fixtures (noted, not hidden); parallel-instance duplication (fork-diff first — held clean this round); r142 real-world validation still pending; watcher data still empty since the rollback until a real sync.
 Blockers: none
 Next recommended action: r214 — (1) FIRST read any user report. (2) Backlog (fork-diff first): browser QA for the r212/r213 deep-links using planted stale/parked/proposal fixtures (the two known uncovered click paths); docs pass on docs/LOCAL_AUTOMATION.md if the r205-r213 automation work drifted the r149 fact-check stamp. (3) Standing: tsc + eslint; keep tracker-mirror 17 / lane 38 / executor 26 green.
+
+---
+Task ID: 424432 — r214
+Agent: main (platform development — hourly dev round)
+Task: r213 handoff — browser QA for the r213 variation-badge deep-link (real-user path, zero fixtures).
+
+Work Log:
+- Start-of-round discipline: fork was 1 behind local — the parallel instance had committed the shared r213 worklog append (byte-identical to mine, no code) but never pushed; fast-forwarded fork to f9be32cc9 before working. Health 200/200, no user report.
+- ATTEMPTED the r213 badge click-path browser QA through the GENUINE user flow (no localStorage seeding). Drive result: nav to Workflows view GREEN (adaptive selector — the nav is a sidebar button "Workflows — Multi-agent pipelines", not a text link), open-run-panel GREEN (Novelty Lab card found, Run clicked), but "Suggest variation" was ABSENT (SUGGEST-NOT-FOUND) and the badge correctly stayed hidden.
+- DIAGNOSIS (stated precisely, not guessed): the suggest button renders only when the card's latest run has scored novelty BELOW the threshold (n != null && n < threshold && no open proposal). In the fresh agent-browser profile the sample-run bootstrap seed did not fire, so n == null → no button → no proposal → no badge. The badge's empty-state behavior is thus VERIFIED CORRECT; the filled-state click remains uncovered.
+- SHIPPED as the round artifact: scripts/qa-variation-badge.sh — the replayable 5-step browser QA harness (nav → suggest → panel → badge assert → anchor assert) with the known blocker documented in its header; r215 only needs to fix the seed precondition (or target any workflow with a stalled scored run) and re-run.
+- Anti-theatre guard held: the conditional commit skipped two earlier incomplete drives (no false-green worklog, no false snapshot).
+
+Stage Summary:
+- Browser QA harness for the badge deep-link is committed and one precondition away from green; badge empty-state (hidden with zero proposals) proven in a real browser.
+
+Round Handoff:
+Round ID: r215
+Task owner: main (platform dev)
+Scope completed: scripts/qa-variation-badge.sh (replayable drive: nav/run/badge/anchor steps all proven reachable; suggest step blocked on sample-run seed); honest evidence screenshots (download/r214-0*.png).
+User-visible changes: none (verification round).
+Verification steps: run `bash scripts/qa-variation-badge.sh` after fixing the seed precondition; expect SUMMARY: 5 passed, 0 failed / QA RESULT: GREEN.
+Verification result: PARTIAL (2/5 steps green this round; empty-state badge behavior verified; filled-state click pending)
+Open risks: sample-run bootstrap seed may be gated on a first-boot condition that a fresh profile doesn't hit — inspect the wf-novelty-lab seed guard in stores.ts before re-running; r212's two same-panel scroll branches still unverified; parallel-instance push hygiene; r142 real-world validation pending.
+Blockers: none
+Next recommended action: r215 — (1) FIRST read any user report. (2) Backlog (fork-diff first): fix the qa-variation-badge seed precondition and drive it to GREEN (the ONLY missing step — everything else is proven); then r212's stale/breaker same-panel scroll QA. (3) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 green.
