@@ -6210,3 +6210,30 @@ Verification result: PARTIAL (N 7/8; N5 fix = reload-after-restore before residu
 Open risks: N5 re-pollution mechanism (above) — r231 applies the reload fix and expects 8/8; SANDBOX ROLLBACKS CAN HAPPEN BETWEEN ROUNDS: new start-of-round discipline = verify HEAD matches the last worklog commit (git log --oneline -1 vs the previous round's pushed SHA) and recover from fork/main if not — a rollback silently reverts committed work AND uncommitted worklog appends; workflow-editor-dialog.tsx audit (728 lines, deferred 3x); r142 real-world vault validation still pending.
 Blockers: none
 Next recommended action: r231 — (1) FIRST read any user report. (2) Verify HEAD lineage (rollback discipline above). (3) Apply N5 reload-after-restore fix, rerun N → expect 8/8, restoring the full standing matrix to green (all other suites green as of r229/r230 runs). (4) Then workflow-editor-dialog.tsx audit (top backlog, 3x deferred). Avoid workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. Harness doctrine additions: failure screenshots are automatic now; after ANY aborted suite run sweep scripts/cdp-sweep-qa-residue.mjs; heavy suites get per-suite fresh boots. (5) Standing: tsc + eslint every code round; keep tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 8/8 green.
+
+---
+Task ID: 424432 — r231
+Agent: main (platform development — hourly dev round)
+Task: r230 handoff — N5 residue fix (expect 8/8) then workflow-editor-dialog audit.
+
+Work Log:
+- Start-of-round: HEAD lineage verified intact (1238992c7 — no rollback recurrence; new discipline working). Health: root 200 (13.7s cold compile). No user report.
+- N5 diagnosis, evidence-first (three theories tested and killed): (1) scheduler re-persist after restore — WRONG, the suite already reloads after restore; (2) DB resurrection via bridge-sync — WRONG, GET /api/automation/sync shows registry:[] and runs:[]; (3) localStorage key outside the snapshot — WRONG, key probe (new scripts/cdp-probe-keys.mjs, dumps qa-r228 hit counts per praison* key) showed ONLY praison-workflows carries the seed. The dump-the-survivor instrumentation (residue now reports ids+names) named the culprit: the suite's OWN qa-r228-wf. ROOT CAUSE: the run that died mid-restore in r229 (localStorage-SecurityError crash) left the seed in storage; every subsequent run captured its start-of-run snapshot FROM THE POLLUTED STORE, and N5's faithful restore resurrected the pollution forever. The seed phase cleaned only its working copy, never the snapshot.
+- FIXED (the decisive patch): clean-before-snapshot — the suite strips qa-r228 entries from praison-workflows BEFORE capturing the snapshot, making it provably clean and the suite idempotent after any aborted run. Supporting hardening shipped this round + r230: auto-screenshot on every failed check, explicit Pipelines-tab landing (sub-view never trusted), double restore+reload, residue ids/names dump.
+- RESULT: N-series 8/8 GREEN (SUMMARY: 8 passed, 0 failed, residue=0 ids=[]). FULL STANDING MATRIX GREEN for the first time since r226: tracker-mirror 17, lane 38, executor 26, spawn-branches 46, agent-io 27 (bun, filter-visible SUMMARY lines), E 6/6+6/6, F 4/4+11/11, G 6/6, H 4/4, I 5/5, J 3/3, K 9/9, L 5/5, M 5/5, N 8/8.
+- Harness lesson en route: the r230 "sweep" never executed (ran before the chrome boot with no live CDP and its FATAL line didn't match my ad-hoc output filter) — sweeps must run AFTER boot, and ad-hoc filters must include FATAL.
+- VERIFIED: eslint on the patched harness → 0 errors (1 inherited harness-pattern warning, accepted); tsc not re-run (zero src/ changes since r228's green tsc — scripts-only round); snapshot committed + pushed.
+
+Stage Summary:
+- The four-round N5 "residue" mystery ends as a textbook aborted-run pollution loop: snapshot-from-polluted-store → faithful restore → eternal seed. Clean-before-snapshot makes the suite self-healing; the whole standing matrix is green again.
+
+Round Handoff:
+Round ID: r232
+Task owner: main (platform dev)
+Scope completed: N-series 8/8 (clean-before-snapshot + residue diagnosability + probe tooling); full standing matrix restored to green; snapshot pushed.
+User-visible changes: none (QA-infrastructure round; product code untouched since r228).
+Verification steps: node scripts/cdp-qa-run-panel-follow-recovery.mjs → SUMMARY: 8 passed, 0 failed (pkill+boot in ONE shell command; suite now self-cleans — no pre-sweep needed). eslint 0 errors. root 200.
+Verification result: PASS
+Open risks: workflow-editor-dialog.tsx (728 lines) audit deferred 4x — it is now THE only remaining backlog item, no matrix debt excuse left; the N-suite's clean-before-snapshot strips by name prefix "qa-r228" (future seed renames must update it); r142 real-world vault validation still pending; sandbox rollback discipline (verify HEAD each round) to be kept forever.
+Blockers: none
+Next recommended action: r232 — (1) FIRST read any user report. (2) Verify HEAD lineage (git log -1 vs 1238992c7's successor). (3) Audit workflow-editor-dialog.tsx END-TO-END — no other standing work remains; ship the fix + a targeted check (G/K/L-series cover agents surfaces; the editor has no series yet — a small editor harness or unit suite may be warranted, mirror the qa-agent-io pattern if the finding is logic-level). (4) Standing: tsc + eslint every code round; keep the full matrix green as listed above; harness doctrine: failure screenshots are automatic; sweeps run after boot; pkill+boot in ONE shell command.

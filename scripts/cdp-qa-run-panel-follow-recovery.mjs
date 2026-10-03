@@ -176,6 +176,24 @@ async function main() {
     await wsSend(ws, "Page.navigate", { url: BASE });
     await waitFor(ws, `document.readyState === "complete"`);
     await new Promise((r) => setTimeout(r, 1500));
+    // r231 root cause of the permanent residue=1: a run that dies before its
+    // restore (the r229 localStorage-SecurityError crash) leaves the seed in
+    // storage; every later run's snapshot then CONTAINS it and the restore
+    // faithfully resurrects it. Strip qa-r228 entries BEFORE capturing, so the
+    // snapshot is provably clean and the suite is idempotent after aborts.
+    await evalJs(ws, `(() => {
+      const raw = localStorage.getItem("praison-workflows");
+      if (!raw) return true;
+      try {
+        const envelope = JSON.parse(raw);
+        if (envelope?.state?.workflows) {
+          envelope.state.workflows = envelope.state.workflows.filter(
+            (w) => !(w.name || "").includes("qa-r228"));
+          localStorage.setItem("praison-workflows", JSON.stringify(envelope));
+        }
+      } catch {}
+      return true;
+    })()`);
     const snapshot = await evalJs(ws, `localStorage.getItem("praison-workflows")`);
     const agentSeed = await evalJs(ws, `(() => {
       try {
@@ -329,11 +347,26 @@ async function main() {
     await wsSend(ws, "Page.navigate", { url: BASE });
     await waitFor(ws, `document.readyState === "complete"`);
     await new Promise((r) => setTimeout(r, 1500));
+    // r231: re-write the snapshot a SECOND time now that no seeded app instance
+    // is live (kills the pre-navigation re-persist window), then dump WHICH item
+    // survives so residue is diagnosable, not just countable.
+    await evalJs(
+      ws,
+      snapshot == null
+        ? `localStorage.removeItem("praison-workflows"); true`
+        : `localStorage.setItem("praison-workflows", ${JSON.stringify(snapshot)}); true`);
+    await wsSend(ws, "Page.reload");
+    await waitFor(ws, `document.readyState === "complete"`);
+    await new Promise((r) => setTimeout(r, 1500));
     const residue = await evalJs(ws, `(() => {
       const s = JSON.parse(localStorage.getItem("praison-workflows") || "null");
-      return (s?.state?.workflows ?? []).filter((w) => (w.name || "").includes("qa-r228")).length;
+      const hits = (s?.state?.workflows ?? []).filter((w) => (w.name || "").includes("qa-r228"));
+      return JSON.stringify({ n: hits.length, ids: hits.map((w) => w.id), names: hits.map((w) => w.name) });
     })()`);
-    check("N5 workflows store restored — zero qa-r228 residue", residue === 0, `residue=${residue}`);
+    let residueInfo = { n: -1, ids: [], names: [] };
+    try { residueInfo = JSON.parse(residue); } catch {}
+    check("N5 workflows store restored — zero qa-r228 residue", residueInfo.n === 0,
+      `residue=${residueInfo.n} ids=${JSON.stringify(residueInfo.ids)} names=${JSON.stringify(residueInfo.names)}`);
   } finally {
     try { await wsSend(ws, "Page.close"); } catch {}
   }

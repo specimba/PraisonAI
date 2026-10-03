@@ -1,23 +1,15 @@
-2026/10/03-18:32:34.844 605 Reusing MANIFEST /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/MANIFEST-000001
-2026/10/03-18:32:34.850 605 Recovering log #59
-2026/10/03-18:32:34.850 605 Level-0 table #63: started
-2026/10/03-18:32:34.851 605 Level-0 table #63: 38936 bytes OK
-2026/10/03-18:32:34.854 605 Delete type=0 #59
-2026/10/03-18:33:34.860 605 Level-0 table #66: started
-2026/10/03-18:33:34.860 605 Level-0 table #66: 11393 bytes OK
-2026/10/03-18:33:34.861 605 Delete type=0 #64
-2026/10/03-18:35:35.461 609 Level-0 table #68: started
-2026/10/03-18:35:35.462 609 Level-0 table #68: 59377 bytes OK
-2026/10/03-18:35:35.462 609 Delete type=0 #65
-2026/10/03-18:36:04.705 605 Level-0 table #70: started
-2026/10/03-18:36:04.706 605 Level-0 table #70: 64996 bytes OK
-2026/10/03-18:36:04.706 605 Delete type=0 #67
-2026/10/03-18:36:04.706 605 Compacting 4@0 + 1@1 files
-2026/10/03-18:36:04.708 605 Generated table #71@0: 7 keys, 72769 bytes
-2026/10/03-18:36:04.708 605 Compacted 4@0 + 1@1 files => 72769 bytes
-2026/10/03-18:36:04.708 605 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/10/03-18:36:04.708 605 Delete type=2 #66
-2026/10/03-18:36:04.708 605 Delete type=2 #70
-2026/10/03-18:36:04.708 605 Delete type=2 #63
-2026/10/03-18:36:04.708 605 Delete type=2 #68
-2026/10/03-18:36:04.708 605 Delete type=2 #61
+2026/10/03-19:28:18.306 687 Reusing MANIFEST /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/10/03-19:28:18.311 687 Recovering log #79
+2026/10/03-19:28:18.311 687 Reusing old log /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/000079.log 
+2026/10/03-19:28:52.629 689 Level-0 table #82: started
+2026/10/03-19:28:52.629 689 Level-0 table #82: 11386 bytes OK
+2026/10/03-19:28:52.630 689 Delete type=0 #79
+2026/10/03-19:28:52.630 689 Compacting 4@0 + 1@1 files
+2026/10/03-19:28:52.631 689 Generated table #83@0: 7 keys, 14767 bytes
+2026/10/03-19:28:52.631 689 Compacted 4@0 + 1@1 files => 14767 bytes
+2026/10/03-19:28:52.631 689 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/10/03-19:28:52.631 689 Delete type=2 #73
+2026/10/03-19:28:52.631 689 Delete type=2 #82
+2026/10/03-19:28:52.631 689 Delete type=2 #78
+2026/10/03-19:28:52.631 689 Delete type=2 #71
+2026/10/03-19:28:52.631 689 Delete type=2 #76
