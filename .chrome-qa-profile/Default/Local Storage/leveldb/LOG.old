@@ -1,21 +1,23 @@
-2026/10/03-17:46:16.024 1265 Reusing MANIFEST /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/MANIFEST-000001
-2026/10/03-17:46:16.030 1265 Recovering log #35
-2026/10/03-17:46:16.030 1265 Reusing old log /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/000035.log 
-2026/10/03-17:47:16.032 1265 Level-0 table #39: started
-2026/10/03-17:47:16.032 1265 Level-0 table #39: 21226 bytes OK
-2026/10/03-17:47:16.032 1265 Delete type=0 #35
-2026/10/03-17:47:16.033 1265 Compacting 4@0 + 1@1 files
-2026/10/03-17:47:16.033 1265 Generated table #40@0: 7 keys, 14146 bytes
-2026/10/03-17:47:16.033 1265 Compacted 4@0 + 1@1 files => 14146 bytes
-2026/10/03-17:47:16.033 1265 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/10/03-17:47:16.033 1265 Delete type=2 #31
-2026/10/03-17:47:16.033 1265 Delete type=2 #39
-2026/10/03-17:47:16.033 1265 Delete type=2 #33
-2026/10/03-17:47:16.033 1265 Delete type=2 #36
-2026/10/03-17:47:16.033 1265 Delete type=2 #29
-2026/10/03-17:49:16.658 1267 Level-0 table #42: started
-2026/10/03-17:49:16.660 1267 Level-0 table #42: 55209 bytes OK
-2026/10/03-17:49:16.660 1267 Delete type=0 #38
-2026/10/03-17:49:45.518 1267 Level-0 table #44: started
-2026/10/03-17:49:45.518 1267 Level-0 table #44: 55714 bytes OK
-2026/10/03-17:49:45.519 1267 Delete type=0 #41
+2026/10/03-18:32:34.844 605 Reusing MANIFEST /home/z/my-project/.chrome-qa-profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/10/03-18:32:34.850 605 Recovering log #59
+2026/10/03-18:32:34.850 605 Level-0 table #63: started
+2026/10/03-18:32:34.851 605 Level-0 table #63: 38936 bytes OK
+2026/10/03-18:32:34.854 605 Delete type=0 #59
+2026/10/03-18:33:34.860 605 Level-0 table #66: started
+2026/10/03-18:33:34.860 605 Level-0 table #66: 11393 bytes OK
+2026/10/03-18:33:34.861 605 Delete type=0 #64
+2026/10/03-18:35:35.461 609 Level-0 table #68: started
+2026/10/03-18:35:35.462 609 Level-0 table #68: 59377 bytes OK
+2026/10/03-18:35:35.462 609 Delete type=0 #65
+2026/10/03-18:36:04.705 605 Level-0 table #70: started
+2026/10/03-18:36:04.706 605 Level-0 table #70: 64996 bytes OK
+2026/10/03-18:36:04.706 605 Delete type=0 #67
+2026/10/03-18:36:04.706 605 Compacting 4@0 + 1@1 files
+2026/10/03-18:36:04.708 605 Generated table #71@0: 7 keys, 72769 bytes
+2026/10/03-18:36:04.708 605 Compacted 4@0 + 1@1 files => 72769 bytes
+2026/10/03-18:36:04.708 605 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/10/03-18:36:04.708 605 Delete type=2 #66
+2026/10/03-18:36:04.708 605 Delete type=2 #70
+2026/10/03-18:36:04.708 605 Delete type=2 #63
+2026/10/03-18:36:04.708 605 Delete type=2 #68
+2026/10/03-18:36:04.708 605 Delete type=2 #61

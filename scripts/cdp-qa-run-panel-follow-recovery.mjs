@@ -98,10 +98,26 @@ async function shot(ws, name) {
   console.log(`  📸 ${file}`);
 }
 
+// r230: every FAILED check auto-captures the page (r229/r230 lesson — N0 failed
+// 4x with zero visual evidence because shot() was only called on success paths).
+let activeWs = null;
+let failSeq = 0;
+function captureFailure(name) {
+  if (!activeWs) return;
+  const file = path.join(OUT_DIR, `FAIL-${String(++failSeq).padStart(2, "0")}-${name.split(/\s+/)[0]}.png`);
+  wsSend(activeWs, "Page.captureScreenshot", { format: "png" })
+    .then((r) => {
+      fs.writeFileSync(file, Buffer.from(r.data, "base64"));
+      console.log(`  📸 ${file}`);
+    })
+    .catch(() => console.log(`  (failure screenshot unavailable for ${name})`));
+}
+
 const results = [];
 function check(name, ok, detail = "") {
   results.push({ name, ok });
   console.log(`${ok ? "✅" : "❌"} ${name}${detail ? ` — ${detail}` : ""}`);
+  if (!ok) captureFailure(name);
 }
 
 const WF_NAME = "qa-r228 follow pipeline";
@@ -148,6 +164,7 @@ async function main() {
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();
   const ws = await connect(tab.webSocketDebuggerUrl);
+  activeWs = ws;
   try {
     await wsSend(ws, "Page.enable");
     await wsSend(ws, "Runtime.enable");
@@ -236,11 +253,22 @@ async function main() {
     await wsSend(ws, "Page.navigate", { url: BASE });
     await waitFor(ws, `document.readyState === "complete"`);
     await new Promise((r) => setTimeout(r, 2000));
-    if (!(await evalJs(ws, `Boolean([...document.querySelectorAll("button")].some(
-        (b) => (b.textContent || "").trim() === "Run" && b.offsetParent !== null))`))) {
-      await evalJs(ws, NAV_TO_WF);
-      await waitFor(ws, `Boolean([...document.querySelectorAll("button")].some(
-        (b) => (b.textContent || "").trim() === "Run" && b.offsetParent !== null))`, 45_000);
+    // r230 root cause: the workflows SUB-VIEW (Pipelines | Runs board) persists
+    // OUTSIDE the snapshot keys — M-series leaves "Runs board" active, whose run
+    // cards have no Run button, and N0 then starves. Never trust the sub-view:
+    // always land on Workflows, then click the Pipelines tab explicitly.
+    await evalJs(ws, NAV_TO_WF);
+    await new Promise((r) => setTimeout(r, 1200));
+    await evalJs(ws, `(() => {
+      const el = [...document.querySelectorAll("button")].find(
+        (e) => (e.textContent || "").trim() === "Pipelines" && e.offsetParent !== null);
+      if (el) { el.click(); return true; }
+      return false;
+    })()`);
+    await new Promise((r) => setTimeout(r, 800));
+    if (!(await waitFor(ws, `Boolean([...document.querySelectorAll("button")].some(
+        (b) => (b.textContent || "").trim() === "Run" && b.offsetParent !== null))`, 45_000))) {
+      console.log("  (no Run buttons visible even on Pipelines — N0 will likely fail)");
     }
 
     // ── N0: open the run panel from the seeded card. ─────────────────────
