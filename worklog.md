@@ -6569,3 +6569,31 @@ Verification result: PASS
 Open risks: r142 real-world vault validation still pending (needs a real provider key); co-editing discipline stands (git status + unmasked tsc before snapshot); markdown external-image CSP note from r241 still unverified in real chats.
 Blockers: none
 Next recommended action: r244 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — the settings surface has now absorbed three rounds (whats-fixed/build-info) — prefer: docs pass, a new small user-facing feature elsewhere (test-agent-dialog is un-scouted and NOT avoid-listed; shell.tsx nav/TopBar un-scouted), performance (e.g. memo/dep audit in workflows-view), or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer/markdown.tsx/whats-fixed.tsx/settings-view.tsx (just done), and don't grind radar. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / T 4/4 / U 4/4 / V 3/3 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r244
+Agent: main (platform dev)
+Task: Surface rotation to test-agent-dialog (un-scouted, allowed): IME-safe Enter parity with the chat composer.
+
+Work Log:
+- HEAD = 6c0f0452a (cron successor of r243's snapshot; tree clean). Health DOWN at round start → ONE restart → root 200.
+- Scouted test-agent-dialog.tsx (434 lines): r163 retry + kind chips + abort-on-close are solid; found one real parity bug — the playground's Enter-to-send ignored IME composition, so CJK users' Enter (which CONFIRMS the composition) prematurely sent the half-composed text. The chat composer (composer.tsx:993) and message-item inline editors (message-item.tsx:447) both already guard `!e.nativeEvent.isComposing`; the playground was the odd one out.
+- Fixed (test-agent-dialog.tsx): added the same `if (e.nativeEvent.isComposing) return;` guard before preventDefault+send, with a comment citing the parity source. One-line behavioral fix, zero surface change.
+- New standing W-series suite scripts/cdp-qa-test-dialog-ime.mjs (4 checks): W1 composing-Enter does NOT send (no bubble, input kept, not running); W2 plain Enter DOES send (user bubble, composer cleared, assistant bubble); W3 turn settles without a provider (stop → stopped/retry reachable, no hang); W4 no console errors. Seeded a v244-tokened agent via the debouncedStorage dance.
+- Suite lessons en route: (a) the "Open test playground for X" control is the agent CARD itself (`[role="button"]`), not a `<button>` — first selector matched nothing and the dialog never opened; diagnostics (moved to stderr — the harness hides stdout on failure) showed the seed landed and 6 cards rendered; (b) an over-escaped Tailwind arbitrary-value selector (`.max-w-\[90\%\]`) threw SyntaxError inside eval — replaced with a structural class check.
+- Verification: W-series 4/4 GREEN; T-series regression 4/4 GREEN (playground renders via MarkdownRenderer); bun run qa:tsc exit=0 unmasked; eslint test-agent-dialog.tsx 0; root 200; screenshot ops/qa/w-series-test-dialog-ime.png.
+- Snapshot pushed: see git log (r244 snapshot).
+
+Stage Summary:
+- The test playground is now IME-safe, matching every other composer in the app; W-series (4/4) pins the composing-Enter guard so it can't regress silently.
+
+Round Handoff:
+Round ID: r245
+Task owner: main (platform dev)
+Scope completed: test-agent-dialog IME guard + W-series suite.
+User-visible changes: CJK/IME users can compose in the agent test playground without Enter sending half-composed text.
+Verification steps: node scripts/cdp-qa-test-dialog-ime.mjs → SUMMARY: 4 passed, 0 failed; node scripts/cdp-qa-markdown-fidelity.mjs → 4 passed, 0 failed; bun run qa:tsc → exit 0; eslint → 0; root 200.
+Verification result: PASS
+Open risks: r142 real-world vault validation still pending (needs a real provider key); co-editing discipline stands (git status + unmasked tsc before snapshot); markdown external-image CSP note from r241 still unverified in real chats; the MAIN composer's Escape-during-streaming also guards isComposing but other Enter handlers may exist elsewhere (grep `key === "Enter"` under src/ to audit — only test-agent-dialog was out of parity as of this round).
+Blockers: none
+Next recommended action: r245 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — candidates: docs pass, shell.tsx/TopBar polish (un-scouted, allowed), an Enter/IME audit across remaining keydown handlers (cheap grep-driven sweep), performance spot-check in workflows-view, or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view (card click behavior + dropdown live there now), agent-form-dialog, chat-search, image-studio, conversation-list, composer, markdown.tsx, whats-fixed.tsx, settings-view.tsx, test-agent-dialog.tsx (just done), and don't grind radar. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / T 4/4 / U 4/4 / V 3/3 / W 4/4 / guard verifier 7/7.
