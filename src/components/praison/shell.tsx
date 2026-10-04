@@ -409,11 +409,22 @@ export function TopBar() {
                   return (
                     <DropdownMenuItem
                       key={p.id}
-                      onClick={() =>
-                        ready
-                          ? update({ provider: "custom", activeProviderId: p.id })
-                          : setPaletteOpen(false)
-                      }
+                      onClick={() => {
+                        if (ready) {
+                          update({ provider: "custom", activeProviderId: p.id });
+                          return;
+                        }
+                        // r246: a keyless provider used to be a dead click —
+                        // it even mutated the wrong store (setPaletteOpen is
+                        // the command palette, not this dropdown) and left
+                        // the user nowhere. Send them to Settings where the
+                        // key actually lives.
+                        useUiStore.getState().setView("settings");
+                        toast(`Add your ${p.name} key`, {
+                          description:
+                            "Settings → Free frontier providers — paste it once and it lands in the local vault.",
+                        });
+                      }}
                       className={cn(active && "bg-accent")}
                       {...(ready
                         ? {}
