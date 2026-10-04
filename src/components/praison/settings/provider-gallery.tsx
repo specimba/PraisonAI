@@ -382,48 +382,11 @@ export function ProviderGallery() {
     });
   }
 
-  async function refreshLiveCatalog() {
-    if (busy) return;
-    const rotating = FREE_PROVIDERS.filter((p) => p.liveCatalog);
-    if (rotating.length === 0) return;
-    setBusy("live-catalog");
-    let total = 0;
-    const failures: string[] = [];
-    try {
-      const next: LiveCatalog = { ...live };
-      for (const p of rotating) {
-        try {
-          const res = await fetch(`/api/providers/free-models?provider=${encodeURIComponent(p.liveCatalog!)}`);
-          const data = (await res.json()) as { models?: LiveCatalog[string]; error?: string; cached?: boolean };
-          if (!res.ok || data.error) throw new Error(data.error ?? `HTTP ${res.status}`);
-          next[p.id] = data.models ?? [];
-          total += data.models?.length ?? 0;
-        } catch (err) {
-          failures.push(`${p.name}: ${err instanceof Error ? err.message : "unknown"}`);
-        }
-      }
-      setLive(next);
-      try {
-        localStorage.setItem(LIVE_CATALOG_KEY, JSON.stringify(next));
-      } catch {
-        /* quota */
-      }
-      if (total > 0) {
-        toast.success(`${total} live models across ${rotating.length} rotating catalogs`, {
-          description: failures.length ? `Partial: ${truncate(failures.join(" · "), 90)}` : "Fresh from the providers' APIs.",
-        });
-      } else {
-        throw new Error(failures.join(" · ") || "No catalogs returned models");
-      }
-    } catch (err) {
-      toast.error("Live catalog fetch failed", {
-        description: err instanceof Error ? truncate(err.message, 80) : "Unknown error",
-      });
-    } finally {
-      setBusy(null);
-    }
-  }
-
+  // r257 audit: the legacy GET-based "rotating catalogs" refresher
+  // (refreshLiveCatalog, ~41 lines) lived here with ZERO call sites —
+  // r22 superseded it with refreshAllModels + per-card refreshProviderModels
+  // (both POST /api/providers/free-models with the vault key). Removed as
+  // unreachable dead code; the r23 browser-direct retry covers region-blocks.
   // r75: relay health badges in every provider's model picker — the rotator's
   // verdict (ok N / sick / throttled) rides on each option row, so a lane that
   // died recently is visible BEFORE you commit it as the provider default.
