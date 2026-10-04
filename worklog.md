@@ -6458,3 +6458,30 @@ Verification result: PASS
 Open risks: another process co-edited src during r237-r239 — before snapshot, ALWAYS `git status` + unmasked tsc; r142 real-world vault validation still pending; run-history contents still outside search scope (deliberate).
 Blockers: none
 Next recommended action: r240 — (1) FIRST read any user report. (2) Verify HEAD = 78c7704ee (or successor); if the tree is dirty with unknown edits, diff before touching anything. (3) Rotate surfaces — candidates: radar-view polish, settings-view detail, docs, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / S 9/9 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r239(done prior hour) / r240
+Agent: main (platform dev)
+Task: r239 worklog-follow-up committed as 78c7704ee; this hour r240 — surface rotation to Radar view: persist tab-local state that used to reset on remount.
+
+Work Log:
+- HEAD = 87d3afdc0 (cron successor of 78c7704ee; verified worklog-only diff, tree clean). Health DOWN → one restart → root 200 (server kept up through the round).
+- Scouted radar-view.tsx (999 lines, 4 tabs). GitHub tab already persists its username (GH_USER_KEY on every keystroke) — but two gaps remained: (a) HF Trending's Hub-section radio (models/datasets/spaces) reset to "models" on every remount while the datasets/spaces cache stayed intact; (b) Paper Radar only restored the last SEARCHED query — a typed-but-unsearched query was lost on view switch.
+- Implemented (radar-view.tsx, mirroring the GH-tab pattern): new keys praison-radar-hf-kind + praison-radar-paper-query; HF kind lazy-initializes from localStorage with a strict union guard (anything but models/datasets/spaces falls back to "models") and persists via a setKind wrapper; Papers query lazy-initializes from its key, persists on every keystroke via a setQuery wrapper (search-success still normalizes the box to the searched query), and the mount effect now prefers the typed query over cached.query.
+- Verification: bun run qa:tsc → exit 0 (unmasked doctrine held); eslint on radar-view.tsx → 0.
+- New standing suite scripts/cdp-qa-radar-persist.mjs (R-series, 3 checks): kind survives view-switch round trip (aria-checked), localStorage key persisted, typed-but-unsearched papers query survives. First run 1/3 — re-learned the r160 tab doctrine the hard way: Radix TabsTrigger activates on POINTERDOWN; synthetic .click() silently switches nothing. Copied the proven focus+pointerdown+mousedown+click helper from cdp-qa-radar-mount.mjs → second run 3/3 GREEN. Screenshot ops/qa/r-series-radar-persist.png.
+- Snapshot pushed: see git log (r240 snapshot).
+
+Stage Summary:
+- Radar remembers what the user was looking at: Hub section choice and in-flight Papers queries now survive navigation, matching the GitHub tab's existing behavior. R-series added to the standing matrix (3/3).
+
+Round Handoff:
+Round ID: r241
+Task owner: main (platform dev)
+Scope completed: radar tab-state persistence (HF kind + papers typed query) + R-series suite.
+User-visible changes: switching views no longer resets the HF Trending section radio or an un-searched arXiv query.
+Verification steps: node scripts/cdp-qa-radar-persist.mjs → SUMMARY: 3 passed, 0 failed; bun run qa:tsc → exit 0; eslint → exit 0; root 200.
+Verification result: PASS
+Open risks: r142 real-world vault validation still pending (needs a real provider key — mock would be theatre); papers input placeholder still shows DEFAULT query regardless of persisted value (cosmetic); co-editing discipline from r239 stands (git status + unmasked tsc before snapshot).
+Blockers: none
+Next recommended action: r241 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — candidates: settings-view detail, docs pass, chat markdown polish (chat markdown.tsx not on the avoid list), or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer, and don't grind radar again this cycle. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / guard verifier 7/7.
