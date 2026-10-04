@@ -6403,3 +6403,30 @@ Verification result: PASS
 Open risks: search does not yet cover schedule task text or run-history contents (could match "task: …" text next); r142 real-world vault validation still pending; editor save/auto-plan paths untouched (still guarded by O+P).
 Blockers: none
 Next recommended action: r238 — (1) FIRST read any user report. (2) Verify HEAD = 7dec9fe6e (or successor). (3) Rotate surfaces — candidates: a docs pass, radar-view polish, settings-view detail, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer (workflows-view list itself now has the O+P+S guards and is fair game again only for additive tweaks). (4) Standing: tsc + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / S 8/8 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r238
+Agent: main (platform dev)
+Task: r237 handoff item — pipeline search v2: cover schedule task text (the stated open risk; additive tweak, allowed by the surface list).
+
+Work Log:
+- Read worklog tail (r237 PASS), HEAD = 556361999 (cron successor of 7dec9fe6e — lineage intact), health DOWN → one restart → root 200.
+- Confirmed WorkflowSchedule.task exists ("Task text used for each scheduled run (falls back to the description)") — a recurring pipeline's intent lives ONLY there; name/description/steps never carry it.
+- Implemented (workflows-view.tsx): filteredWorkflows now also matches `(wf.schedule?.task ?? "").toLowerCase()`; updated the r237 comment, the placeholder ("Search pipelines, agents, steps, schedules…") and the no-match empty-state description to advertise the new coverage. No new state/renders — same memo, same deps.
+- Extended S-series: fixture Zephyr Digest v237 now carries schedule { enabled:false, intervalMs:1h, task:"kepler telemetry digest" } (mkWf gained an optional 7th arg); new T5 asserts needle "kepler telemetry" — a token appearing in NO other field — resolves to exactly that card; downstream checks renumbered (now 9 total).
+- Verification: tsc 0; eslint 0 (view + suite); S-series browser run 9/9 GREEN (fresh profile /tmp/qa-r238-profile, one shell command; screenshot ops/qa/s-series-search.png).
+- Snapshot pushed: a6e91a73b (fork/main).
+
+Stage Summary:
+- Pipeline search now finds schedules by intent: "improved reports", "telemetry digest", etc. surface the recurring pipeline that carries them — closing r237's stated coverage gap. S-series standing suite grown to 9 checks, all green; no other suite touches this surface.
+
+Round Handoff:
+Round ID: r239
+Task owner: main (platform dev)
+Scope completed: schedule-task-text search coverage + S-series T5 + copy updates.
+User-visible changes: searching any word from a pipeline's schedule task text now surfaces that pipeline; placeholder/empty-state copy reflect the wider coverage.
+Verification steps: node scripts/cdp-qa-pipeline-search.mjs → SUMMARY: 9 passed, 0 failed; tsc 0; eslint 0; root 200.
+Verification result: PASS
+Open risks: run-history contents still outside search scope (deliberate — runs are ephemeral and large); r142 real-world vault validation still pending; editor save/auto-plan paths untouched (guarded by O+P).
+Blockers: none
+Next recommended action: r239 — (1) FIRST read any user report. (2) Verify HEAD = a6e91a73b (or successor). (3) Rotate surfaces — candidates: a docs pass, radar-view polish, settings-view detail, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (4) Standing: tsc + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / S 9/9 / guard verifier 7/7.
