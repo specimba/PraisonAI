@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ImageOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { copyText } from "@/lib/helpers";
 import { applyReferral, referralAnchorProps, type ReferralRewrite } from "@/lib/referral-registry";
@@ -41,6 +41,46 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   );
 }
 
+// r241: model replies frequently embed images (screenshots, diagrams, data
+// URLs). An unconstrained <img> overflows the chat card, and hallucinated URLs
+// render as the browser's raw broken-image glyph with alt-text spill. Lazy
+// load + clamp width + a real fallback that keeps the alt text visible.
+function MdImage({ alt, ...rest }: React.ImgHTMLAttributes<HTMLImageElement>) {
+  const [failed, setFailed] = React.useState(false);
+  if (failed) {
+    return (
+      <span
+        data-md-img-fallback
+        role="img"
+        aria-label={alt || "image unavailable"}
+        title={alt || "image unavailable"}
+        className="my-2 flex max-w-full items-center gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-2 text-[12.5px] text-muted-foreground"
+      >
+        <ImageOff className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="truncate">{alt || "image unavailable"}</span>
+      </span>
+    );
+  }
+  return (
+    <img
+      alt={alt ?? ""}
+      loading="lazy"
+      className="my-2 inline-block h-auto max-w-full rounded-lg border"
+      onError={() => setFailed(true)}
+      {...rest}
+    />
+  );
+}
+
+// r241: react-markdown's default URL transform blanks data: URIs, silently
+// hiding model-generated inline images (charts, screenshots embedded as data
+// URLs). Allow RASTER image data URIs only — everything else keeps the strict
+// default (no svg/script-bearing payloads).
+function markdownUrlTransform(url: string): string {
+  if (/^data:image\/(png|jpeg|jpg|gif|webp|bmp|avif)[;,]/i.test(url)) return url;
+  return defaultUrlTransform(url);
+}
+
 export const MarkdownRenderer = React.memo(function MarkdownRenderer({
   content,
   className,
@@ -52,14 +92,38 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
     <div className={cn("md-body text-[14.5px] leading-relaxed", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={markdownUrlTransform}
         components={{
           h1: (p) => <h1 className="mb-2 mt-4 text-xl font-bold tracking-tight" {...p} />,
           h2: (p) => <h2 className="mb-2 mt-4 text-lg font-bold tracking-tight" {...p} />,
           h3: (p) => <h3 className="mb-1.5 mt-3 text-base font-semibold" {...p} />,
           p: (p) => <p className="my-2" {...p} />,
-          ul: (p) => <ul className="my-2 list-disc space-y-1 pl-5" {...p} />,
+          ul: ({ className, ...p }) => {
+            // r241: GFM tags task-list containers with `contains-task-list` —
+            // merging (not spreading over) keeps spacing classes alive; task
+            // containers drop the disc so checkboxes don't sit next to bullets.
+            const classes = Array.isArray(className) ? className : typeof className === "string" ? [className] : [];
+            const isTask = classes.includes("contains-task-list");
+            return (
+              <ul
+                className={cn("my-2 space-y-1", isTask ? "pl-2" : "list-disc pl-5", classes)}
+                {...p}
+              />
+            );
+          },
           ol: (p) => <ol className="my-2 list-decimal space-y-1 pl-5" {...p} />,
-          li: (p) => <li className="pl-0.5" {...p} />,
+          // r241: GFM task lists (`- [x]`) get a checkbox via remark-gfm; the
+          // list disc next to it reads as a doubled marker, so task items drop
+          // the bullet. Props className arrives as string OR array (hast).
+          li: ({ className, children, ...p }) => {
+            const classes = Array.isArray(className) ? className : typeof className === "string" ? [className] : [];
+            const isTask = classes.includes("task-list-item");
+            return (
+              <li className={cn("pl-0.5", isTask && "list-none", classes)} {...p}>
+                {children}
+              </li>
+            );
+          },
           // r28 referral registry: known referral-program links get the public
           // owner code appended (harmless anchor decoration) + honest anchor
           // attrs (sponsored/nofollow) + a visible "ref" chip. Everything else
@@ -102,6 +166,15 @@ export const MarkdownRenderer = React.memo(function MarkdownRenderer({
           thead: (p) => <thead className="bg-muted/60" {...p} />,
           th: (p) => <th className="border-b px-3 py-1.5 text-left font-semibold" {...p} />,
           td: (p) => <td className="border-b px-3 py-1.5 align-top last:border-0" {...p} />,
+          img: (p) => <MdImage {...p} />,
+          // GFM task-list checkbox (rendered disabled by react-markdown).
+          input: (p) => (
+            <input
+              readOnly
+              className="mr-1.5 h-3.5 w-3.5 shrink-0 translate-y-px cursor-default accent-violet-500"
+              {...p}
+            />
+          ),
           code: ({ className, children, ...rest }) => {
             const isBlock = /language-/.test(className ?? "") || String(children).includes("\n");
             if (isBlock) return <CodeBlock className={className}>{children}</CodeBlock>;
