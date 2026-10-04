@@ -187,15 +187,22 @@ function jsonError(status: number, message: string) {
   return Response.json({ error: message }, { status });
 }
 
-/** Retry helper for transient upstream failures (auto engine LLM calls). */
+/**
+ * Retry helper for transient upstream failures (auto engine LLM calls).
+ * r251: abort-aware — a cancelled/client-gone run no longer keeps retrying
+ * (or sleeping through the backoff) after its signal fired; the sleep races
+ * the abort so cancellation lands within milliseconds, not seconds.
+ */
 async function withRetry<T>(
   attempts: number,
   label: string,
   send: Send,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
+  signal?: AbortSignal
 ): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     try {
       return await fn();
     } catch (err) {
@@ -206,7 +213,14 @@ async function withRetry<T>(
         type: "status",
         message: `${label} — network hiccup, retrying (${attempt + 1}/${attempts})…`,
       });
-      await new Promise((r) => setTimeout(r, waitMs));
+      await new Promise<void>((r) => {
+        const t = setTimeout(r, waitMs);
+        signal?.addEventListener("abort", () => {
+          clearTimeout(t);
+          r();
+        }, { once: true });
+      });
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     }
   }
   throw lastErr;
@@ -249,6 +263,10 @@ async function runAutoEngine(
   // JSON tool call ON the final pass gets it executed once, plus a hard
   // warning, instead of the raw JSON becoming the step's "answer".
   for (let iteration = 1; iteration <= maxIterations + 2; iteration++) {
+    // r251: bail at every iteration boundary once the run is cancelled or the
+    // client is gone — previously only simulateStream observed the signal, so
+    // a dead run kept burning LLM calls + tool fetches to natural completion.
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     send({ type: "iteration", n: iteration });
     send({ type: "status", message: iteration === 1 ? "Thinking…" : "Reasoning with tool results…" });
 
@@ -267,8 +285,9 @@ async function runAutoEngine(
         : zai.chat.completions.create({
             messages: msgs as never,
             thinking: { type: "disabled" },
-          })
-    );
+          }),
+    signal
+  );
     const raw = completion.choices?.[0]?.message?.content ?? "";
     // r29: parse on EVERY pass. In-budget calls execute normally; a call
     // parsed on the final pass is the "stubborn model" case — it gets ONE
@@ -284,7 +303,7 @@ async function runAutoEngine(
       const validation = validateToolCall(toolDefs, call.name, JSON.stringify(call.args));
       if (!validation.ok && audit) audit.rejectedCalls += 1;
       const result = validation.ok
-        ? await executeTool(call.name, validation.args ?? "{}")
+        ? await executeTool(call.name, validation.args ?? "{}", signal)
         : { ok: false, content: validation.error ?? "invalid tool call", ms: 0 };
       collected.push({
         id: call.id,
