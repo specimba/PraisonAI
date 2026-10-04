@@ -33,7 +33,9 @@ import { cn } from "@/lib/utils";
 const GH_USER_KEY = "praison-radar-user";
 const GH_CACHE_KEY = "praison-radar-gh";
 const HF_CACHE_KEY = "praison-radar-hf";
+const HF_KIND_KEY = "praison-radar-hf-kind";
 const ARXIV_CACHE_KEY = "praison-radar-arxiv";
+const ARXIV_QUERY_KEY = "praison-radar-paper-query";
 
 const DEFAULT_GH_USER = "specimba";
 const GH_PAGES = 3; // 3 × 100 repos — enough radar, not a full scrape
@@ -599,7 +601,19 @@ function HfTrendingTab() {
   const [cache, setCache] = React.useState<HfCache | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [kind, setKind] = React.useState<HfKind>("models");
+  const [kind, setKindState] = React.useState<HfKind>(() => {
+    const saved = readCache<HfKind>(HF_KIND_KEY);
+    return saved === "models" || saved === "datasets" || saved === "spaces"
+      ? saved
+      : "models";
+  });
+  // r240: the picked Hub section survives remounts — same treatment the
+  // GitHub tab already gives its username. Switching views no longer snaps
+  // the radio back to "models" while the datasets/spaces cache is intact.
+  const setKind = (k: HfKind) => {
+    setKindState(k);
+    writeCache(HF_KIND_KEY, k);
+  };
   const didAuto = React.useRef(false);
 
   const fetchTrending = React.useCallback(async () => {
@@ -770,7 +784,16 @@ function HfTrendingTab() {
 // ─── Paper Radar tab ─────────────────────────────────────────────────────────
 
 function PaperRadarTab() {
-  const [query, setQuery] = React.useState(DEFAULT_PAPER_QUERY);
+  const [query, setQueryState] = React.useState<string>(
+    () => readCache<string>(ARXIV_QUERY_KEY) ?? DEFAULT_PAPER_QUERY
+  );
+  // r240: every keystroke persists, mirroring the GitHub username input —
+  // a query typed but not yet searched now survives view switches (before,
+  // only the last SEARCHED query came back on remount).
+  const setQuery = (q: string) => {
+    setQueryState(q);
+    writeCache(ARXIV_QUERY_KEY, q);
+  };
   const [cache, setCache] = React.useState<ArxivCache | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -827,11 +850,12 @@ function PaperRadarTab() {
     if (didAuto.current) return;
     didAuto.current = true;
     const cached = readCache<ArxivCache>(ARXIV_CACHE_KEY);
+    const typed = readCache<string>(ARXIV_QUERY_KEY);
     if (cached) {
       setCache(cached);
-      setQuery(cached.query || DEFAULT_PAPER_QUERY);
+      setQuery(typed?.trim() || cached.query || DEFAULT_PAPER_QUERY);
     } else {
-      void search(DEFAULT_PAPER_QUERY);
+      void search(typed?.trim() || DEFAULT_PAPER_QUERY);
     }
   }, [search]);
 
