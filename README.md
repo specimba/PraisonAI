@@ -37,6 +37,25 @@ Nav labels are short; page titles are descriptive — both names are intentional
 - **Model tracker** — a global ticker over provider/model lanes; polls every 15 min and
   retries failed fetches with a short backoff (5s/15s/60s) so a failed first fetch can't
   leave the strip dark (`src/components/praison/tracker/model-ticker.tsx`).
+- **Shell** — ⌘K command palette (see Keyboard below), TopBar provider switcher
+  (keyless providers route you to Settings with a pointing toast instead of doing
+  nothing), and a stale-build guard that toasts + pins a refresh pill when the server
+  picks up newer code than the tab is running (`src/components/praison/shell.tsx`,
+  `src/components/praison/stale-build-guard.tsx`).
+
+## Keyboard
+
+- `⌘K` / `Ctrl+K` — command palette: search all chats, run a workflow, open
+  Image Studio, or jump to provider settings — from any view.
+- `⌘/Ctrl+Shift+N` — new chat (and jump to Chat).
+- `⌘/Ctrl+Shift+F` — global search across all chats.
+- `⌘/Ctrl+1…5` — switch to Chat / Agents / Workflows / **Settings / Radar**
+  (note: digit order follows the app's view order, so 4 = Settings, 5 = Radar).
+  Caveat: Chrome reserves `Ctrl+1-8` for tab switching on Windows/Linux, so the
+  digit shortcuts are only reliable on macOS or Firefox; the rest work everywhere.
+
+Shortcuts live in `src/lib/use-shortcuts.ts` (global) and
+`src/components/praison/command-palette.tsx` (palette).
 
 ## Stack & rules
 
@@ -49,6 +68,8 @@ Next.js 16 App Router · shadcn/ui + Tailwind · Prisma/SQLite · Bun for dev.
 bun install
 bun run dev        # port 3000
 bun run lint       # eslint
+bun run qa:tsc     # unmasked TypeScript check (tsc --noEmit)
+bun run qa:syntax  # static syntax sweep (scripts/qa-syntax-sweep.ts)
 bun run a11y:audit # static icon-button/aria gate (scripts/a11y-icon-button-audit.mjs)
 bun run db:push    # prisma schema push
 ```
