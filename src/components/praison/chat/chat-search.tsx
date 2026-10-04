@@ -103,10 +103,12 @@ export function ChatSearch({ open, messages, onClose }: ChatSearchProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") {
+              // r245 IME parity: while a CJK composition is active, Escape and
+              // Enter belong to the IME — don't close the panel or jump.
+              if (e.key === "Escape" && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 onClose();
-              } else if (e.key === "Enter" && hits.length > 0) {
+              } else if (e.key === "Enter" && hits.length > 0 && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 jumpToMessage(hits[0].msgId);
               }

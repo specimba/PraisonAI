@@ -702,7 +702,9 @@ export function LocalModelsPanel() {
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  // r245 IME parity: same guard as the chat composer — Enter
+                  // that confirms a CJK composition must not send the draft.
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     generate();
                   }

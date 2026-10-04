@@ -168,7 +168,9 @@ export function GlobalSearchDialog() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && hits.length > 0) {
+                // r245 IME parity: Enter that only confirms a CJK composition
+                // must not jump to the first hit.
+                if (e.key === "Enter" && hits.length > 0 && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   jump(hits[0]);
                 }

@@ -389,7 +389,9 @@ function GitHubStarsTab() {
             writeCache(GH_USER_KEY, e.target.value.trim());
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void fetchStars(user);
+            // r245 IME parity sweep: Enter confirming a CJK composition must
+            // not fire the fetch with a half-composed username.
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) void fetchStars(user);
           }}
           placeholder="GitHub username"
           aria-label="GitHub username to browse stars for"
@@ -871,7 +873,8 @@ function PaperRadarTab() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void search(query);
+              // r245 IME parity sweep: don't search mid-composition.
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) void search(query);
             }}
             placeholder={DEFAULT_PAPER_QUERY}
             aria-label="arXiv query"

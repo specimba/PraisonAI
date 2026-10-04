@@ -979,7 +979,9 @@ export function Composer({
                     setSlashIndex((i) => (i - 1 + filteredSlash.length) % filteredSlash.length);
                     return;
                   }
-                  if (e.key === "Enter" || e.key === "Tab") {
+                  // r245 IME parity: while a CJK composition is active that
+                  // Enter/Tab belongs to the IME — don't accept the command.
+                  if ((e.key === "Enter" || e.key === "Tab") && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     runSlash(filteredSlash[slashIndex]);
                     return;

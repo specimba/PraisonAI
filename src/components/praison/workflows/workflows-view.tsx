@@ -1397,7 +1397,9 @@ export function WorkflowsView() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Escape" && query) setQuery("");
+                  // r245 IME parity: don't clear the query while a CJK
+                  // composition is active — that Escape cancels the IME.
+                  if (e.key === "Escape" && query && !e.nativeEvent.isComposing) setQuery("");
                 }}
                 placeholder="Search pipelines, agents, steps, schedules…"
                 aria-label="Search pipelines"
