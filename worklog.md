@@ -6513,3 +6513,32 @@ Verification result: PASS
 Open risks: r142 real-world vault validation still pending (needs a real provider key); co-editing discipline stands (git status + unmasked tsc before snapshot); markdown now renders external images on load — CSP/CSP-report endpoint was not touched, verify no mixed-content complaints in real chats.
 Blockers: none
 Next recommended action: r242 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — candidates: settings-view detail, docs pass, error-handling polish in API routes, or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer/markdown.tsx (just done), and don't grind radar. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / T 4/4 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r242
+Agent: main (platform dev)
+Task: Surface rotation to Settings — What's-fixed receipt panel: document r239-r241 and flip render order to newest-first.
+
+Work Log:
+- HEAD = c22b3e09c (cron successor of r241's snapshot; tree clean). Health DOWN at round start → ONE restart → root 200.
+- Scouted API-route error handling first (handoff candidate): radar proxies (r139), tools/execute, automation/run-now all already return honest classified errors — polishing them would be theatre. Pivoted to settings detail.
+- Verified real gap in whats-fixed.tsx: changelog stopped at r237-r238 (r239/r240/r241 undocumented) and FIXES rendered oldest-first, so the most relevant receipts sat at the bottom of a 10-entry scroll.
+- Shipped (whats-fixed.tsx): (1) three new receipts — r239 pipeline cards show recurring intent, r240 radar remembers tab state, r241 markdown images & checklists; (2) render order flipped newest-first via `[...FIXES].reverse()`, source array kept chronological with a comment so future receipts just append; (3) header range r186-r238 → r186-r241 + "Newest receipts first" promise.
+- New standing U-series suite scripts/cdp-qa-whatsfixed-order.mjs (4 checks; static content — no seeding, no reload dance).
+- Suite lessons: first run 1/4 — (a) my new entries were inserted at the TOP of the source array, breaking the ascending order reverse() relies on (rendered = exact reverse of an unsorted array; chip dump made it obvious) → moved entries to the array's chronological end; (b) `#whats-fixed p` matched an entry detail, not the CardDescription (this shadcn version doesn't render descriptions as <p>) → U3 now checks section-level text; (c) my "strictlyDescending" predicate was tautologically false (idx computed over the iterated array itself) → replaced with an exact expected-sequence assertion.
+- Verification: U-series 4/4 GREEN; T-series regression 4/4 GREEN; bun run qa:tsc exit=0 unmasked; eslint whats-fixed.tsx 0; root 200; screenshot ops/qa/u-series-whatsfixed.png.
+- Snapshot pushed: see git log (r242 snapshot).
+
+Stage Summary:
+- The in-app changelog is current through r241 and leads with the newest work; U-series (4/4) guards order + range so the receipt panel can't silently go stale again.
+
+Round Handoff:
+Round ID: r243
+Task owner: main (platform dev)
+Scope completed: whats-fixed r239-r241 receipts + newest-first ordering + U-series suite.
+User-visible changes: Settings → What's fixed now shows r241/r240/r239 at the top and names the r186-r241 range.
+Verification steps: node scripts/cdp-qa-whatsfixed-order.mjs → SUMMARY: 4 passed, 0 failed; node scripts/cdp-qa-markdown-fidelity.mjs → 4 passed, 0 failed; bun run qa:tsc → exit 0; eslint → 0; root 200.
+Verification result: PASS
+Open risks: r142 real-world vault validation still pending (needs a real provider key); co-editing discipline stands (git status + unmasked tsc before snapshot); markdown external-image CSP note from r241 still unverified in real chats.
+Blockers: none
+Next recommended action: r243 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — candidates: settings-view detail beyond whats-fixed (Behavior/Evolution sections untouched), docs pass, a new small user-facing feature, error-handling sweep of the chat send path (frontend, not the already-clean API routes), or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer/markdown.tsx/whats-fixed.tsx (just done), and don't grind radar. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / T 4/4 / U 4/4 / guard verifier 7/7.
