@@ -6542,3 +6542,30 @@ Verification result: PASS
 Open risks: r142 real-world vault validation still pending (needs a real provider key); co-editing discipline stands (git status + unmasked tsc before snapshot); markdown external-image CSP note from r241 still unverified in real chats.
 Blockers: none
 Next recommended action: r243 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — candidates: settings-view detail beyond whats-fixed (Behavior/Evolution sections untouched), docs pass, a new small user-facing feature, error-handling sweep of the chat send path (frontend, not the already-clean API routes), or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer/markdown.tsx/whats-fixed.tsx (just done), and don't grind radar. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / T 4/4 / U 4/4 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r243
+Agent: main (platform dev)
+Task: Surface rotation to Settings → About: human-readable build fingerprint (pairs with the r189 stale-tab guard).
+
+Work Log:
+- HEAD = 09026937f (cron successor of r242's snapshot; tree clean). Health DOWN at round start → ONE restart → root 200.
+- Honest scouting pass before committing: Behavior/Evolution sections (aria labels, live preview, reset button — already polished), usage-dashboard + setup-wizard (empty states present), chat send path in chat-view.tsx (honest receipts, abort classification, error toasts — hardened). No forced fixes; pivoted to an additive feature.
+- Shipped (settings-view.tsx): BuildInfoLine in the About panel — one fetch to the existing /api/version endpoint (already polled by the r189 stale-tab guard, so no new network surface), decodes the bootId:mtimeMs freshness stamp into "server boot <id> · source last changed <local time>". After an amber-pill refresh the user can now confirm the new build actually landed; failed fetch renders nothing (honest absence). data-boot/data-changed-ms attributes for testability.
+- New standing V-series suite scripts/cdp-qa-build-info.mjs (3 checks; static content, no seeding): line renders with boot id + source-changed text; displayed fingerprint must MATCH the live /api/version response (boot equality, mtime within 5s, age < 2h); no console errors.
+- Verification: V-series 3/3 GREEN first run (fingerprint 1x92sr, mtime 0 min old); regressions U-series 4/4 + S-series 9/9 GREEN; bun run qa:tsc exit=0 unmasked; eslint settings-view.tsx 0; root 200; screenshot ops/qa/v-series-build-info.png.
+- Snapshot pushed: see git log (r243 snapshot).
+
+Stage Summary:
+- The About panel closes the freshness loop: r189's guard tells users WHEN to refresh, the build fingerprint shows them WHAT they are running (boot id + last source change), and V-series (3/3) pins the displayed values to the live endpoint.
+
+Round Handoff:
+Round ID: r244
+Task owner: main (platform dev)
+Scope completed: About build fingerprint + V-series suite.
+User-visible changes: Settings → About shows "Build fingerprint: server boot <id> · source last changed <time>".
+Verification steps: node scripts/cdp-qa-build-info.mjs → SUMMARY: 3 passed, 0 failed; node scripts/cdp-qa-whatsfixed-order.mjs → 4 passed; node scripts/cdp-qa-pipeline-search.mjs → 9 passed; bun run qa:tsc → exit 0; eslint → 0; root 200.
+Verification result: PASS
+Open risks: r142 real-world vault validation still pending (needs a real provider key); co-editing discipline stands (git status + unmasked tsc before snapshot); markdown external-image CSP note from r241 still unverified in real chats.
+Blockers: none
+Next recommended action: r244 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — the settings surface has now absorbed three rounds (whats-fixed/build-info) — prefer: docs pass, a new small user-facing feature elsewhere (test-agent-dialog is un-scouted and NOT avoid-listed; shell.tsx nav/TopBar un-scouted), performance (e.g. memo/dep audit in workflows-view), or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer/markdown.tsx/whats-fixed.tsx/settings-view.tsx (just done), and don't grind radar. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / T 4/4 / U 4/4 / V 3/3 / guard verifier 7/7.
