@@ -188,6 +188,45 @@ const FRAMEWORK_OPTIONS: { value: Framework; title: string; sub: string }[] = [
   },
 ];
 
+// r243: human-readable build identity for the About panel — decodes the r189
+// /api/version freshness stamp (bootId:mtimeMs) into "server boot" + "source
+// last changed". Pairs with the stale-tab guard: after an amber-pill refresh,
+// this line lets the user confirm the new build actually landed. One fetch
+// per Settings open, same endpoint the guard already polls; a failed fetch
+// renders nothing (honest absence, no fake stamp).
+function BuildInfoLine() {
+  const [info, setInfo] = React.useState<{ boot: string; changedMs: number } | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/version")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { stamp?: string } | null) => {
+        if (cancelled || !data?.stamp) return;
+        const [boot, mtime] = String(data.stamp).split(":");
+        const ms = Number(mtime);
+        if (!boot || !Number.isFinite(ms) || ms <= 0) return;
+        setInfo({ boot, changedMs: ms });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!info) return null;
+  return (
+    <p
+      data-testid="build-info"
+      data-boot={info.boot}
+      data-changed-ms={info.changedMs}
+      className="text-xs text-muted-foreground"
+    >
+      Build fingerprint: server boot{" "}
+      <span className="font-mono text-[11px]">{info.boot}</span> · source last
+      changed {new Date(info.changedMs).toLocaleString()}
+    </p>
+  );
+}
+
 export function SettingsView() {
   const settings = useSettingsStore((s) => s.settings);
   const update = useSettingsStore((s) => s.update);
@@ -910,6 +949,7 @@ export function SettingsView() {
                   BYOK
                 </Badge>
               </div>
+              <BuildInfoLine />
               <div>
                 <a
                   href={GITHUB_URL}
