@@ -390,6 +390,10 @@ export function TestAgentDialog({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
+                  // r244: parity with the chat composer (r993) — Enter that
+                  // only CONFIRMS an IME composition (CJK input) must not
+                  // send the half-composed text.
+                  if (e.nativeEvent.isComposing) return;
                   e.preventDefault();
                   void send();
                 }
