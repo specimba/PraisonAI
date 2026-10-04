@@ -81,3 +81,4 @@ ops/heartbeat.log
 # r179: provider vault contains LIVE keys — local-only, never pushed (GitHub push protection + directive §credentials)
 user-artifacts/**/praison-provider-vault*.json
 user-artifacts/**
+ops/chrome-profile/
