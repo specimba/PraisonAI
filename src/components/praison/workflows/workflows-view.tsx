@@ -19,6 +19,7 @@ import {
   Plus,
   RotateCcw,
   PauseCircle,
+  Search,
   ShieldAlert,
   Sparkles,
   Trash2,
@@ -28,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -883,6 +885,58 @@ export function WorkflowsView() {
     [agents]
   );
 
+  // r237: pipeline search — the studio had no way to find a pipeline beyond
+  // eyeballing cards (the only filters lived inside the Evolution inbox).
+  // One lowercase needle matches name, description, step labels, step
+  // instructions and the resolved agent names; the memo keeps typing cheap
+  // even with large rosters, and an empty needle short-circuits to the full
+  // list so the grid identity is stable when search is idle.
+  const [query, setQuery] = React.useState("");
+  const searchRef = React.useRef<HTMLInputElement | null>(null);
+  const filteredWorkflows = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return workflows;
+    return workflows.filter((wf) => {
+      if (
+        wf.name.toLowerCase().includes(q) ||
+        wf.description.toLowerCase().includes(q)
+      )
+        return true;
+      return wf.steps.some((s) => {
+        const agentName = agentById.get(s.agentId)?.name ?? "";
+        return (
+          s.label.toLowerCase().includes(q) ||
+          (s.instruction ?? "").toLowerCase().includes(q) ||
+          agentName.toLowerCase().includes(q)
+        );
+      });
+    });
+  }, [workflows, query, agentById]);
+
+  // "/" focuses the search box while Workflow Studio is on screen. This view
+  // mounts only when active (page.tsx renders it conditionally), so the
+  // window listener can't leak into Chat/Agents — and the target guard keeps
+  // typing inside any input, textarea, select or contenteditable from
+  // triggering it.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // r125: provider health — resolve the active brain ONCE per view (every card
   // runs through the same engine). The resolver is the single source of truth,
   // so the chip can never drift from what a run will actually do: a selected
@@ -1325,6 +1379,54 @@ export function WorkflowsView() {
         <EvolutionInbox />
         <EvolutionLedger workflows={workflows} />
 
+        {!boardOpen && workflows.length > 0 && (
+          <div className="mb-4 flex items-center gap-2">
+            <div className="relative w-full max-w-xs">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && query) setQuery("");
+                }}
+                placeholder="Search pipelines, agents, steps…"
+                aria-label="Search pipelines"
+                className="h-8 pl-8 pr-8 text-xs"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear pipeline search"
+                  title="Clear search (Esc)"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              ) : (
+                <kbd
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border bg-muted px-1 font-mono text-[10px] text-muted-foreground"
+                  aria-hidden
+                >
+                  /
+                </kbd>
+              )}
+            </div>
+            {query.trim() !== "" && (
+              <span
+                aria-live="polite"
+                className="shrink-0 text-xs text-muted-foreground"
+              >
+                {filteredWorkflows.length} of {workflows.length} pipeline{workflows.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+        )}
+
         {boardOpen ? (
           <RunKanban onSelect={openRunFromBoard} />
         ) : workflows.length === 0 ? (
@@ -1336,6 +1438,18 @@ export function WorkflowsView() {
               <Button size="sm" onClick={openNew}>
                 <Plus className="h-4 w-4" />
                 New Workflow
+              </Button>
+            }
+          />
+        ) : filteredWorkflows.length === 0 ? (
+          <EmptyState
+            emoji="🔍"
+            title={`No pipelines match “${query.trim()}”`}
+            description="Try a shorter needle — search covers names, descriptions, step labels, instructions and agent names."
+            action={
+              <Button size="sm" variant="outline" onClick={() => setQuery("")}>
+                <X className="h-4 w-4" />
+                Clear search
               </Button>
             }
           />
@@ -1366,7 +1480,7 @@ export function WorkflowsView() {
             </Alert>
           )}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {workflows.map((wf) => {
+            {filteredWorkflows.map((wf) => {
               const lastRun = wf.runs[0];
               // r81: live state for ANY run (manual or scheduled) — see the
               // liveRunCount note. Only one run per workflow can be active
