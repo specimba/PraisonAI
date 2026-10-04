@@ -888,9 +888,10 @@ export function WorkflowsView() {
   // r237: pipeline search — the studio had no way to find a pipeline beyond
   // eyeballing cards (the only filters lived inside the Evolution inbox).
   // One lowercase needle matches name, description, step labels, step
-  // instructions and the resolved agent names; the memo keeps typing cheap
-  // even with large rosters, and an empty needle short-circuits to the full
-  // list so the grid identity is stable when search is idle.
+  // instructions, the resolved agent names and — since r238 — the schedule
+  // task text; the memo keeps typing cheap even with large rosters, and an
+  // empty needle short-circuits to the full list so the grid identity is
+  // stable when search is idle.
   const [query, setQuery] = React.useState("");
   const searchRef = React.useRef<HTMLInputElement | null>(null);
   const filteredWorkflows = React.useMemo(() => {
@@ -899,7 +900,12 @@ export function WorkflowsView() {
     return workflows.filter((wf) => {
       if (
         wf.name.toLowerCase().includes(q) ||
-        wf.description.toLowerCase().includes(q)
+        wf.description.toLowerCase().includes(q) ||
+        // r238: a recurring pipeline's "what it does" lives in
+        // schedule.task ("routine every 1 hour for improved reports…"),
+        // which no other field carries — search it so a schedule is
+        // findable by intent, not just by its name.
+        (wf.schedule?.task ?? "").toLowerCase().includes(q)
       )
         return true;
       return wf.steps.some((s) => {
@@ -1393,7 +1399,7 @@ export function WorkflowsView() {
                 onKeyDown={(e) => {
                   if (e.key === "Escape" && query) setQuery("");
                 }}
-                placeholder="Search pipelines, agents, steps…"
+                placeholder="Search pipelines, agents, steps, schedules…"
                 aria-label="Search pipelines"
                 className="h-8 pl-8 pr-8 text-xs"
               />
@@ -1445,7 +1451,7 @@ export function WorkflowsView() {
           <EmptyState
             emoji="🔍"
             title={`No pipelines match “${query.trim()}”`}
-            description="Try a shorter needle — search covers names, descriptions, step labels, instructions and agent names."
+            description="Try a shorter needle — search covers names, descriptions, step labels, instructions, agent names and schedule task text."
             action={
               <Button size="sm" variant="outline" onClick={() => setQuery("")}>
                 <X className="h-4 w-4" />

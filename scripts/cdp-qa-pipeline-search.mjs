@@ -73,13 +73,15 @@ const AGENTS = [
   mkAgent("s237-quill", "Quill Keeper v237", "🧐", "Code review bot"),
   mkAgent("s237-moss", "Moss Walker v237", "🪴", "Garden planner bot"),
 ];
-const mkWf = (id, name, desc, agentId, label, instruction) => ({
+const mkWf = (id, name, desc, agentId, label, instruction, schedule) => ({
   id, name, description: desc,
   steps: [{ id: `${id}-step`, agentId, label, instruction, kind: "generate" }],
   runs: [], createdAt: NOW, updatedAt: NOW,
+  ...(schedule ? { schedule } : {}),
 });
 const WFS = [
-  mkWf("s237-wf-zephyr", "Zephyr Digest v237", "Morning headlines digest", "s237-aurora", "Scrape headlines", "pull top news"),
+  mkWf("s237-wf-zephyr", "Zephyr Digest v237", "Morning headlines digest", "s237-aurora", "Scrape headlines", "pull top news",
+    { enabled: false, intervalMs: 3_600_000, task: "kepler telemetry digest" }),
   mkWf("s237-wf-code", "Code Reviewer v237", "Reviews pull requests", "s237-quill", "Lint the diff", "check quartz typescript types"),
   mkWf("s237-wf-garden", "Garden Planner v237", "Seasonal planting plan", "s237-moss", "Watering schedule", "seasonal plants"),
 ];
@@ -226,7 +228,16 @@ const t4 = await evalJs(ws, `(() => ({
 }))()`);
 check("T4 agent-name needle 'moss walker' → Garden Planner v237", t4.cards === 1 && t4.name === "Garden Planner v237", `cards=${t4.cards} name="${t4.name}"`);
 
-// T5 — no-match → empty state → Clear restores
+// T5 — schedule-task needle (r238: matches ONLY schedule.task, no other field)
+await evalJs(ws, TYPE_INTO("kepler telemetry"));
+await waitFor(ws, `document.querySelectorAll("[data-wf-card]").length === 1`, 5_000);
+const t5 = await evalJs(ws, `(() => ({
+  cards: document.querySelectorAll("[data-wf-card]").length,
+  name: document.querySelector("[data-wf-card] h3")?.textContent ?? "",
+}))()`);
+check("T5 schedule-task needle 'kepler telemetry' → Zephyr Digest v237", t5.cards === 1 && t5.name === "Zephyr Digest v237", `cards=${t5.cards} name="${t5.name}"`);
+
+// T6 — no-match → empty state → Clear restores
 await evalJs(ws, TYPE_INTO("zzzqqq"));
 await waitFor(ws, `document.body.textContent.includes("No pipelines match")`, 5_000);
 const t5a = await evalJs(ws, `(() => ({
@@ -239,14 +250,14 @@ const t5b = await evalJs(ws, `(() => ({
   cards: document.querySelectorAll("[data-wf-card]").length,
   value: document.querySelector('input[aria-label="Search pipelines"]')?.value ?? "?",
 }))()`);
-check("T5 no-match empty state", t5a.empty && t5a.cards === 0, `empty=${t5a.empty} cards=${t5a.cards}`);
-check("T5b Clear button restores all + empties input", t5b.cards === TOTAL && t5b.value === "", `cards=${t5b.cards} value="${t5b.value}"`);
+check("T6 no-match empty state", t5a.empty && t5a.cards === 0, `empty=${t5a.empty} cards=${t5a.cards}`);
+check("T6b Clear button restores all + empties input", t5b.cards === TOTAL && t5b.value === "", `cards=${t5b.cards} value="${t5b.value}"`);
 
-// T6 — "/" hotkey focuses the box (guarded away from inputs by the feature)
+// T7 — "/" hotkey focuses the box (guarded away from inputs by the feature)
 await evalJs(ws, `document.activeElement?.blur?.(); document.body.focus();`);
 await evalJs(ws, `document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }))`);
-const t6 = await evalJs(ws, `document.activeElement?.getAttribute("aria-label")`);
-check("T6 '/' focuses the search box", t6 === "Search pipelines", `activeElement aria-label=${JSON.stringify(t6)}`);
+const t7 = await evalJs(ws, `document.activeElement?.getAttribute("aria-label")`);
+check("T7 '/' focuses the search box", t7 === "Search pipelines", `activeElement aria-label=${JSON.stringify(t7)}`);
 
 await evalJs(ws, TYPE_INTO("zephyr digest"));
 await waitFor(ws, `document.querySelectorAll("[data-wf-card]").length === 1`, 5_000);
