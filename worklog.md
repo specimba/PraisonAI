@@ -6430,3 +6430,31 @@ Verification result: PASS
 Open risks: run-history contents still outside search scope (deliberate — runs are ephemeral and large); r142 real-world vault validation still pending; editor save/auto-plan paths untouched (guarded by O+P).
 Blockers: none
 Next recommended action: r239 — (1) FIRST read any user report. (2) Verify HEAD = a6e91a73b (or successor). (3) Rotate surfaces — candidates: a docs pass, radar-view polish, settings-view detail, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (4) Standing: tsc + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / S 9/9 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r239
+Agent: main (platform dev)
+Task: Rotate surface per r238 handoff. Mid-round the "app visibly broken" clause fired: transient tree corruption found, diagnosed, and verified healthy — then shipped the scheduled-task-intent loop closer + changelog receipt.
+
+Work Log:
+- HEAD = 067faffa3 (cron successor of a6e91a73b — lineage intact; that commit was only my r238 worklog auto-committed). Health DOWN → one restart → root 200.
+- CORRUPTION SCARE (investigated, resolved): workflows-view.tsx line 998 read `}, ighlightId, clearHighlight]);` (deps array missing `[h`) — a hard ReferenceError had it been live. It appeared in the window between r238's tsc and the a6e91a73b snapshot, and was found ALREADY FIXED on re-read; the file had also silently grown ~120 lines (command-palette → requestRunWorkflow integration landed concurrently and was swept into my r238 snapshot). Current tree: git status clean, tsc exit=0 UNMASKED. Co-editing risk noted for future rounds: re-verify immediately before snapshot; do not assume last round's reads.
+- VERIFICATION BLIND SPOT closed for my own process: previous rounds piped tsc through `tail`, so `$?` measured tail, not tsc — that's how the typo slipped past r238's "verification". Standing fix: use `bun run qa:tsc` (script already exists) or capture exit un-piped. Recorded as doctrine.
+- Shipped (workflows-view.tsx): schedule task text now renders on the card — a muted one-line `<p>` under the description (Clock icon, line-clamp-1, full text in title), only when schedule.task exists and differs from the description. This closes the r238 loop: search finds a pipeline by recurring intent → the card shows that intent (it was previously invisible).
+- Changelog receipt (settings/whats-fixed.tsx): new entry "r237-r238 — Workflow Studio is searchable" with the lookFor chip and a note about the new card task line; header range updated r186-r196 → r186-r238.
+- S-series T5 extended: schedule-task hit must be VISIBLE in the matched card's textContent (visible=true asserted). Suite run: 9/9 GREEN (fresh profile /tmp/qa-r239-profile; screenshot ops/qa/s-series-search.png). tsc exit=0 unmasked; eslint exit=0 on both edited files.
+- Snapshot pushed: 78c7704ee (fork/main).
+
+Stage Summary:
+- Pipeline search is now end-to-end honest: intent findable (r238) AND intent visible on the card (r239); users get an in-app changelog receipt for the search feature. Tree-health verified unmasked; co-editing/verification doctrine recorded.
+
+Round Handoff:
+Round ID: r240
+Task owner: main (platform dev)
+Scope completed: schedule-task line on cards + changelog entry + verification-integrity doctrine (no more piped tsc) + concurrent-editor forensics.
+User-visible changes: cards with a distinct schedule task show it (muted clock line); Settings → What's fixed documents the searchable studio.
+Verification steps: node scripts/cdp-qa-pipeline-search.mjs → SUMMARY: 9 passed, 0 failed; bun run qa:tsc → exit 0; eslint → exit 0; root 200.
+Verification result: PASS
+Open risks: another process co-edited src during r237-r239 — before snapshot, ALWAYS `git status` + unmasked tsc; r142 real-world vault validation still pending; run-history contents still outside search scope (deliberate).
+Blockers: none
+Next recommended action: r240 — (1) FIRST read any user report. (2) Verify HEAD = 78c7704ee (or successor); if the tree is dirty with unknown edits, diff before touching anything. (3) Rotate surfaces — candidates: radar-view polish, settings-view detail, docs, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / S 9/9 / guard verifier 7/7.
