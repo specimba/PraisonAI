@@ -6371,3 +6371,35 @@ Verification result: PASS
 Open risks: P-suite depends on the QA profile keeping ≥1 agent in praison-agents and a vault provider configured (browser-direct leg) — a profile change would need the mock dialect revisited; r142 real-world vault validation still pending; sandbox rollback discipline kept forever.
 Blockers: none
 Next recommended action: r237 — (1) FIRST read any user report. (2) Verify HEAD lineage. (3) Rotate surfaces per the standing list — candidates: pipelines-view polish, a docs pass, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog (save + auto-plan now guarded by O+P), workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (4) Standing: tsc + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r237
+Agent: main (platform dev)
+Task: Rotate surfaces per r236 handoff — shipped user-facing pipeline search in Workflow Studio (pipelines-view polish candidate).
+
+Work Log:
+- Read worklog tail (r236 closed P-suite 6/6), verified HEAD lineage c968776b1, health curl DOWN → one restart (setsid bun run dev) → root 200.
+- Surface scan: "pipelines" = Workflows Studio (workflows-view.tsx, on the allowed list). Found the gap: no way to search/filter the pipeline list (only filters were inside EvolutionInbox).
+- Implemented pipeline search (workflows-view.tsx, +~120 lines): toolbar row above the grid (hidden when the runs board is open or roster empty); one lowercase needle matches wf.name, description, step labels, step instructions, and agentId→agent-name resolution via the existing agentById memo; empty needle short-circuits to the full list (stable grid identity). Live "N of M pipelines" count in an aria-live=polite span; clear (X) button + Esc clears; "/" hotkey focuses the box (guarded against INPUT/TEXTAREA/SELECT/contenteditable; inherently view-scoped because page.tsx mounts WorkflowsView conditionally); no-match EmptyState ("No pipelines match …") with a Clear search action; grid now maps memoized filteredWorkflows.
+- Verification: tsc --noEmit → 0; eslint on workflows-view.tsx → 0.
+- New standing suite scripts/cdp-qa-pipeline-search.mjs (S-series, 8 checks): box+cards initial, name needle ("zephyr digest"), instruction needle ("quartz"), agent-name needle ("moss walker"), no-match empty state, Clear restores all, "/" focus, zero console errors + screenshot ops/qa/s-series-search.png.
+- HARNESS DOCTRINE (three new lessons, all bought with failed runs):
+  (1) DESKTOP VIEWPORT REQUIRED: headless-shell defaults to 800x600 → mobile shell mounts (nav lives in the closed Sheet) → nav[aria-label=Primary] missing. Fix: Emulation.setDeviceMetricsOverride 1440x900 right after connect.
+  (2) RELOAD DOM RACE: after Page.reload the OLD document can answer the nav probe before the swap — gate on the NEW document's readyState==="complete" first, and poll the nav-button find.
+  (3) DEBOUNCED-STORAGE SEED RACE: praison-workflows uses debouncedStorage(450) — a boot-time set() can flush the 5-demo blob AFTER a direct localStorage seed write, silently clobbering it (suite saw 5 cards vs 3 expected). Fix: seed → wait 700ms → seed again → reload (last write wins, no stale timer left). Also: fresh profiles never wrote the persist key at all (debounce writes only on change) — the seed now CREATES the blob with the app's default versions (workflows 0 / agents 1).
+- RESULT: S-series 8/8 GREEN (fresh profile, one shell command). The five pre-existing demo workflows coexist with the 3 seeded v237 fixtures; needles are collision-proof tokens.
+- Snapshot pushed: 7dec9fe6e (fork/main).
+
+Stage Summary:
+- Workflow Studio now has real search over pipelines (name/description/steps/instructions/agents) with count, clear, hotkey, and an honest empty state — the list surface catches up with the rest of the studio's polish. Standing matrix: all suites remain green (S 8/8 added; P/O editor paths untouched this round).
+
+Round Handoff:
+Round ID: r238
+Task owner: main (platform dev)
+Scope completed: pipeline search feature + S-series standing suite + three harness doctrine lessons (viewport, reload race, debounce seed race).
+User-visible changes: Workflow Studio list is searchable — "/" focuses, Esc clears, live result count, empty-match state with a one-click reset.
+Verification steps: node scripts/cdp-qa-pipeline-search.mjs → SUMMARY: 8 passed, 0 failed; tsc 0; eslint 0; root 200.
+Verification result: PASS
+Open risks: search does not yet cover schedule task text or run-history contents (could match "task: …" text next); r142 real-world vault validation still pending; editor save/auto-plan paths untouched (still guarded by O+P).
+Blockers: none
+Next recommended action: r238 — (1) FIRST read any user report. (2) Verify HEAD = 7dec9fe6e (or successor). (3) Rotate surfaces — candidates: a docs pass, radar-view polish, settings-view detail, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer (workflows-view list itself now has the O+P+S guards and is fair game again only for additive tweaks). (4) Standing: tsc + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / S 8/8 / guard verifier 7/7.
