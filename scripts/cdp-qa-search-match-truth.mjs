@@ -13,6 +13,14 @@ import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 //   J4  Enter jumps to the first hit (msg-flash lands on a real message)
 //   J5  hygiene: original praison-conversations localStorage restored —
 //       zero qa-r224 rows remain
+// r258 finding: J5 failed once (rows=2 mine=1) — the restore wrote the
+// snapshot while the LIVE app was still on the chat view, and the app's
+// conversations persist (in-memory state, incl. the seeded conv) raced the
+// foreign write and resurrected qa-r224 before the reload could hydrate the
+// restored value. Fix: BOTH foreign writes (seed + restore) now happen from
+// a bare JSON page on the same origin (/api/providers/free-models — zero
+// app JS, so no live store can overwrite them); hydration then picks the
+// write up deterministically on the next gotoChat.
 // Seeding doctrine: the conversations store hydrates from localStorage — the
 // harness snapshots the existing value, merges its throwaway conversation in,
 // reloads (hydration picks it up), and restores the snapshot in J5.
@@ -116,6 +124,14 @@ async function gotoChat(ws) {
   }
 }
 
+// Bare same-origin page: a JSON API route renders zero app JS, but localStorage
+// stays readable/writable for the origin (r258 J5 resurrection fix).
+async function gotoBare(ws) {
+  await wsSend(ws, "Page.navigate", { url: `${BASE}/api/providers/free-models` });
+  await waitFor(ws, `document.readyState === 'complete'`, 15_000);
+  await new Promise((r) => setTimeout(r, 300));
+}
+
 async function main() {
   // Browser boot
   await ensureChrome();
@@ -135,6 +151,9 @@ async function main() {
     const snapshot = await evalJs(ws, `localStorage.getItem("praison-conversations")`);
 
     // Merge the throwaway conversation into the persisted state, then reload.
+    // r258: the foreign write happens from a bare page (see header) — the
+    // live app's persist could race it exactly like J5's restore did.
+    await gotoBare(ws);
     await evalJs(ws, `(() => {
       const now = Date.now();
       const mk = (i, content) => ({
@@ -236,7 +255,11 @@ async function main() {
     const flashed = await waitFor(ws, `Boolean(document.querySelector('.msg-flash'))`, 5_000);
     check("J4 Enter jumps to the first hit (message flashes)", flashed);
 
-    // J5 — hygiene: restore the original seed and prove zero residue
+    // J5 — hygiene: restore the original seed and prove zero residue.
+    // r258: write from a bare page — the live app resurrected qa-r224 once
+    // by persisting its in-memory state (with the seeded conv) over the
+    // foreign write before the reload could hydrate it.
+    await gotoBare(ws);
     await evalJs(ws, snapshot === null
       ? `localStorage.removeItem("praison-conversations"); true`
       : `localStorage.setItem("praison-conversations", ${JSON.stringify(snapshot)}); true`);
