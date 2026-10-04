@@ -75,7 +75,17 @@ function buildGlobalHits(
       convHits += 1;
       if (convHits >= MAX_HITS_PER_CONV) break;
     }
-    if (hits.filter((h) => h.convId === conv.id).length > 0 && hits.length >= MAX_CONVS) break;
+    // r258: the old early break read `hits.length >= MAX_CONVS` — a
+    // hits-vs-conversations category error that always stopped the scan
+    // at 6 hits = 2 groups, silently hiding matches in chats 3-6 that the
+    // MAX_CONVS design (and the group filter below) promise. Cap distinct
+    // conversation groups instead (6 groups × 3 hits = 18).
+    if (
+      hits.some((h) => h.convId === conv.id) &&
+      new Set(hits.map((x) => x.convId)).size >= MAX_CONVS
+    ) {
+      break;
+    }
   }
   // group order follows conversation order; keep at most MAX_CONVS groups
   const seen = new Set<string>();
