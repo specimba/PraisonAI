@@ -115,7 +115,7 @@ async function main() {
   // navigation assertion is meaningful.
   let h2 = await evalJS(ws, `document.querySelector("header h2")?.textContent ?? ""`);
   if (h2 === "Settings") {
-    await evalJS(ws, `${POINTER_SEQ}([...document.querySelectorAll('aside nav button')].find((b) => b.textContent.trim() === "Chat")))`);
+    await evalJS(ws, `${POINTER_SEQ}([...document.querySelectorAll('aside nav button')].find((b) => b.textContent.includes("Chat")))`);
     await poll(ws, `document.querySelector("header h2")?.textContent`, (v) => v === "Chat", 8_000, "back to Chat");
     h2 = "Chat";
   }

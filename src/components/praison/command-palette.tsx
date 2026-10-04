@@ -45,8 +45,8 @@ const NAV: { view: View; label: string; icon: React.ElementType; shortcut: strin
   { view: "chat", label: "Chat", icon: MessagesSquare, shortcut: "⌘1" },
   { view: "agents", label: "Agents", icon: Bot, shortcut: "⌘2" },
   { view: "workflows", label: "Workflows", icon: WorkflowIcon, shortcut: "⌘3" },
-  { view: "radar", label: "Radar", icon: RadarIcon, shortcut: "⌘5" },
-  { view: "settings", label: "Settings", icon: Cog, shortcut: "⌘4" },
+  { view: "radar", label: "Radar", icon: RadarIcon, shortcut: "⌘4" },
+  { view: "settings", label: "Settings", icon: Cog, shortcut: "⌘5" },
 ];
 
 const RECENT_CONVERSATIONS = 6;

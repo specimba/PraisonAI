@@ -49,10 +49,10 @@ Nav labels are short; page titles are descriptive — both names are intentional
   Image Studio, or jump to provider settings — from any view.
 - `⌘/Ctrl+Shift+N` — new chat (and jump to Chat).
 - `⌘/Ctrl+Shift+F` — global search across all chats.
-- `⌘/Ctrl+1…5` — switch to Chat / Agents / Workflows / **Settings / Radar**
-  (note: digit order follows the app's view order, so 4 = Settings, 5 = Radar).
-  Caveat: Chrome reserves `Ctrl+1-8` for tab switching on Windows/Linux, so the
-  digit shortcuts are only reliable on macOS or Firefox; the rest work everywhere.
+- `⌘/Ctrl+1…5` — switch views by sidebar position: Chat / Agents / Workflows /
+  Radar / Settings. Caveat: Chrome reserves `Ctrl+1-8` for tab switching on
+  Windows/Linux, so the digit shortcuts are only reliable on macOS or Firefox;
+  the rest work everywhere.
 
 Shortcuts live in `src/lib/use-shortcuts.ts` (global) and
 `src/components/praison/command-palette.tsx` (palette).
