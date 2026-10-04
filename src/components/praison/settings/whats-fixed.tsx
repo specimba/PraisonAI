@@ -26,6 +26,9 @@ interface FixNote {
 }
 
 const FIXES: FixNote[] = [
+  // r242: the array stays CHRONOLOGICAL (oldest → newest, new receipts append
+  // at the bottom) and the component renders it REVERSED, so the newest
+  // receipt is what a returning user sees first.
   {
     round: "r186",
     title: "Deep pipelines degrade instead of dying",
@@ -93,6 +96,27 @@ const FIXES: FixNote[] = [
     lookFor:
       'the "Search pipelines, agents, steps, schedules…" box above the card grid — press / to jump into it',
   },
+  {
+    round: "r239",
+    title: "Pipeline cards show their recurring intent",
+    detail:
+      "A pipeline with a schedule shows the schedule's task line right on the card (clock icon, muted) when it says something the description doesn't — so a pipeline found by what it does shows what it does.",
+    lookFor: "the clock line under the description on scheduled cards",
+  },
+  {
+    round: "r240",
+    title: "Trend Radar remembers where you were",
+    detail:
+      "Switching views no longer resets the HF Trending Hub section (models/datasets/spaces) or an arXiv query you had typed but not yet searched — the GitHub tab already remembered its username, now the other two tabs match.",
+    lookFor: "set the Hub section to Datasets, navigate away and back — it stays",
+  },
+  {
+    round: "r241",
+    title: "Markdown in replies renders images & checklists",
+    detail:
+      "Model replies that embed images now show them clamped to the card (lazy-loaded), broken image URLs get a clean fallback that keeps the alt text instead of the browser's raw broken glyph, inline data-URI images (charts, screenshots) actually render, and - [x] task lists display as real checkboxes.",
+    lookFor: "images in replies stay inside the bubble; task lists show checkboxes",
+  },
 ];
 
 export function WhatsFixedSection() {
@@ -101,13 +125,14 @@ export function WhatsFixedSection() {
       <CardHeader className="pb-3">
         <CardTitle>What&apos;s fixed recently</CardTitle>
         <CardDescription>
-          r186-r238 shipped pipeline &amp; relay repairs while boards can look unchanged (background
-          tabs stop hot-reloading). If you can read this section, this tab already runs current code
-          — otherwise an amber refresh pill appears within a minute.
+          r186-r241 shipped pipeline, radar &amp; rendering repairs while boards can look unchanged
+          (background tabs stop hot-reloading). Newest receipts first. If you can read this section,
+          this tab already runs current code — otherwise an amber refresh pill appears within a
+          minute.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {FIXES.map((f) => (
+        {[...FIXES].reverse().map((f) => (
           <div key={f.round} className="rounded-lg border p-3">
             <div className="flex items-baseline gap-2">
               <span className="shrink-0 rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
