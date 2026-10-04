@@ -25,7 +25,6 @@ import {
 import { AgentAvatar, ModelBadge } from "@/components/praison/atoms";
 import { ChatSearch } from "@/components/praison/chat/chat-search";
 import { HeartbeatButton } from "@/components/praison/chat/chat-heartbeat";
-import { ImageStudioDialog } from "@/components/praison/chat/image-studio";
 import { Composer } from "@/components/praison/chat/composer";
 import { ConversationList } from "@/components/praison/chat/conversation-list";
 import { MemoryDialog } from "@/components/praison/chat/memory-dialog";
@@ -1180,8 +1179,6 @@ export function ChatView() {
           onSendQueued={sendQueuedNow}
           onStop={stop}
         />
-        {/* Image Studio — global BYOK image generation dialog */}
-        <ImageStudioDialog />
       </div>
     </div>
   );
