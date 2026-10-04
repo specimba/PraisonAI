@@ -6485,3 +6485,31 @@ Verification result: PASS
 Open risks: r142 real-world vault validation still pending (needs a real provider key — mock would be theatre); papers input placeholder still shows DEFAULT query regardless of persisted value (cosmetic); co-editing discipline from r239 stands (git status + unmasked tsc before snapshot).
 Blockers: none
 Next recommended action: r241 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — candidates: settings-view detail, docs pass, chat markdown polish (chat markdown.tsx not on the avoid list), or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer, and don't grind radar again this cycle. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / guard verifier 7/7.
+
+---
+Task ID: 424432 — r241
+Agent: main (platform dev)
+Task: Surface rotation to the shared MarkdownRenderer (chat/workflows/test-dialogs): image fidelity + GFM task-list polish.
+
+Work Log:
+- HEAD = e88ad7971 (cron successor of r240's snapshot; tree clean, tsc exit=0 unmasked). Health DOWN at round start → ONE restart (`bun run start`) → root 200.
+- Scouted markdown.tsx (explicitly green-lit by r241 handoff): no `img` override and no GFM task-list styling — both gaps hit every surface that renders model output (message-item, workflow-run-panel step output, test-agent-dialog).
+- Shipped (markdown.tsx): (1) `MdImage` — lazy loading, `max-w-full` width clamp, rounded/bordered, and a real broken-image fallback (`[data-md-img-fallback]`, ImageOff icon + alt text kept visible via aria-label/title) for hallucinated URLs; (2) GFM task lists — checkboxes styled (accent-violet, aligned), `task-list-item` lis drop the doubled disc; (3) **real product bug found by the suite**: react-markdown's `defaultUrlTransform` silently blanks `data:` URIs, so model-generated inline images (charts/screenshots as data URLs) rendered as empty boxes — added `markdownUrlTransform` allow-listing RASTER `data:image/*` only (no svg), delegating everything else to the strict default; (4) `ul` override now MERGES GFM's `contains-task-list` class instead of being clobbered by it (task uls keep spacing, drop the disc).
+- New standing T-series suite scripts/cdp-qa-markdown-fidelity.mjs (4 checks), seeded a v241-tokened conversation with data-URI pixel + hallucinated URL + task list (debouncedStorage dance honored: 700ms ×2 + reload).
+- Two suite lessons en route: first run 2/4 exposed the urlTransform data-URI bug (the suite paying for itself); T3's "plain ul" assertion failed because CommonMark merges adjacent same-marker lists across a blank line — fixture fixed with a separating paragraph.
+- Verification: T-series 4/4 GREEN; S-series regression spot-check 9/9 GREEN; bun run qa:tsc exit=0 unmasked; eslint markdown.tsx 0; screenshot ops/qa/t-series-markdown.png.
+- Snapshot pushed: see git log (r241 snapshot).
+
+Stage Summary:
+- Markdown rendering is now fidelity-complete for the common model-output cases: inline images load (incl. data URIs) without overflowing, broken images get an honest visible fallback instead of the raw browser glyph, and GFM task lists render as proper checklists. T-series (4/4) added to the standing matrix.
+
+Round Handoff:
+Round ID: r242
+Task owner: main (platform dev)
+Scope completed: markdown img/task-list/data-URI urlTransform improvements + T-series suite.
+User-visible changes: chat/workflow/test-dialog markdown now shows model-embedded images (clamped + lazy), broken URLs get a clean fallback with alt text, `- [x]` task lists render as real checklists.
+Verification steps: node scripts/cdp-qa-markdown-fidelity.mjs → SUMMARY: 4 passed, 0 failed; node scripts/cdp-qa-pipeline-search.mjs → 9 passed, 0 failed; bun run qa:tsc → exit 0; eslint → 0; root 200.
+Verification result: PASS
+Open risks: r142 real-world vault validation still pending (needs a real provider key); co-editing discipline stands (git status + unmasked tsc before snapshot); markdown now renders external images on load — CSP/CSP-report endpoint was not touched, verify no mixed-content complaints in real chats.
+Blockers: none
+Next recommended action: r242 — (1) FIRST read any user report. (2) Verify HEAD lineage; diff unknown edits before touching anything. (3) Rotate surfaces — candidates: settings-view detail, docs pass, error-handling polish in API routes, or the Local Automation Vault epic (r142 — only if a real key exists). Avoid workflow-editor-dialog, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer/markdown.tsx (just done), and don't grind radar. (4) Standing: bun run qa:tsc (unmasked) + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / R 3/3 / S 9/9 / T 4/4 / guard verifier 7/7.
