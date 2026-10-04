@@ -1562,6 +1562,21 @@ export function WorkflowsView() {
                     </p>
                   ) : null}
 
+                  {/* r239: show the schedule's task text on the card. Search
+                      can now find a pipeline by its recurring intent (r238),
+                      but the card never displayed that intent — the hit was
+                      invisible. Shown only when it differs from the
+                      description (schedule.task falls back to it anyway). */}
+                  {wf.schedule?.task && wf.schedule.task !== wf.description ? (
+                    <p
+                      className="line-clamp-1 text-xs text-muted-foreground/80"
+                      title={`Schedule task — what each scheduled run asks for: ${wf.schedule.task}`}
+                    >
+                      <Clock className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden />
+                      {wf.schedule.task}
+                    </p>
+                  ) : null}
+
                   {liveRun ? (
                     <div
                       role="status"

@@ -85,6 +85,14 @@ const FIXES: FixNote[] = [
     lookFor:
       'the amber "No credentials in this export" note inside the import confirm dialog',
   },
+  {
+    round: "r237-r238",
+    title: "Workflow Studio is searchable",
+    detail:
+      "The pipeline list gains a real search box — one needle matches names, descriptions, step labels, step instructions, agent names and even the schedule task text that says what a recurring pipeline is for. Live result count, Esc or the × button clears, and a no-match state offers a one-click reset. Cards now also show that schedule task line, so a hit by intent is visible on the card itself.",
+    lookFor:
+      'the "Search pipelines, agents, steps, schedules…" box above the card grid — press / to jump into it',
+  },
 ];
 
 export function WhatsFixedSection() {
@@ -93,7 +101,7 @@ export function WhatsFixedSection() {
       <CardHeader className="pb-3">
         <CardTitle>What&apos;s fixed recently</CardTitle>
         <CardDescription>
-          r186-r196 shipped pipeline &amp; relay repairs while boards can look unchanged (background
+          r186-r238 shipped pipeline &amp; relay repairs while boards can look unchanged (background
           tabs stop hot-reloading). If you can read this section, this tab already runs current code
           — otherwise an amber refresh pill appears within a minute.
         </CardDescription>

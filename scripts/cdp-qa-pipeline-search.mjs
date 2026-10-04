@@ -234,8 +234,10 @@ await waitFor(ws, `document.querySelectorAll("[data-wf-card]").length === 1`, 5_
 const t5 = await evalJs(ws, `(() => ({
   cards: document.querySelectorAll("[data-wf-card]").length,
   name: document.querySelector("[data-wf-card] h3")?.textContent ?? "",
+  // r239: the schedule-task hit must be VISIBLE on the card itself
+  text: document.querySelector("[data-wf-card]")?.textContent ?? "",
 }))()`);
-check("T5 schedule-task needle 'kepler telemetry' → Zephyr Digest v237", t5.cards === 1 && t5.name === "Zephyr Digest v237", `cards=${t5.cards} name="${t5.name}"`);
+check("T5 schedule-task needle 'kepler telemetry' → Zephyr Digest v237 (task text visible)", t5.cards === 1 && t5.name === "Zephyr Digest v237" && t5.text.includes("kepler telemetry digest"), `cards=${t5.cards} name="${t5.name}" visible=${t5.text.includes("kepler telemetry digest")}`);
 
 // T6 — no-match → empty state → Clear restores
 await evalJs(ws, TYPE_INTO("zzzqqq"));
