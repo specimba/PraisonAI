@@ -357,6 +357,16 @@ export function SetupWizard() {
                     className="pr-10 font-mono text-xs"
                     autoComplete="off"
                     spellCheck={false}
+                    onKeyDown={(e) => {
+                      // Enter submits — paste-key-then-Enter is the natural
+                      // flow (r255). isComposing guard per the r244/r245 IME
+                      // doctrine: the Enter that CONFIRMS an IME composition
+                      // must not submit the wizard.
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        void validateAndFinish(provider);
+                      }
+                    }}
                   />
                   <button
                     type="button"
@@ -383,6 +393,14 @@ export function SetupWizard() {
                   className="font-mono text-xs"
                   autoComplete="off"
                   spellCheck={false}
+                  onKeyDown={(e) => {
+                    // Same Enter-to-submit contract as the key field (r255),
+                    // with the same isComposing IME guard.
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void validateAndFinish(provider);
+                    }
+                  }}
                 />
               </div>
             ) : null}
@@ -411,7 +429,19 @@ export function SetupWizard() {
             ) : null}
 
             <div className="flex items-center justify-between gap-2">
-              <Button type="button" variant="ghost" size="sm" onClick={() => setStep(provider.guide.length >= 0 ? 1 : 0)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  // r255: was `guide.length >= 0 ? 1 : 0` — a tautology whose
+                  // 0 branch was unreachable dead code. Keyed providers return
+                  // to the registration reading (as before); a provider with
+                  // no guide at all would now correctly return to the pick
+                  // step instead of an empty guide page.
+                  setStep(provider.guide.length > 0 ? 1 : 0)
+                }
+              >
                 <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back
               </Button>
               <div className="flex items-center gap-2">
