@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — L-series (r226): agent import is a truthful restore path ───────
 // The r226 change: sanitizeAgent always minted a FRESH id on import, so
 // export → wipe → import could never reconnect workflows that referenced the
@@ -175,6 +176,7 @@ const storeAgents = `((() => {
 })())`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

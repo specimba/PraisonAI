@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — H-series (r140): Agent card keyboard a11y ─────────────────────────
 // r140 made the agent roster cards keyboard-operable: the clickable Card was
 // a bare div (cursor-pointer + onClick only) — invisible to keyboard users
@@ -131,6 +132,7 @@ const cardExpr = `
   )`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

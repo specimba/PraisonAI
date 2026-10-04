@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — E-series (r218): per-slot Test/Reveal on registry-provider rows ─
 // The r218 change gives the executor-facing lane slots the same affordances
 // the legacy builtin box always had. Asserts end-to-end against the live dev
@@ -143,6 +144,7 @@ async function main() {
   await fetch(`${BASE}/api/vault?provider=builtin`, { method: "DELETE" });
 
   // Browser boot (r132 pattern)
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — R-series (r219): radar tab parked-staleness fix ────────────────
 // Asserts ModelRadarTab (the full-screen model tracker) refetches /api/tracker:
 //   R1 boot:   navigating to #/radar fires a mount GET (counter ≥ 1)
@@ -133,6 +134,7 @@ async function clickNav(ws, re, label) {
 
 async function main() {
   // Browser boot
+  await ensureChrome();
   const tabRes = await fetch("http://127.0.0.1:9222/json/new", { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — N-series (r228): run-panel follow-once + recovery-card gate ────
 // The r228 changes to workflow-run-panel.tsx:
 //  (1) The recovery card rendered only for error|stopped runs, but the runner
@@ -163,6 +164,7 @@ const rowFor = (task) =>
   })()`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

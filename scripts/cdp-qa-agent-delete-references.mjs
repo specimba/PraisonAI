@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — G-series (r221): delete dialog names its real consequences ─────
 // The r221 change: the agent delete dialog used to warn "Workflows that
 // reference it will need to be updated" — vague, when the exact breakage is
@@ -213,6 +214,7 @@ async function cardAction(ws, cardName, action) {
 
 async function main() {
   // Browser boot
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

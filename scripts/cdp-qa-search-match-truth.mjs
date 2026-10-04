@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — J-series (r224): the find-in-chat counter tells the truth ──────
 // The r224 change: ChatSearch's buildHits CAPPED the hit list at 50 but the
 // readout displayed hits.length — a conversation with 80 matches read
@@ -117,6 +118,7 @@ async function gotoChat(ws) {
 
 async function main() {
   // Browser boot
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

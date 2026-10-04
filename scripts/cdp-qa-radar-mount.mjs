@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — R-series (r159): Radar view mount cost MEASUREMENT ────────────────
 // The last main view never measured (r151 measured Workflows; r150 the ticker).
 // Radar = 972-line view, 4 tabs (models/github/hf/papers) on Radix Tabs
@@ -128,6 +129,7 @@ async function awaitSentinel(ws, budgetMs) {
 }
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

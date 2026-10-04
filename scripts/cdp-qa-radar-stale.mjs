@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — S-series (r160): stale-cache affordance on radar tabs ─────────────
 // CacheStatus now turns amber + "stale" past a per-tab TTL (HF 6h, papers 24h,
 // GitHub 7d). Live check, atomic chrome:
@@ -128,6 +129,7 @@ async function openHfTab(ws) {
 }
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   const tab = await tabRes.json();
   const ws = await connect(tab.webSocketDebuggerUrl);

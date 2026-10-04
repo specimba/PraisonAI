@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — H-series (r222): duplicate-named attachments remove one, not all ─
 // The r222 fix: Composer.removeAttachment filtered by NAME
 // (prev.filter(a => a.name !== name)) — but duplicate-named attachments are
@@ -100,6 +101,7 @@ const CHIP_COUNT = `document.querySelectorAll('[role="list"][aria-label^="Attach
 
 async function main() {
   // Browser boot
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── Y-series (r246): TopBar provider dropdown "no key" click navigates ──────
 // Feature under test: clicking a KEYLESS provider in the TopBar provider
 // dropdown used to be a dead click (it even mutated the wrong store —
@@ -79,6 +80,7 @@ const POINTER_SEQ = `(function firePointer(el){
 })`;
 
 async function main() {
+  await ensureChrome();
   const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
   if (!list) throw new Error("chrome CDP not reachable on :9222 — launch chrome-headless-shell first (same shell command)");
   const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

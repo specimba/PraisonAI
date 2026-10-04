@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP click-through QA (r129) ─────────────────────────────────────────────
 // Drives the locally-installed playwright headless shell over raw CDP (node's
 // native WebSocket) — bypasses the agent-browser CLI whose Chrome is
@@ -100,6 +101,7 @@ const clickByText = (label) => `
 async function main() {
   // New tab (about:blank), then navigate over CDP — /json/new?url= is
   // ignored by some Chrome builds (observed on HeadlessChrome/143).
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

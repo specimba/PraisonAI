@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — W-series (r244): test playground IME-safe Enter ────────────────
 // Feature under test: test-agent-dialog Enter-to-send now ignores Enter that
 // only confirms an IME composition (parity with the chat composer).
@@ -97,6 +98,7 @@ const TYPE_INTO = (v) => `
 `;
 
 // ─── drive ────────────────────────────────────────────────────────────────────
+await ensureChrome();
 const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
 if (!list) { console.error("SUMMARY: 0 passed, 1 failed — chrome CDP not reachable"); process.exit(1); }
 const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

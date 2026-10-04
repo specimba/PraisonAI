@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — F-series (r138): vault consume localhost-only guard ───────────
 // The consume endpoint now ENFORCES the trust model documented in
 // docs/LOCAL_AUTOMATION.md. Asserts, against the live dev server:
@@ -204,6 +205,7 @@ async function main() {
   }
 
   // F8 — browser "Test key" (legit caller #2) still passes the guard
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

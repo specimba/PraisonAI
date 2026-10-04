@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — Q-series (r151): ticker dark-recovery retry loop ──────────────────
 // r151 shipped a short-backoff retry (5s/15s/60s) for failed tracker fetches.
 // Before the fix, a failed FIRST fetch left the strip dark (no localStorage
@@ -100,6 +101,7 @@ const BLOCKER = `
 `;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

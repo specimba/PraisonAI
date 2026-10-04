@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // r229 residue sweeper — removes qa-r2xx-seeded entries from praison-workflows
 // (and praison-agents) localStorage after an ABORTED harness run left seeds behind.
 // Doctrine context: an aborted suite never reaches its restore step; the NEXT
@@ -7,6 +8,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 const PREFIXES = process.argv.slice(2).length ? process.argv.slice(2) : ["qa-r227", "qa-r228"];
+await ensureChrome();
 const BASE = "http://127.0.0.1:9222";
 
 async function cdpJson(path) {

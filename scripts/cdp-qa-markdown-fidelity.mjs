@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — T-series (r241): shared MarkdownRenderer fidelity ──────────────
 // Feature under test: markdown.tsx img override (lazy load + width clamp +
 // broken-image fallback) and GFM task-list checkbox styling.
@@ -110,6 +111,7 @@ const SEED = `
 `;
 
 // ─── drive ────────────────────────────────────────────────────────────────────
+await ensureChrome();
 const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
 if (!list) { console.error("SUMMARY: 0 passed, 1 failed — chrome CDP not reachable"); process.exit(1); }
 const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

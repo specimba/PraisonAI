@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── D-series (r249): ⌘/Ctrl+1…5 follow SIDEBAR POSITION ────────────────────
 // r249 changed VIEW_ORDER in src/lib/use-shortcuts.ts from the old internal
 // order [chat, agents, workflows, SETTINGS, RADAR] to sidebar order
@@ -83,6 +84,7 @@ const POINTER_SEQ = `(function firePointer(el){
 })`;
 
 async function main() {
+  await ensureChrome();
   const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
   if (!list) throw new Error("chrome CDP not reachable on :9222 — launch chrome-headless-shell first (same shell command)");
   const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

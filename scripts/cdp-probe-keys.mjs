@@ -1,8 +1,10 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // r231 probe — dump every praison* localStorage key with its qa-r228 reference
 // count, to find where the N-suite's seeded schedule survives the restore.
 // Usage: node scripts/cdp-probe-keys.mjs
 import { setTimeout as sleep } from "node:timers/promises";
 
+await ensureChrome();
 const BASE = "http://127.0.0.1:9222";
 const list = await (await fetch(`${BASE}/json/list`)).json();
 const tab = list.find((t) => t.type === "page" && (t.url || "").startsWith("http://localhost:3000"));

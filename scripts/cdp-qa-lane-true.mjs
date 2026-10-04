@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — E-series (r137): lane-true countdowns in ServerAutopilot ───────
 // Live evidence (2026-09-30, pasted app state) showed two defects this fixes:
 //   1. "bridge sync -5s ago" — negative relative time from server/client
@@ -132,6 +133,7 @@ const setSeed = (wf) => `
   localStorage.setItem("praison-workflows", JSON.stringify({ state: { workflows: [${JSON.stringify(wf)}] }, version: 0 }))`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

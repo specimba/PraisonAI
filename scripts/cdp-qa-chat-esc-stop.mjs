@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — K-series (r145): composer Esc-to-stop while streaming ──────────────
 // r145 adds: pressing Escape in the composer textarea while the agent is
 // streaming calls onStop() (the same handler as the "Stop generating" button).
@@ -87,6 +88,7 @@ async function shot(ws, name) {
 const js = (s) => `(function(){ ${s} })()`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

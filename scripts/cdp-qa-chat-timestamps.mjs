@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — L-series (r146): chat timestamp polish ────────────────────────────
 // r146 added fmtChatTime (today → bare HH:MM · yesterday → "Yesterday HH:MM"
 // · older → "Mon D, HH:MM") + fmtChatTimeFull (absolute, for hover titles).
@@ -81,6 +82,7 @@ async function shot(ws, name) {
 const js = (s) => `(function(){ ${s} })()`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

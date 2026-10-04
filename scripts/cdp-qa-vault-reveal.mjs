@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — V-series (r154): vault card reveal-once ────────────────────────
 // Asserts the reveal-once feature end-to-end against the live dev server:
 //   V1 API: store a throwaway builtin key → ok
@@ -112,6 +113,7 @@ async function main() {
   check("V1 store throwaway vault key", storeRes.ok && storeJson.ok === true);
 
   // Browser boot
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

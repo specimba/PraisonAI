@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — P-series (r151): Workflows view mount cost MEASUREMENT ────────────
 // The heaviest view (1669-line workflows-view + kanban + autopilot panel +
 // evolution ledger) was never measured. Design:
@@ -96,6 +97,7 @@ function diff(before, after, names) {
 }
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

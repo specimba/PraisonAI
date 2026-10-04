@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — R-series (r240): radar tab-state persistence ───────────────────
 // Feature under test: HF Hub-section choice and the Papers query survive
 // view switches (previously both snapped back on remount).
@@ -83,6 +84,7 @@ const TYPE_INTO = (sel, v) => `(() => {
   return true;
 })()`;
 
+await ensureChrome();
 const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
 if (!list) { console.error("SUMMARY: 0 passed, 1 failed — chrome CDP not reachable"); process.exit(1); }
 const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

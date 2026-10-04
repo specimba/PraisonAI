@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — O-series (r150): workflow editor dialog keyboard behavior ─────────
 // The editor dialog is the most complex surface never live-QA'd. The r150
 // a11y sweep (scripts/a11y-icon-button-audit.mjs) found 0 defects statically;
@@ -87,6 +88,7 @@ const js = (s) => `(function(){ ${s} })()`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

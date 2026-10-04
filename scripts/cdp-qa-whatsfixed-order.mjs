@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — U-series (r242): What's-fixed receipt panel order ──────────────
 // Feature under test: whats-fixed.tsx newest-first render + r239-r241 entries.
 //  U1  first receipt chip = "r241", last = "r186", 13 entries total
@@ -57,6 +58,7 @@ async function shot(ws, name) {
 }
 
 // ─── drive ────────────────────────────────────────────────────────────────────
+await ensureChrome();
 const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
 if (!list) { console.error("SUMMARY: 0 passed, 1 failed — chrome CDP not reachable"); process.exit(1); }
 const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

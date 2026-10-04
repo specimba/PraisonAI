@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — M-series (r227): the runs kanban cap tells the truth ───────────
 // The r227 change: groupRuns used to slice done/attention to 10 cards BEFORE
 // anything counted — a pipeline with 30 completed runs read "Done 10" and its
@@ -120,6 +121,7 @@ async function gotoWorkflows(ws) {
 }
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

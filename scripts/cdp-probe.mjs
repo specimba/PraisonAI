@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // r132 diagnostic B: what opens after clicking the seeded workflow card?
 let msgId = 0;
 const pending = new Map();
@@ -38,6 +39,7 @@ const clickByText = (label) => `
   })()`;
 
 const BASE = "http://localhost:3000";
+await ensureChrome();
 const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
 const tab = await tabRes.json();
 const ws = await connect(tab.webSocketDebuggerUrl);

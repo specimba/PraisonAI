@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — V-series (r243): About panel build fingerprint ─────────────────
 // Feature under test: BuildInfoLine in Settings → About decodes the r189
 // /api/version freshness stamp into a human-readable build identity.
@@ -58,6 +59,7 @@ async function shot(ws, name) {
 }
 
 // ─── drive ────────────────────────────────────────────────────────────────────
+await ensureChrome();
 const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
 if (!list) { console.error("SUMMARY: 0 passed, 1 failed — chrome CDP not reachable"); process.exit(1); }
 const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // P-series — workflow editor auto-plan: cancellable + honest (r235).
 // Proves the AI auto-plan path end-to-end in the browser (r232 left it only
 // unit-audited), with runAgentChat mocked at the wire seam (window.fetch →
@@ -192,6 +193,7 @@ const INSTALL_STUB = `(() => {
 })()`;
 
 async function main() {
+  await ensureChrome();
   const list = await (await fetch("http://127.0.0.1:9222/json/list")).json();
   let tab = list.find((t) => t.type === "page" && (t.url || "").startsWith("http://localhost:3000"));
   if (!tab) tab = list.find((t) => t.type === "page");

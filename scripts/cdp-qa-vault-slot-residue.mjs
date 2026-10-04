@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — F-series (r220): vault slot residue, compile-tolerant ──────────
 // Split out of the E-series (r218): E6's post-cleanup UI re-verify reloaded
 // and asserted "row gone" — but a dev-compile stall either crashed the leg
@@ -134,6 +135,7 @@ async function main() {
   await fetch(`${BASE}/api/vault?provider=builtin`, { method: "DELETE" });
 
   // Browser boot (r132 pattern)
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

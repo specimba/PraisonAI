@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // O-series — workflow editor save-truth (r232).
 // Proves the workflow editor dialog never lies on save:
 //   O1  empty name + save → INLINE error at the name field (aria-invalid +
@@ -141,6 +142,7 @@ const SET_VALUE = (selector, value) => `(() => {
 const bodyHas = (s) => `document.body.innerText.includes(${JSON.stringify(s)})`;
 
 async function main() {
+  await ensureChrome();
   const list = await (await fetch("http://127.0.0.1:9222/json/list")).json();
   let tab = list.find((t) => t.type === "page" && (t.url || "").startsWith("http://localhost:3000"));
   if (!tab) tab = list.find((t) => t.type === "page");

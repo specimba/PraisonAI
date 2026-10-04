@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — I-series (r141): ServerAutopilot poll is visibility-aware ─────────
 // r141 changed the autopilot panel's 15s /api/automation/sync poll to skip
 // ticks while the tab is hidden and to refetch immediately on return
@@ -130,6 +131,7 @@ const setHidden = (hidden) => `
   })()`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

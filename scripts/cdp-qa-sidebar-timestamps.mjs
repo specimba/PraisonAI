@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — M-series (r147): sidebar list timestamps ──────────────────────────
 // r147 added fmtListTime: sidebar conversation rows show relative time while
 // fresh (<24h) and a short date ("Sep 27") when older; each row time now also
@@ -79,6 +80,7 @@ async function shot(ws, name) {
 const js = (s) => `(function(){ ${s} })()`;
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

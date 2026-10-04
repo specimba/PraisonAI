@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — N-series (r148): model-tracker ticker performance MEASUREMENT ─────
 // The r147 handoff suspected the always-visible marquee "re-renders
 // continuously". Code reading says otherwise: .ticker-track is a pure CSS
@@ -113,6 +114,7 @@ function readTreeCpuMs() {
 }
 
 async function main() {
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

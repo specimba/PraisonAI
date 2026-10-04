@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── Z-series (r247): Image Studio opens from the command palette anywhere ───
 // Feature under test: the palette's "Open Image Studio…" action used to be a
 // dead action on every non-chat view — the dialog only mounted inside
@@ -76,6 +77,7 @@ const POINTER_SEQ = `(function firePointer(el){
 })`;
 
 async function main() {
+  await ensureChrome();
   const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
   if (!list) throw new Error("chrome CDP not reachable on :9222 — launch chrome-headless-shell first (same shell command)");
   const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());

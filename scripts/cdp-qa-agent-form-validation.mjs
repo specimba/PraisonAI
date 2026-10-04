@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — K-series (r225): agent form name validation is inline & honest ──
 // The r225 change: the Create/Edit Agent dialog's name validation used to be
 // SPLIT — an empty name got the browser's native `required` bubble (unstyled,
@@ -158,6 +159,7 @@ async function typeName(ws, value) {
 
 async function main() {
   // Browser boot
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();

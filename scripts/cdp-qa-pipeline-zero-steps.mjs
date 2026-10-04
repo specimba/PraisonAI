@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — W-series (r156): reproduce the user's 0/11 scheduled-pipeline runs ──
 // User report: "Continuous Research…" hourly pipeline — 12 runs, ~all end 0/11
 // steps done in 204-449s with 2-3 tool calls (one 7104s for 1/11). Root-cause hunt.
@@ -111,6 +112,7 @@ const READ_RUN = `
   })()`;
 
 async function main() {
+  await ensureChrome();
   const tab = await (await fetch("http://127.0.0.1:9222/json/new", { method: "PUT" })).json();
   const ws = await connect(tab.webSocketDebuggerUrl);
   await wsSend(ws, "Page.enable");

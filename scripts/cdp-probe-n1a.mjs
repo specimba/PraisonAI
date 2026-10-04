@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // N1a probe: after opening the run panel on a workflow whose runs[0] is
 // status "running", is the panel in the EMPTY state, or the run DETAIL?
 import path from "node:path";
@@ -30,6 +31,7 @@ async function evalJs(ws, expression) {
 }
 const BASE = "http://localhost:3000";
 const WF_NAME = "qa-n1a probe pipeline";
+await ensureChrome();
 const tabRes = await fetch("http://127.0.0.1:9222/json/new", { method: "PUT" });
 const tab = await tabRes.json();
 const ws = await connect(tab.webSocketDebuggerUrl);

@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── QA — G-series (r139): /api/radar/hf proxy + HF tab e2e ─────────────────
 // r139 routes the LAST radar source through the server: HF Trending now dials
 // our own /api/radar/hf instead of huggingface.co from the browser (GitHub
@@ -163,6 +164,7 @@ async function main() {
   );
 
   // G6 — browser e2e: Radar → HF Trending → Refresh → fresh cache stamp, no error box
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — C-series (r134): vault-lane chip in ServerAutopilot ────────────
 // Asserts the r134 UI surface end-to-end against the live dev server:
 //   C1 API: store a throwaway builtin key → sync GET reports vaultLane (masked)
@@ -132,6 +133,7 @@ async function main() {
   );
 
   // Browser boot (r132 pattern: new tab + navigate over CDP, hydration settle)
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();

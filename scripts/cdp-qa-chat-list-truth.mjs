@@ -1,3 +1,4 @@
+import { ensureChrome } from "./cdp-ensure-chrome.mjs";
 // ─── CDP QA — I-series (r223): the chat-list badge tells the truth ────────────
 // The r223 change: the "Chats" header badge always showed sorted.length (the
 // TOTAL), even while a search filter reduced the list to a few matches — the
@@ -176,6 +177,7 @@ async function createNamedChat(ws, title) {
 
 async function main() {
   // Browser boot
+  await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status} — is chrome-headless-shell up?`);
   const tab = await tabRes.json();
