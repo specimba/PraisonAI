@@ -269,6 +269,24 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Backoff sleep that races the caller's abort (r252, same fix the auto
+ *  engine's withRetry got in r251): a cancelled run stops in ms instead of
+ *  sleeping out the full backoff and dialing a dead stream again. */
+export function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) return resolve();
+    const onAbort = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    const t = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 // ─── Region-block detection (r23) ────────────────────────────────────────────
 // Datacenter egress IPs are blocked by several providers (Groq/Cerebras/Google
 // do it to cloud regions). A 403 there is NOT a key problem — say so honestly
@@ -404,6 +422,8 @@ export async function runRelayedCustom(
   let lastErr: unknown = null;
   for (let i = 0; i < hops.length; i++) {
     const hop = hops[i];
+    // Cancelled runs never dial the next hop (r252 loop-head bail doctrine).
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     try {
       if (hop.useAuto || !hop.baseUrl) {
         if (!autoRunner) throw new Error("The built-in engine is only available through the app relay");
@@ -565,6 +585,8 @@ export async function runCustomEngine(
 
   let graceUsed = 0; // tool-calls salvaged from the FINAL pass (max 2)
   for (let iteration = 1; iteration <= maxIterations + 3 && iteration <= 13; iteration++) {
+    // Cancelled runs bail before starting another LLM iteration (r252).
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     send({ type: "iteration", n: iteration });
     const isFinalPass = iteration > maxIterations;
     // Resilience (r19): gateways like Vyce sit behind rotating upstream pools
@@ -641,7 +663,8 @@ export async function runCustomEngine(
         const surfaced: unknown = deadlineReason ?? err;
         if (attempt < MAX_UPSTREAM_ATTEMPTS && !streamedAny && isTransientNetworkError(surfaced)) {
           send({ type: "status", message: `Upstream hiccup (${shortError(surfaced)}) — retrying (${attempt + 1}/${MAX_UPSTREAM_ATTEMPTS})…` });
-          await sleep(1200 * attempt);
+          await sleepAbortable(1200 * attempt, signal);
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError");
           continue attemptLoop;
         }
         throw surfaced;
@@ -667,7 +690,8 @@ export async function runCustomEngine(
         const httpErr = new Error(upstreamErrorMessage(res.status, text));
         if (attempt < MAX_UPSTREAM_ATTEMPTS && isTransientNetworkError(httpErr)) {
           send({ type: "status", message: `Upstream hiccup (${shortError(httpErr)}) — retrying (${attempt + 1}/${MAX_UPSTREAM_ATTEMPTS})…` });
-          await sleep(1200 * attempt);
+          await sleepAbortable(1200 * attempt, signal);
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError");
           continue attemptLoop;
         }
         throw httpErr;
@@ -693,7 +717,8 @@ export async function runCustomEngine(
         if (isAbort(err)) throw err;
         if (attempt < MAX_UPSTREAM_ATTEMPTS && !streamedAny && isTransientNetworkError(err)) {
           send({ type: "status", message: `Upstream hiccup (${shortError(err)}) — retrying (${attempt + 1}/${MAX_UPSTREAM_ATTEMPTS})…` });
-          await sleep(1200 * attempt);
+          await sleepAbortable(1200 * attempt, signal);
+          if (signal.aborted) throw new DOMException("Aborted", "AbortError");
           continue attemptLoop;
         }
         throw err;
