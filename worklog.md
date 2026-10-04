@@ -6343,3 +6343,31 @@ Verification result: PARTIAL
 Open risks: P-series at 4/6 (three harness sub-assertions open — NOT product bugs per screenshot evidence); standing matrix otherwise green from r231–r234; editor save-path surfaces untouched this round; r142 real-world vault validation still pending.
 Blockers: none
 Next recommended action: r236 — (1) FIRST read any user report. (2) Verify HEAD lineage. (3) Fix the three P harness sub-assertions → expect 6/6: read the exact instruction-override badge markup in workflow-editor-dialog.tsx (match its real punctuation), re-sample panel state after a settle, and probe the P4 error toast with a longer window / sonner-portal-aware selector. (4) Then rotate per the standing list (pipelines-view polish / docs). Avoid workflow-editor-dialog save path, workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (5) Standing: tsc + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / guard verifier 7/7 / P 4/6→6/6.
+
+---
+Task ID: 424432 — r236
+Agent: main (platform development — hourly dev round)
+Task: r235 handoff — fix the three P-harness sub-assertions → expect 6/6.
+
+Work Log:
+- Start-of-round: HEAD verified (4a21122bf). Root 200 (13.8s cold compile). No user report.
+- Three harness bugs found and fixed — ZERO product code changed this round:
+  (1) TEMPLATE-LITERAL ESCAPE CORRUPTION: the P3 DOM probe lives inside a JS template literal; its `/\s+/g` lost the backslash in transit, so the browser received `/s+/g` and replaced every "s" with a space — the "override · set" badge could never match. Fixed with file-level `\\s` + a comment doctrinally warning about backslashes in evalJs templates. (Regex badge match now tolerant of the JSX "override· set" no-space concat.)
+  (2) STEP-ROW "Generate" PILL STOLE THE CLICK: step rows carry their own inline Generate pill EARLIER in the DOM. P4's plan-panel click hit the pill → no run, no toast (the r235 "P4 toast mystery" — liveToasts=[] was the tell). FIND.generate is now scoped to the plan panel via #wf-plan-task's parent.
+  (3) panelClosed counted dialog-wide Generate buttons — with a step present it could never pass. Now asserted by the panel's unique task-box absence (panel unmounts on success).
+- RESULT: P-series 6/6 GREEN. P3: step mapped + instruction "· set" + success toast + panel closes. P4: error toast CONFIRMED live ("Couldn't generate a plan, add steps manually" captured in [data-sonner-toast] dump), steps kept, UI idle. P5: zero residue. The r235 auto-plan cancel affordance + honest planner path now has a fully green standing guard.
+- VERIFIED: tsc --noEmit → 0; eslint on the harness → 0 errors. Root 200. Snapshot pushed.
+
+Stage Summary:
+- P-series 6/6: the auto-plan surface (cancel affordance, plan mapping, honest error handling, hygiene) is fully browser-proven; the standing matrix is back to all-green with two new suites (N 9/9, O 5/5, P 6/6) guarding the workflows editor.
+
+Round Handoff:
+Round ID: r237
+Task owner: main (platform dev)
+Scope completed: P-harness assertion fixes (6/6); harness doctrine: template-literal backslash doubling, plan-panel-scoped finders, task-box-based panel assertions.
+User-visible changes: none (harness-only round; the r235 product fix unchanged and now fully proven).
+Verification steps: node scripts/cdp-qa-editor-autoplan.mjs → SUMMARY: 6 passed, 0 failed (fresh boot, one shell command). tsc 0; eslint 0; root 200.
+Verification result: PASS
+Open risks: P-suite depends on the QA profile keeping ≥1 agent in praison-agents and a vault provider configured (browser-direct leg) — a profile change would need the mock dialect revisited; r142 real-world vault validation still pending; sandbox rollback discipline kept forever.
+Blockers: none
+Next recommended action: r237 — (1) FIRST read any user report. (2) Verify HEAD lineage. (3) Rotate surfaces per the standing list — candidates: pipelines-view polish, a docs pass, or the Local Automation Vault epic (r142 real-world validation). Avoid workflow-editor-dialog (save + auto-plan now guarded by O+P), workflow-run-panel/run-kanban/agents-view/agent-form-dialog/chat-search/image-studio/conversation-list/composer. (4) Standing: tsc + eslint every code round; matrix: tracker-mirror 17 / lane 38 / executor 26 / spawn-branches 46 / E 6/6+6/6 / F 4/4+11/11 / G 6/6 / H 4/4 / I 5/5 / J 3/3 / K 9/9 / L 5/5 / M 5/5 / N 9/9 / O 5/5 / P 6/6 / guard verifier 7/7.

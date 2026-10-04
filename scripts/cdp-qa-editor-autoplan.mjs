@@ -131,8 +131,15 @@ const SET_VALUE = (selector, value) => `(() => {
 const bodyHas = (s) => `document.body.innerText.includes(${JSON.stringify(s)})`;
 
 const FIND = {
-  generate: `[...document.querySelectorAll('[role="dialog"] button')].find(
-    (b) => /^(Generate|Generating…)$/.test((b.textContent || "").trim()))`,
+  // Scoped to the PLAN PANEL — step rows carry their own inline "Generate"
+  // pill which sits EARLIER in the DOM and would otherwise steal the click
+  // (r236: P4's "generate" silently hit the step pill → no run, no toast).
+  generate: `(() => {
+    const p = document.getElementById("wf-plan-task");
+    if (!p) return null;
+    return [...p.parentElement.querySelectorAll("button")].find(
+      (b) => /^(Generate|Generating…)$/.test((b.textContent || "").trim()));
+  })()`,
   cancelPanel: `[...document.querySelectorAll('[role="dialog"] button')].filter(
     (b) => (b.textContent || "").trim() === "Cancel")[0]`,
   toggle: `[...document.querySelectorAll('[role="dialog"] button')].find(
@@ -264,19 +271,23 @@ async function main() {
       true`);
     await evalJs(ws, POINTER_SEQ(`(${FIND.generate})`));
     const p3toast = await waitFor(ws, bodyHas("Generated 1 steps"), 10_000);
+    await new Promise((r) => setTimeout(r, 1500)); // let success fully settle
     const p3 = await evalJs(ws, `(() => {
       const dlg = document.querySelector('[role="dialog"]');
       const btns = [...(dlg?.querySelectorAll("button") ?? [])];
+      // NOTE: this expression travels through a template literal — regex
+      // backslashes must be doubled at file level or the browser gets /s+/.
+      const norm = (dlg?.textContent || "").replace(/\\s+/g, " ");
       return {
         stepShown: [...(dlg?.querySelectorAll("input") ?? [])].some((i) => i.value === "Research trends"),
-        instructionShown: (dlg?.textContent || "").replace(/\s+/g, " ").includes("override · set"),
-        panelClosed: !btns.some((b) => /^(Generate|Generating…)$/.test((b.textContent || "").trim()))
-          && !document.getElementById("wf-plan-task"),
+        instructionShown: /override\\s*·\\s*set/.test(norm),
+        overrideSnippet: (norm.match(/Step instruction override.{0,10}/) || [""])[0],
+        panelClosed: !document.getElementById("wf-plan-task"), // panel unmounts → task box gone; do NOT count dialog-wide Generate buttons (step rows have their own pill)
       };
     })()`);
     check("P3 valid plan → step lands with instruction + toast + panel closes",
       p3toast && p3.stepShown && p3.instructionShown && p3.panelClosed,
-      `toast=${p3toast} step=${p3.stepShown} instruction=${p3.instructionShown} panelClosed=${p3.panelClosed} stubHits=${JSON.stringify(await evalJs(ws, "window.__stubHits"))}`);
+      `toast=${p3toast} step=${p3.stepShown} instruction=${p3.instructionShown} (${p3.overrideSnippet}) panelClosed=${p3.panelClosed} stubHits=${JSON.stringify(await evalJs(ws, "window.__stubHits"))}`);
 
     // ── P4: unparseable plan → honest error, steps unchanged. ────────────
     await new Promise((r) => setTimeout(r, 1500)); // success path fully settles
@@ -285,7 +296,8 @@ async function main() {
     await evalJs(ws, SET_VALUE("#wf-plan-task", "Try a broken planner response"));
     await evalJs(ws, `window.__planPayload = "this is not json"; true`);
     await evalJs(ws, POINTER_SEQ(`(${FIND.generate})`));
-    const p4toast = await waitFor(ws, bodyHas("generate a plan, add steps manually"), 10_000);
+    const p4toast = await waitFor(ws, bodyHas("generate a plan, add steps manually"), 15_000);
+    const p4toasts = await evalJs(ws, `[...document.querySelectorAll("[data-sonner-toast]")].map((t) => (t.textContent || "").slice(0, 60))`);
     const p4keep = await evalJs(ws, `(() => {
       const dlg = document.querySelector('[role="dialog"]');
       return {
@@ -296,7 +308,7 @@ async function main() {
     })()`);
     check("P4 broken planner response → error toast + steps unchanged",
       p4toast && p4keep.stepKept && p4keep.idle,
-      `toast=${p4toast} stepKept=${p4keep.stepKept} idle=${p4keep.idle}`);
+      `toast=${p4toast} stepKept=${p4keep.stepKept} idle=${p4keep.idle} liveToasts=${JSON.stringify(p4toasts)}`);
 
     // ── P5: hygiene — close without saving; store untouched, no residue. ─
     await evalJs(ws, POINTER_SEQ(`(${FIND.footerCancel})`));
