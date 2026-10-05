@@ -144,7 +144,24 @@ async function main() {
 
   // Inject a 40-day-old assistant message directly into the store and let
   // React re-render — the header must switch to the dated form.
+  // r261: the store patch happens on a bare same-origin page (zero app JS) —
+  // patching on the live app page let its debounced persist race the write
+  // before the Page.navigate below re-hydrated (J5 race doctrine, r259/r260).
   const oldTs = Date.now() - 40 * 86_400_000;
+  const gotoBare = async () => {
+    await evalJs(ws, `window.__r261bare = 1`);
+    await evalJs(ws, `location.href = "/api/providers/free-models"`);
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        if (String(await evalJs(ws, `window.__r261bare`)) !== "1") {
+          if ((await evalJs(ws, `document.readyState`)) === "complete") return true;
+        }
+      } catch { /* execution context detached mid-navigation */ }
+    }
+    return false;
+  };
+  await gotoBare();
   const injected = await evalJs(ws, js(`
     try {
       // persisted zustand store exposes itself via localStorage rehydration;

@@ -78,6 +78,26 @@ async function connect(wsUrl) {
   return ws;
 }
 
+// r261: foreign localStorage writes must not run on a live app page — the
+// app's debounced persist can overwrite the write before the next navigation
+// re-hydrates it (J5 race doctrine, r259/r260). Navigate to a bare JSON
+// endpoint on the same origin (zero app JS), write there, then navigate
+// back; marker-gated so the poll never mistakes the old document for the
+// new one.
+async function gotoBare(ws) {
+  await evalJs(ws, `window.__r261bare = 1`);
+  await evalJs(ws, `location.href = "/api/providers/free-models"`);
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      if (String(await evalJs(ws, `window.__r261bare`)) !== "1") {
+        if ((await evalJs(ws, `document.readyState`)) === "complete") return true;
+      }
+    } catch { /* execution context detached mid-navigation */ }
+  }
+  return false;
+}
+
 async function evalJs(ws, expression) {
   const r = await wsSend(ws, "Runtime.evaluate", {
     expression,
@@ -153,11 +173,15 @@ async function main() {
     `JSON.parse(localStorage.getItem("praison-agents") ?? '{"state":{"agents":[]}}').state.agents.length === 0`
   );
   if (rosterEmpty) {
+    // r261: seed lands on a bare same-origin page (gotoBare) — writing it on
+    // the live app root let the debounced persist clobber the seed before
+    // the reload re-hydrated it (J5 race doctrine, r259/r260).
+    await gotoBare(ws);
     await evalJs(
       ws,
       `localStorage.setItem("praison-agents", JSON.stringify({ state: { agents: [${JSON.stringify(QA_AGENT)}] }, version: 1 }))`
     );
-    await evalJs(ws, `location.reload()`);
+    await wsSend(ws, "Page.navigate", { url: BASE });
     await waitFor(ws, `document.readyState === 'complete'`);
     await new Promise((r) => setTimeout(r, 2500));
   }
@@ -238,6 +262,10 @@ async function main() {
   );
 
   // Cleanup — remove the throwaway agent (direct persist rewrite + reload)
+  // r261: the rewrite happens from the bare page (gotoBare) so no live app
+  // persist can race it; the in-IIFE reload then just refreshes the bare
+  // page — the suite ends here, nothing app-side is asserted afterwards.
+  await gotoBare(ws);
   await evalJs(ws, `
     (() => {
       const raw = JSON.parse(localStorage.getItem("praison-agents") ?? '{"state":{"agents":[]}}');

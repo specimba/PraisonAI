@@ -109,7 +109,10 @@ async function main() {
 
   try {
     // Seed BEFORE first load (reads are plain localStorage; writes are debounced).
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    // r261: seed lands on the bare JSON page (zero app JS) — writing while the
+    // app root was live let its debounced persist clobber the seed before
+    // gotoAgents hydrated it (J5 race doctrine, r259/r260).
+    await page.goto(`${BASE}/api/providers/free-models`, { waitUntil: "domcontentloaded" }).catch(() => {});
     await page.evaluate(([agents, workflows]) => {
       localStorage.setItem("praison-agents", JSON.stringify({ state: { agents }, version: 1 }));
       localStorage.setItem("praison-workflows", JSON.stringify({ state: { workflows, proposals: [] }, version: 0 }));
@@ -122,10 +125,14 @@ async function main() {
     check("V1b no replies segment yet", !/repl/.test(a), a.trim());
 
     // V2: merge a chat reply into the same chip
+    // r261: conversations seed lands on the bare JSON page — writing it while
+    // the agents view was live let the debounced persist clobber the write
+    // before the reload re-hydrated (J5 race doctrine, r259/r260); gotoAgents
+    // below performs the hydrating navigation, so the old page.reload is gone.
+    await page.goto(`${BASE}/api/providers/free-models`, { waitUntil: "domcontentloaded" });
     await page.evaluate((conversations) => {
       localStorage.setItem("praison-conversations", JSON.stringify({ state: { conversations }, version: 0 }));
     }, CONVERSATIONS);
-    await page.reload({ waitUntil: "domcontentloaded" });
     await gotoAgents(page);
     const a2 = await chipText(page, "Scout Prime");
     check("V2 reply + steps merged in one chip", /1\s*repl/.test(a2) && /2\s*step/.test(a2), a2.trim());
