@@ -7182,3 +7182,32 @@ Verification result: PASS
 Open risks: target leak remains in ~40 other suites (vault-guard/digit-shortcuts et al leak +1 target per run — same jam-at-scale behavior will recur until ported); ensureChrome wedge-recovery path still awaits natural exercise; r142 vault real-key validation; markdown external-image CSP note (r241); Chrome Ctrl+1-8 reservation (cosmetic); ZAI SDK LLM call can't be signal-aborted (r251); W-suite wizard marker copy; /api/providers/free-models bare-write anchor for ~14 suites; CDP-variant conversions await natural fleet runs.
 Blockers: none
 Next recommended action: r265 — (1) FIRST read any user report. (2) Verify HEAD lineage (expect the r264 auto-backup or successor; cron-named commit on top = harness worklog auto-commit, diff it). (3) PRIMARY: port closeActiveTab() fleet-wide — for each scripts/cdp-qa-*.mjs that creates a tab via /json/new: register activeTabId = tab.id, close it on the success path AND in the catch handler (copy the vault-reveal pattern verbatim, ~10 lines per suite); then spot-check 3-4 ported suites (vault-guard, digit-shortcuts, workflows-mount, local-models) and confirm /json/list stays flat. Alternatives: any user report; fresh product-surface audit from the non-avoid list. Avoid workflow-editor-dialog, workflow-run-panel/run-kanban, agents-view, agent-form-dialog, chat-search, image-studio, conversation-list, composer, markdown.tsx, whats-fixed.tsx, settings-view.tsx, test-agent-dialog.tsx, radar-view, shell.tsx, page.tsx + chat-view.tsx, stale-build-guard/memory-dialog/atoms/chat-heartbeat, use-shortcuts + command-palette + README, the 18 API route files, chat/route.ts, agent-engine.ts + tools-defs.ts, providers.ts + free-provider-matrix.md, workflows-view.tsx, setup-wizard.tsx, scripts/cdp-qa-setup-wizard.mjs, provider-gallery.tsx, global-search-dialog.tsx, scripts/cdp-qa-search-match-truth.mjs, model-picker.tsx, and the fifteen converted suites (only touch via a failing run). (4) Standing: bun run qa:tsc (unmasked, includes qa-ime-parity) + eslint every code round; chat suites esc-stop 3/3 + chat-guard 8/8 for any chat-lane change; CDP suites self-heal chrome on 9222 (wedge-aware per r263); full matrix per r262 entry (unchanged).
+
+---
+Task ID: r265
+Agent: main (platform dev)
+Task: r264 handoff — port target-leak fix fleet-wide; spot-check 3-4 suites.
+
+Work Log:
+- Lineage: HEAD 524efa507 = worklog-only harness auto-commit atop r264's 0798f8ff7; round executed as r265.
+- Health: root 000 (sandbox reap) → ONE restart → 200. Process care: 1 round.
+- Coverage: all 30 tab-creating suites import ensureChrome → the fleet fix lives in cdp-ensure-chrome.mjs (ONE edit, not 40).
+- SHIPPED (scripts/cdp-ensure-chrome.mjs): closeLeftoverPages() janitor on the ensureChrome "up" path — closes leftover app-page targets (the leak that jammed the renderer across r263-r264). Two design iterations against empirical shell behavior: (v1) keep one about:blank → (v2) mint a keeper → (v3) FINAL: close app pages, spare any about:blank, no minting — because this headless shell LAZILY REAPS clientless /json/new targets (r265 empirical: live /json/version with empty /json/list; a minted keeper evaporates before any scanner can use it). Shell verifiably survives zero page targets.
+- SHIPPED (scripts/cdp-qa-digit-shortcuts.mjs): converted from /json/list scan-reuse to self-created tab (vault-guard shape). The old scan was a RACE — it only passed when another suite's leftover tab happened to linger (how it passed r263); fails fast with "no page target" otherwise.
+- 11 other suites reference /json/list (build-info, editor-autoplan, editor-save-truth, image-studio-global, markdown-fidelity, pipeline-search, provider-nokey-nav, radar-persist, setup-wizard, test-dialog-ime, whatsfixed-order) — not all are reuse-scanners; each needs triage + the same self-create conversion if so.
+- Verification: node --check ×2; digit-shortcuts 4/4 (FIRST clean pass — no leftover to ride), vault-guard 11/11, workflows-mount 1/1; page-target count stable 0-1 across three runs (no growth); eslint 0 errors (33 pre-existing warnings); bun run qa:tsc 0 unmasked.
+
+Stage Summary:
+- Fleet-wide target leak is closed at the ensureChrome layer; scanner-race suites now fail fast instead of hanging on stale leftovers.
+- Reuse-scanner conversion recipe is proven (digit-shortcuts diff, ~8 lines).
+
+Round Handoff:
+Round ID: r266
+Task owner: main (platform dev)
+Scope completed: ensureChrome janitor v3 (fleet-wide leftover closure); digit-shortcuts self-create conversion; 3-suite spot-check all green.
+User-visible changes: none product-side; QA fleet no longer accumulates renderer targets and no longer depends on cross-suite races.
+Verification steps: node --check; in-vivo digit-shortcuts 4/4 + vault-guard 11/11 + workflows-mount 1/1; target count 0-1 flat; eslint; qa:tsc.
+Verification result: PASS
+Open risks: 11 suites still reference /json/list — unconverted reuse-scanners will now FAIL FAST (janitor closes app leftovers they used to ride); each needs the digit recipe (create own tab via /json/new PUT) — triage build-info/editor-autoplan/editor-save-truth/image-studio-global/markdown-fidelity/pipeline-search/provider-nokey-nav/radar-persist/setup-wizard/test-dialog-ime/whatsfixed-order first (some may list for non-scan purposes). Carried: ensureChrome wedge-recovery path awaits natural exercise; r142 vault real-key validation; markdown external-image CSP note (r241); Chrome Ctrl+1-8 reservation (cosmetic); ZAI SDK LLM call can't be signal-aborted (r251); W-suite wizard marker copy; /api/providers/free-models bare-write anchor for ~14 suites; CDP-variant conversions await natural fleet runs.
+Blockers: none
+Next recommended action: r266 — (1) FIRST read any user report. (2) Verify HEAD lineage (expect the r265 auto-backup or successor; cron-named commit on top = harness worklog auto-commit, diff it). (3) PRIMARY: triage the 11 /json/list suites and convert true reuse-scanners to self-created tabs (digit-shortcuts r265 recipe); re-run each converted suite once. If budget remains, spot-check 1-2 converted suites of r259-r262. Alternatives: any user report; fresh product-surface audit from the non-avoid list. Avoid list per r264 entry (unchanged); standing checks per r264 entry (unchanged).
