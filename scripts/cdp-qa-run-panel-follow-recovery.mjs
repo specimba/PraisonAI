@@ -247,6 +247,24 @@ async function main() {
         steps: [step("st1", "Research", "done", "err output", 600),
                 step("st2", "Synthesize", "error")] },
     ];
+    // r262: the seed write happens on the bare page (gotoBare) — the app
+    // instance booted for the pre-snapshot cleanup could hold a pending
+    // debounced persist that clobbers the seed before the reload below
+    // re-hydrates it (J5 race doctrine, r259-r261).
+    const gotoBare = async (ws) => {
+      await evalJs(ws, `window.__r262bare = 1`);
+      await evalJs(ws, `location.href = "/api/providers/free-models"`);
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        try {
+          if (String(await evalJs(ws, `window.__r262bare`)) !== "1") {
+            if ((await evalJs(ws, `document.readyState`)) === "complete") return true;
+          }
+        } catch { /* execution context detached mid-navigation */ }
+      }
+      return false;
+    };
+    await gotoBare(ws);
     await evalJs(ws, `(() => {
       let seed = null;
       try { seed = JSON.parse(localStorage.getItem("praison-workflows") || "null"); } catch {}
@@ -344,6 +362,12 @@ async function main() {
     check("N4 error run recovery card unchanged (regression guard)", failed === true && retry === true);
 
     // ── N5: restore the snapshot; zero residue. ──────────────────────────
+    // r262: the restore write happens on the bare page (gotoBare) — N1-N4's
+    // app interaction leaves possible pending persists that can clobber the
+    // write before the navigate re-hydrates. The r231 second write below is
+    // now bare too; residue is read on the bare page (same-origin, no app
+    // JS to race the read).
+    await gotoBare(ws);
     await evalJs(
       ws,
       snapshot == null
@@ -355,6 +379,7 @@ async function main() {
     // r231: re-write the snapshot a SECOND time now that no seeded app instance
     // is live (kills the pre-navigation re-persist window), then dump WHICH item
     // survives so residue is diagnosable, not just countable.
+    await gotoBare(ws);
     await evalJs(
       ws,
       snapshot == null

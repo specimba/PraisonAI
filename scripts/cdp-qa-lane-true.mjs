@@ -132,6 +132,26 @@ const seedWf = (enabled, nextRunAt) => ({
 const setSeed = (wf) => `
   localStorage.setItem("praison-workflows", JSON.stringify({ state: { workflows: [${JSON.stringify(wf)}] }, version: 0 }))`;
 
+// r262: foreign localStorage writes must not run on a live app page — the
+// app's debounced persist can overwrite the write before the next navigation
+// re-hydrates it (J5 race doctrine, r259-r261). Navigate to a bare JSON
+// endpoint on the same origin (zero app JS), write there, then navigate
+// back; marker-gated so the poll never mistakes the old document for the
+// new one.
+async function gotoBare(ws) {
+  await evalJs(ws, `window.__r262bare = 1`);
+  await evalJs(ws, `location.href = "/api/providers/free-models"`);
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      if (String(await evalJs(ws, `window.__r262bare`)) !== "1") {
+        if ((await evalJs(ws, `document.readyState`)) === "complete") return true;
+      }
+    } catch { /* execution context detached mid-navigation */ }
+  }
+  return false;
+}
+
 async function main() {
   await ensureChrome();
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
@@ -150,6 +170,7 @@ async function main() {
 
   // Seed: LOCAL nextRunAt = +6h (safe — never fires); the bridge's mount sync
   // will register a DB row with interval 2m (nextRunAt = now+2m → "2m"/"due").
+  await gotoBare(ws);
   await evalJs(ws, setSeed(seedWf(true, Date.now() + SIX_H)));
   await wsSend(ws, "Page.navigate", { url: BASE });
   await waitFor(ws, `document.readyState === 'complete'`);
@@ -232,6 +253,7 @@ async function main() {
   check("E5b registry row enabled=false (never claimable)", row?.enabled === false);
 
   // Cleanup 2: rewrite the localStorage seed disabled too
+  await gotoBare(ws);
   await evalJs(ws, setSeed(seedWf(false, Date.now() + SIX_H)));
   await wsSend(ws, "Page.close").catch(() => {});
 

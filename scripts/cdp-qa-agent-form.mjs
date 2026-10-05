@@ -72,7 +72,10 @@ async function main() {
 
   try {
     // Seed BEFORE first load (reads are plain localStorage; writes are debounced).
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    // r262: seed lands on the bare JSON page (zero app JS) — writing while
+    // the app root was live let its debounced persist clobber the seed
+    // before gotoAgents re-hydrated it (J5 race doctrine, r259-r261).
+    await page.goto(`${BASE}/api/providers/free-models`, { waitUntil: "domcontentloaded" }).catch(() => {});
     await page.evaluate(([agent]) => {
       localStorage.setItem("praison-agents", JSON.stringify({ state: { agents: [agent] }, version: 1 }));
     }, [AGENT]);

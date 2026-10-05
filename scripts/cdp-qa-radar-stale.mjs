@@ -146,13 +146,34 @@ async function main() {
   await shot(ws, "S-radar-stale-hf");
 
   // S2: fresh cache → no stale marker.
+  // r262: seed via the bare page (gotoBare) — S1's tab interaction left the
+  // app live with possible pending persists, which could clobber the seed
+  // before the reload re-hydrated it (J5 race doctrine, r259-r261).
+  const gotoBare = async (ws) => {
+    await evalJs(ws, `window.__r262bare = 1`);
+    await evalJs(ws, `location.href = "/api/providers/free-models"`);
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        if (String(await evalJs(ws, `window.__r262bare`)) !== "1") {
+          if ((await evalJs(ws, `document.readyState`)) === "complete") return true;
+        }
+      } catch { /* execution context detached mid-navigation */ }
+    }
+    return false;
+  };
+  await gotoBare(ws);
   await evalJs(ws, seedCache(0));
-  await evalJs(ws, js(`location.reload(); return true;`));
+  await wsSend(ws, "Page.navigate", { url: BASE });
   await sleep(3500); // dev rehydration is slow — waitNav below also retries
   s = await openHfTab(ws);
   check("S2 fresh cache stays muted", s.found === true && s.amber === false && !/stale/.test(s.text), JSON.stringify(s));
 
   // S3: GitHub tab, 8-day-old cache (past its 7d TTL) → stale.
+  // r262: same bare-page treatment as S2 — write lands with no live app,
+  // then an explicit navigate re-hydrates (the old reload targeted whatever
+  // page was current; now it is deterministic).
+  await gotoBare(ws);
   await evalJs(ws, js(`
     localStorage.setItem("praison-radar-gh", JSON.stringify({
       user: "seeduser",
@@ -161,7 +182,7 @@ async function main() {
     }));
     return true;
   `));
-  await evalJs(ws, js(`location.reload(); return true;`));
+  await wsSend(ws, "Page.navigate", { url: BASE });
   await sleep(3500);
   await waitNav(ws, "Radar");
   await sleep(800);

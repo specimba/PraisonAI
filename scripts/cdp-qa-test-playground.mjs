@@ -72,7 +72,11 @@ async function main() {
 
   try {
     // Seed one agent (fresh QA profile) before app code runs.
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    // r262: seed lands on the bare JSON page (zero app JS — literally no app
+    // code running during the write); the original app-root goto left the
+    // store live, so its debounced persist could clobber the seed before the
+    // dialog navigation re-hydrated (J5 race doctrine, r259-r261).
+    await page.goto(`${BASE}/api/providers/free-models`, { waitUntil: "domcontentloaded" }).catch(() => {});
     await page.evaluate((agents) => {
       localStorage.setItem("praison-agents", JSON.stringify({ state: { agents }, version: 1 }));
       // Force the "auto" (server relay) lane: the default settings ride the

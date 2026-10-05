@@ -31,7 +31,10 @@ function check(name, ok, detail = "") {
 }
 
 async function seedAndOpen(page, settingsPatch) {
-  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  // r262: seed lands on the bare JSON page (zero app JS) — writing while the
+  // app root was live let its debounced persist clobber the seed before the
+  // second goto re-hydrated it (J5 race doctrine, r259-r261).
+  await page.goto(`${BASE}/api/providers/free-models`, { waitUntil: "domcontentloaded" }).catch(() => {});
   await page.evaluate(([patch]) => {
     localStorage.setItem(
       "praison-settings",

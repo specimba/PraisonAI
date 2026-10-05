@@ -57,7 +57,10 @@ async function main() {
 
   try {
     // ── D1: sanitized import with honest skipped counts ──────────────────
-    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" }).catch(() => {});
+    // r262: seed lands on the bare JSON page (zero app JS) — writing while
+    // the app root was live let its debounced persist clobber the seed
+    // before the settings navigation re-hydrated (J5 doctrine, r259-r261).
+    await page.goto(`${BASE}/api/providers/free-models`, { waitUntil: "domcontentloaded" }).catch(() => {});
     await page.evaluate(() => {
       localStorage.setItem(
         "praison-agents",
@@ -161,6 +164,20 @@ async function main() {
     check("D2b vault preseed intact after guarded merge", d2.preseedIntact);
 
     // ── D3: clear-all wipes every praison-* key, spares foreign keys ─────
+    // r262: probe keys land on the bare JSON page — the app view was live
+    // during the original write and its debounced persist could clobber
+    // them before the goto below re-hydrated (J5 doctrine, r259-r261).
+    // D2's import triggers an app location.reload() that can still be in
+    // flight here — it aborts this navigation with ERR_ABORTED (seen in vivo
+    // r262: the converted goto fires before the reload settles). Retry until
+    // the bare-page navigation sticks; a bare URL has no redirects, so any
+    // abort is a competing navigation and retrying is always correct.
+    for (let i = 0; i < 5; i++) {
+      try {
+        await page.goto(`${BASE}/api/providers/free-models`, { waitUntil: "domcontentloaded" });
+        break;
+      } catch { await page.waitForTimeout(300); }
+    }
     await page.evaluate(() => {
       localStorage.setItem("praison-relay-health", JSON.stringify({ hops: {} }));
       localStorage.setItem("praison-free-catalog", JSON.stringify({ vyce: [] }));
