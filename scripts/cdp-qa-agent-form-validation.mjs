@@ -230,6 +230,24 @@ async function main() {
       `toast=${toastOk} closed=${dialogGone}`);
 
     // Hygiene — restore the agents store, reload, prove zero residue
+    // r260: the restore write now happens from a bare same-origin JSON page
+    // (gotoBare) — writing it on the live app page let the app's in-memory
+    // persist race the foreign write and resurrect qa-r* rows before gotoApp
+    // re-hydrated (the J5 race root-caused r259 on search-match-truth).
+    const gotoBare = async (ws) => {
+      await evalJs(ws, `window.__r260bare = 1`);
+      await evalJs(ws, `location.href = "/api/providers/free-models"`);
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        try {
+          if (String(await evalJs(ws, `window.__r260bare`)) !== "1") {
+            if ((await evalJs(ws, `document.readyState`)) === "complete") return true;
+          }
+        } catch { /* execution context detached mid-navigation */ }
+      }
+      return false;
+    };
+    await gotoBare(ws);
     await evalJs(ws, snapshot === null
       ? `localStorage.removeItem("praison-agents"); true`
       : `localStorage.setItem("praison-agents", ${JSON.stringify(snapshot)}); true`);
