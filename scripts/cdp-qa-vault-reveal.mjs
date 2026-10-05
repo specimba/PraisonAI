@@ -75,7 +75,38 @@ async function evalJs(ws, expression) {
 async function waitFor(ws, expr, timeoutMs = 15_000, everyMs = 400) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
-    if (await evalJs(ws, `Boolean(${expr})`)) return true;
+    try {
+      if (await evalJs(ws, `Boolean(${expr})`)) return true;
+    } catch {
+      // Transient eval failure (mid-navigation context detach, brief CDP
+      // stall — both seen for real in r263/r264's V6 window) must not kill
+      // the run; keep polling until the wait budget is spent.
+    }
+    await new Promise((r) => setTimeout(r, everyMs));
+  }
+  return false;
+}
+
+// Click-until-effect by aria-label prefix, tolerating the same transient
+// eval failures as waitFor. r264: this helper was CALLED at the V6 fallback
+// branch but never defined anywhere — the ReferenceError masked the real
+// "#vault did not appear" failure whenever the deep-link route needed a
+// manual nav click.
+async function retryClickAria(ws, ariaPrefix, attempts = 4, everyMs = 800) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const clicked = await evalJs(ws, `
+        (() => {
+          const el = [...document.querySelectorAll("button,a")].find(
+            (e) => (e.getAttribute("aria-label") || "").startsWith(${JSON.stringify(ariaPrefix)}) && e.offsetParent !== null);
+          if (!el) return false;
+          el.click();
+          return true;
+        })()`);
+      if (clicked) return true;
+    } catch {
+      /* transient — retry within budget */
+    }
     await new Promise((r) => setTimeout(r, everyMs));
   }
   return false;
@@ -92,6 +123,25 @@ const results = [];
 function check(name, ok, detail = "") {
   results.push({ name, ok });
   console.log(`${ok ? "✅" : "❌"} ${name}${detail ? ` — ${detail}` : ""}`);
+}
+
+// r264: every suite run /json/new's a target and never closed it — leftover
+// targets keep whole app pages rendering (heartbeats, pollers, listeners)
+// inside the long-lived 9222 shell. After ~a dozen runs the renderer jams
+// and Runtime.evaluate times out fleet-wide (seen for real: r263's mid-run
+// wedges + r264's boot wedge). Close the tab on BOTH exit paths.
+let activeTabId = null;
+async function closeActiveTab() {
+  if (!activeTabId) return;
+  const id = activeTabId;
+  activeTabId = null;
+  try {
+    await fetch(`http://127.0.0.1:9222/json/close/${id}`, {
+      signal: AbortSignal.timeout(1500),
+    });
+  } catch {
+    /* best effort */
+  }
 }
 
 // NOTE the parens: `a?.innerText ?? "".includes(x)` would parse as
@@ -117,6 +167,7 @@ async function main() {
   const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
   if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
   const tab = await tabRes.json();
+  activeTabId = tab.id;
   const ws = await connect(tab.webSocketDebuggerUrl);
   await wsSend(ws, "Page.enable");
   await wsSend(ws, "Runtime.enable");
@@ -218,10 +269,18 @@ async function main() {
   await new Promise((r) => setTimeout(r, 2500));
   if (!(await waitFor(ws, `document.querySelector('#vault')`, 45_000))) {
     // settings may need a nav click after reload depending on view routing
-    await retryClickAria(ws, "Open navigation");
-    await evalJs(ws, `
-      [...document.querySelectorAll("button,a")].find(
-        (e) => (e.textContent || "").trim() === "Settings" && e.offsetParent !== null)?.click()`);
+    console.log("  [V6] #vault not direct-routed — falling back to manual nav click");
+    const opened = await retryClickAria(ws, "Open navigation");
+    if (!opened) console.log("  [V6] 'Open navigation' not found — sidebar may already be visible");
+    let navSettings = false;
+    for (let i = 0; i < 6 && !navSettings; i++) {
+      try {
+        navSettings = await evalJs(ws, clickSettings);
+      } catch {
+        /* transient — retry within budget */
+      }
+      if (!navSettings) await new Promise((r) => setTimeout(r, 800));
+    }
     await waitFor(ws, `document.querySelector('#vault')`, 45_000);
   }
   await waitFor(ws, `${cardText()}.includes(${JSON.stringify(QA_MASK)})`, 10_000);
@@ -241,10 +300,12 @@ async function main() {
 
   const pass = results.filter((r) => r.ok).length;
   console.log(`\nV-series: ${pass}/${results.length} ${pass === results.length ? "PASS" : "FAIL"}`);
+  await closeActiveTab();
   process.exit(pass === results.length ? 0 : 1);
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error("FATAL:", e.message);
+  await closeActiveTab();
   process.exit(1);
 });
