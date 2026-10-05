@@ -87,9 +87,13 @@ async function main() {
   await ensureChrome();
   const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
   if (!list) throw new Error("chrome CDP not reachable on :9222 — launch chrome-headless-shell first (same shell command)");
-  const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());
-  const page = targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
-  if (!page) throw new Error("no page target");
+  // r265: this suite used to SCAN /json/list for any page to reuse — but in
+  // this headless shell a clientless target is reaped lazily, so the scan was
+  // a race (it only passed when another suite's leftover tab happened to
+  // linger). Create our own tab like every other suite (vault-guard shape).
+  const tabRes = await fetch(`http://127.0.0.1:9222/json/new`, { method: "PUT" });
+  if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
+  const page = await tabRes.json();
   const ws = await connect(page.webSocketDebuggerUrl);
   const errors = [];
 

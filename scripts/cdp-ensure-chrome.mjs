@@ -112,6 +112,46 @@ async function cdpResponsive() {
   });
 }
 
+/**
+ * r265: close leftover page targets from previous suite runs. Every tab-
+ * creating suite /json/new's a page and (before r264's vault-reveal fix)
+ * never closed it — leftover app pages keep rendering inside the long-lived
+ * 9222 shell until the renderer jams and Runtime.evaluate times out
+ * fleet-wide (r263/r264 evidence). At ensureChrome time — before THIS suite
+ * has created its tab — every existing page target is a leftover. Suites
+ * run sequentially (doctrine), so there is no concurrent owner to disturb.
+ *
+ * Safety: about:blank pages are spared; app-page leftovers are closed. A
+ * minted "keeper" is futile — this shell lazily reaps clientless /json/new
+ * targets, so nothing left behind survives anyway (r265 empirical). If the
+ * list can't be read, close nothing. Never throws — the janitor must never
+ * break a suite boot.
+ */
+async function closeLeftoverPages() {
+  try {
+    const r = await fetch(`${CDP}/json/list`, { signal: AbortSignal.timeout(1500) });
+    const targets = await r.json();
+    const pages = targets.filter((t) => t.type === "page");
+    // v3: don't mint keepers — clientless targets are reaped lazily by this
+    // shell, so a minted blank evaporates before any scanner can use it
+    // (r265 empirical: live /json/version, empty /json/list). Reuse-scanner
+    // suites must create their own tabs instead (digit-shortcuts r265);
+    // until all of them convert, they fail FAST here instead of hanging on
+    // stale leftovers. Close app pages; spare any about:blank that exists.
+    await Promise.all(
+      pages
+        .filter((t) => t.url !== "about:blank")
+        .map((t) =>
+          fetch(`${CDP}/json/close/${t.id}`, { signal: AbortSignal.timeout(1500) }).catch(
+            () => {}
+          )
+        )
+    );
+  } catch {
+    /* best effort */
+  }
+}
+
 function findChromeBin() {
   const root = path.join(os.homedir(), ".cache", "ms-playwright");
   let entries;
@@ -138,7 +178,10 @@ function findChromeBin() {
  * Throws an explicit error (never a bare "fetch failed") if recovery fails.
  */
 export async function ensureChrome() {
-  if ((await cdpAlive()) && (await cdpResponsive())) return "up";
+  if ((await cdpAlive()) && (await cdpResponsive())) {
+    await closeLeftoverPages();
+    return "up";
+  }
   // Else: dead OR wedged (alive at HTTP level, dead at CDP level) — both fall
   // through to the same single kill+relaunch cycle below.
 
