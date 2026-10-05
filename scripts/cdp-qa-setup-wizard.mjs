@@ -118,9 +118,11 @@ async function main() {
   await ensureChrome();
   const ver = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
   if (!ver) throw new Error("chrome CDP not reachable on :9222 — ensureChrome() failed (see its explicit error)");
-  const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());
-  const page = targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
-  if (!page) throw new Error("no page target");
+  // r266: self-created tab (scan-reuse was a race — clientless targets are
+  // reaped lazily by this shell; r265 finding).
+  const tabRes = await fetch("http://127.0.0.1:9222/json/new", { method: "PUT" });
+  if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
+  const page = await tabRes.json();
   const ws = await connect(page.webSocketDebuggerUrl);
   const errors = [];
 

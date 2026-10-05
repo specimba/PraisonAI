@@ -194,9 +194,11 @@ const INSTALL_STUB = `(() => {
 
 async function main() {
   await ensureChrome();
-  const list = await (await fetch("http://127.0.0.1:9222/json/list")).json();
-  let tab = list.find((t) => t.type === "page" && (t.url || "").startsWith("http://localhost:3000"));
-  if (!tab) tab = list.find((t) => t.type === "page");
+  // r266: self-created tab (scan-reuse was a race — clientless targets are
+  // reaped lazily by this shell; r265 finding).
+  const tabRes = await fetch("http://127.0.0.1:9222/json/new", { method: "PUT" });
+  if (!tabRes.ok) throw new Error(`/json/new failed: ${tabRes.status}`);
+  let tab = await tabRes.json();
   const ws = await connect(tab.webSocketDebuggerUrl);
   activeWs = ws;
   await wsSend(ws, "Page.enable");

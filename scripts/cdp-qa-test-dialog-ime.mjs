@@ -101,9 +101,11 @@ const TYPE_INTO = (v) => `
 await ensureChrome();
 const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
 if (!list) { console.error("SUMMARY: 0 passed, 1 failed — chrome CDP not reachable"); process.exit(1); }
-const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());
-let page = targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
-if (!page) { console.error("SUMMARY: 0 passed, 1 failed — no page target"); process.exit(1); }
+// r266: self-created tab (scan-reuse was a race — clientless targets are
+// reaped lazily by this shell; r265 finding).
+const tabRes = await fetch("http://127.0.0.1:9222/json/new", { method: "PUT" });
+if (!tabRes.ok) { console.error(`SUMMARY: 0 passed, 1 failed — /json/new failed: ${tabRes.status}`); process.exit(1); }
+let page = await tabRes.json();
 const ws = await connect(page.webSocketDebuggerUrl);
 await wsSend(ws, "Page.enable");
 await wsSend(ws, "Runtime.enable");

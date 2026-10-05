@@ -62,9 +62,11 @@ async function shot(ws, name) {
 await ensureChrome();
 const list = await fetch("http://127.0.0.1:9222/json/version").then((r) => r.json()).catch(() => null);
 if (!list) { console.error("SUMMARY: 0 passed, 1 failed — chrome CDP not reachable"); process.exit(1); }
-const targets = await fetch("http://127.0.0.1:9222/json/list").then((r) => r.json());
-let page = targets.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
-if (!page) { console.error("SUMMARY: 0 passed, 1 failed — no page target"); process.exit(1); }
+// r266: self-created tab (scan-reuse was a race — clientless targets are
+// reaped lazily by this shell; r265 finding).
+const tabRes = await fetch("http://127.0.0.1:9222/json/new", { method: "PUT" });
+if (!tabRes.ok) { console.error(`SUMMARY: 0 passed, 1 failed — /json/new failed: ${tabRes.status}`); process.exit(1); }
+let page = await tabRes.json();
 const ws = await connect(page.webSocketDebuggerUrl);
 await wsSend(ws, "Page.enable");
 await wsSend(ws, "Runtime.enable");
@@ -134,8 +136,16 @@ const v2 = await evalJs(ws, `(async () => {
   };
 })()`);
 const bootMatch = v2.ok && v2.apiBoot === v2.shownBoot;
-const mtimeFresh = v2.ok && Math.abs(v2.shownChangedMs - v2.apiChangedMs) < 5_000 && v2.ageMinutes < 120;
-check("V2 shown fingerprint matches live /api/version (mtime < 2h old)", bootMatch && mtimeFresh, JSON.stringify(v2));
+const tsMatch = v2.ok && Math.abs(v2.shownChangedMs - v2.apiChangedMs) < 5_000;
+// r266: the fixed 2h freshness window false-positived in a healthy state —
+// app source had legitimately gone ~8h unchanged while QA rounds only touched
+// scripts/ (ageMinutes=481, fingerprints perfectly in agreement). Staleness
+// is now informational; the FAIL signal is UI/API fingerprint disagreement
+// (the actual stale-build regression this check exists for).
+if (v2.ok && v2.ageMinutes >= 120) {
+  console.log(`  ⚠️ source mtime is ${v2.ageMinutes}min old (informational — rebuild-to-serve happens on app-source change only)`);
+}
+check("V2 shown fingerprint matches live /api/version", bootMatch && tsMatch, JSON.stringify(v2));
 
 await shot(ws, "v-series-build-info");
 
